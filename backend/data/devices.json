@@ -1,0 +1,47 @@
+[
+  {
+    "id": "355d49cbb79b432c",
+    "name": "Pe",
+    "host": "45.166.28.253",
+    "port": 2210,
+    "vendor": "mikrotik_v6",
+    "model": "NE8000 F1A",
+    "username": "cayke",
+    "password": "#Rr66oi90@1426",
+    "auth_type": "password",
+    "is_bgp": false,
+    "created_at": "2026-09-21T11:44:18.2376712-03:00",
+    "last_seen": "2026-09-22T16:01:26.3027473-03:00",
+    "status": "online"
+  },
+  {
+    "id": "738398e45a892540",
+    "name": "BGP2",
+    "host": "45.166.28.249",
+    "port": 2210,
+    "vendor": "huawei",
+    "model": "NE40",
+    "username": "caykesilva",
+    "password": "#Rr66oi90@1426",
+    "auth_type": "password",
+    "is_bgp": true,
+    "created_at": "2026-09-22T08:42:15.9137387-03:00",
+    "last_seen": "2026-09-22T16:01:26.3015579-03:00",
+    "status": "online"
+  },
+  {
+    "id": "7a5d2d4230302c56",
+    "name": "BGP",
+    "host": "45.166.28.254",
+    "port": 2210,
+    "vendor": "huawei",
+    "model": "NE8000 F1A",
+    "username": "cayke.silva",
+    "password": "#Rr66oi90@1426",
+    "auth_type": "password",
+    "is_bgp": true,
+    "created_at": "2026-09-21T10:59:08.5046479-03:00",
+    "last_seen": "2026-09-22T16:01:26.1577088-03:00",
+    "status": "online"
+  }
+]

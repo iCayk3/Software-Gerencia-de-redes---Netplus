@@ -1,0 +1,28 @@
+# Binaries and build artifacts (Go)
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+*.test
+*.out
+backend/bin/
+backend/dist/
+
+# Node & Frontend
+node_modules/
+frontend/node_modules/
+frontend/dist/
+frontend/.cache/
+*.local
+
+# Environment & IDE
+.env
+.env.*
+!.env.example
+.vscode/
+.idea/
+*.swp
+*.swo
+Thumbs.db
+Desktop.ini

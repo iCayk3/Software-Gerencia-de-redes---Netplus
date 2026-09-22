@@ -1,0 +1,555 @@
+import React, { useState, useEffect, useCallback } from 'react'
+import {
+  Radio,
+  RefreshCw,
+  AlertTriangle,
+  CheckCircle2,
+  XCircle,
+  Activity,
+  Server,
+  Network,
+  Bell,
+  Check,
+  ChevronDown,
+  ChevronUp,
+  Clock,
+  Layers,
+  ShieldCheck,
+  Terminal,
+  Zap
+} from 'lucide-react'
+import {
+  fetchTelemetryOverview,
+  fetchTelemetryStatus,
+  fetchAlerts,
+  acknowledgeAlert,
+  triggerTelemetryCollect,
+  fetchTelemetryHistory,
+  type TelemetryOverview,
+  type TelemetryStatus,
+  type Alert,
+  type TelemetrySnapshot
+} from '../services/api'
+
+interface TelemetryViewProps {
+  onAlertsUpdated?: (count: number) => void
+}
+
+export const TelemetryView: React.FC<TelemetryViewProps> = ({ onAlertsUpdated }) => {
+  const [overview, setOverview] = useState<TelemetryOverview | null>(null)
+  const [status, setStatus] = useState<TelemetryStatus | null>(null)
+  const [alerts, setAlerts] = useState<Alert[]>([])
+  const [history, setHistory] = useState<TelemetrySnapshot[]>([])
+  const [loading, setLoading] = useState(true)
+  const [collecting, setCollecting] = useState(false)
+  const [alertFilter, setAlertFilter] = useState<'active' | 'acknowledged' | 'resolved' | 'all'>('active')
+  const [showSyslogGuide, setShowSyslogGuide] = useState(false)
+  const [actionMessage, setActionMessage] = useState<string | null>(null)
+
+  const loadData = useCallback(async () => {
+    try {
+      const [ov, st, al, hist] = await Promise.all([
+        fetchTelemetryOverview(),
+        fetchTelemetryStatus(),
+        fetchAlerts('all'),
+        fetchTelemetryHistory(20)
+      ])
+      setOverview(ov)
+      setStatus(st)
+      setAlerts(al)
+      setHistory(hist)
+
+      const activeCount = al.filter(a => a.status === 'active' || a.status === 'acknowledged').length
+      if (onAlertsUpdated) {
+        onAlertsUpdated(activeCount)
+      }
+    } catch (err) {
+      console.error('Erro ao carregar telemetria:', err)
+    } finally {
+      setLoading(false)
+    }
+  }, [onAlertsUpdated])
+
+  useEffect(() => {
+    loadData()
+    // Periodic refresh every 10 seconds
+    const interval = setInterval(loadData, 10000)
+    return () => clearInterval(interval)
+  }, [loadData])
+
+  const handleTriggerCollect = async () => {
+    setCollecting(true)
+    setActionMessage('Ciclo de leitura disparado! Coletando dados via SSH...')
+    try {
+      await triggerTelemetryCollect()
+      // Wait 3 seconds for workers to start returning data
+      setTimeout(async () => {
+        await loadData()
+        setCollecting(false)
+        setActionMessage('Leituras atualizadas com sucesso!')
+        setTimeout(() => setActionMessage(null), 3000)
+      }, 3000)
+    } catch {
+      setCollecting(false)
+      setActionMessage('Erro ao acionar ciclo de leitura.')
+      setTimeout(() => setActionMessage(null), 3000)
+    }
+  }
+
+  const handleAcknowledge = async (id: string) => {
+    try {
+      await acknowledgeAlert(id)
+      await loadData()
+    } catch (err: any) {
+      alert(err.message || 'Falha ao reconhecer alerta')
+    }
+  }
+
+  const filteredAlerts = alerts.filter(a => {
+    if (alertFilter === 'all') return true
+    return a.status === alertFilter
+  })
+
+  const activeAlertsCount = alerts.filter(a => a.status === 'active' || a.status === 'acknowledged').length
+
+  const formatRelativeTime = (isoString: string) => {
+    const diff = Math.floor((new Date().getTime() - new Date(isoString).getTime()) / 1000)
+    if (diff < 60) return `há ${diff}s`
+    if (diff < 3600) return `há ${Math.floor(diff / 60)} min`
+    return `há ${Math.floor(diff / 3600)}h`
+  }
+
+  if (loading && !overview) {
+    return (
+      <div className="flex flex-col items-center justify-center p-16 space-y-4">
+        <Radio className="h-10 w-10 text-cyan-400 animate-spin" />
+        <p className="text-slate-400 text-sm">Carregando telemetria e estado dos roteadores...</p>
+      </div>
+    )
+  }
+
+  return (
+    <div className="space-y-6">
+      {/* Top Banner & Control Bar */}
+      <div className="bg-slate-900/90 border border-slate-800 rounded-2xl p-5 shadow-xl">
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+          <div className="flex items-start gap-4">
+            <div className="h-12 w-12 rounded-xl bg-cyan-500/10 border border-cyan-500/30 flex items-center justify-center text-cyan-400 shrink-0">
+              <Radio className={`h-6 w-6 ${collecting ? 'animate-spin' : 'animate-pulse'}`} />
+            </div>
+            <div>
+              <div className="flex items-center gap-3">
+                <h2 className="text-xl font-bold text-white tracking-tight">Telemetria & Detecção de Anomalias</h2>
+                <span className="flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-medium bg-emerald-950 text-emerald-400 border border-emerald-800/80">
+                  <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 animate-ping"></span>
+                  Motor Ativo ({status?.poll_interval_seconds || 45}s)
+                </span>
+                {status?.syslog_active && (
+                  <span className="hidden sm:inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-medium bg-indigo-950 text-indigo-400 border border-indigo-800/80">
+                    <Zap className="h-3 w-3 text-indigo-400" />
+                    Syslog UDP :{status.syslog_port}
+                  </span>
+                )}
+              </div>
+              <p className="text-xs text-slate-400 mt-1 flex items-center gap-2">
+                <Clock className="h-3.5 w-3.5 text-slate-500" />
+                <span>
+                  Última leitura: {overview?.last_updated ? new Date(overview.last_updated).toLocaleTimeString() : 'Aguardando...'}
+                </span>
+                <span>&bull;</span>
+                <span>Ciclos executados: {status?.total_cycles || 0}</span>
+              </p>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-3">
+            <button
+              onClick={handleTriggerCollect}
+              disabled={collecting}
+              className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-semibold bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-500 hover:to-blue-500 text-white shadow-lg shadow-cyan-600/20 disabled:opacity-50 transition cursor-pointer"
+            >
+              <RefreshCw className={`h-4 w-4 ${collecting ? 'animate-spin' : ''}`} />
+              <span>{collecting ? 'Coletando...' : 'Coletar Agora'}</span>
+            </button>
+            <button
+              onClick={loadData}
+              title="Atualizar painel"
+              className="p-2.5 rounded-xl border border-slate-700 bg-slate-800/70 hover:bg-slate-700 text-slate-300 hover:text-white transition cursor-pointer"
+            >
+              <RefreshCw className="h-4 w-4" />
+            </button>
+          </div>
+        </div>
+
+        {actionMessage && (
+          <div className="mt-4 p-3 rounded-lg bg-cyan-950/60 border border-cyan-800/80 text-cyan-300 text-xs flex items-center gap-2">
+            <Zap className="h-4 w-4 text-cyan-400 animate-pulse" />
+            <span>{actionMessage}</span>
+          </div>
+        )}
+      </div>
+
+      {/* KPI Cards */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        {/* Roteadores */}
+        <div className="bg-slate-900/70 border border-slate-800 rounded-xl p-4 shadow-sm">
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Roteadores</span>
+            <Server className="h-4 w-4 text-cyan-400" />
+          </div>
+          <div className="mt-2 flex items-baseline gap-2">
+            <span className="text-2xl font-bold text-white">{overview?.online_devices ?? 0}</span>
+            <span className="text-xs text-slate-500">/ {overview?.total_devices ?? 0} online</span>
+          </div>
+          <div className="mt-3 w-full bg-slate-800 rounded-full h-1.5 overflow-hidden">
+            <div
+              className="bg-emerald-500 h-1.5 rounded-full transition-all duration-500"
+              style={{
+                width: `${overview?.total_devices ? (overview.online_devices / overview.total_devices) * 100 : 0}%`
+              }}
+            />
+          </div>
+        </div>
+
+        {/* BGP Peers */}
+        <div className="bg-slate-900/70 border border-slate-800 rounded-xl p-4 shadow-sm">
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Sessões BGP</span>
+            <Activity className="h-4 w-4 text-blue-400" />
+          </div>
+          <div className="mt-2 flex items-baseline justify-between">
+            <div>
+              <span className="text-2xl font-bold text-emerald-400">{overview?.established_bgp ?? 0}</span>
+              <span className="text-xs text-slate-500 ml-1.5">Up</span>
+            </div>
+            {(overview?.down_bgp ?? 0) > 0 && (
+              <span className="px-2 py-0.5 rounded text-xs font-semibold bg-rose-950 text-rose-400 border border-rose-800">
+                {overview?.down_bgp} Down
+              </span>
+            )}
+          </div>
+          <p className="text-xs text-slate-500 mt-2">
+            Total de {overview?.total_bgp_peers ?? 0} peers cadastrados
+          </p>
+        </div>
+
+        {/* OSPF Neighbors */}
+        <div className="bg-slate-900/70 border border-slate-800 rounded-xl p-4 shadow-sm">
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Vizinhos OSPF</span>
+            <Network className="h-4 w-4 text-indigo-400" />
+          </div>
+          <div className="mt-2 flex items-baseline justify-between">
+            <div>
+              <span className="text-2xl font-bold text-indigo-400">{overview?.full_ospf ?? 0}</span>
+              <span className="text-xs text-slate-500 ml-1.5">Full</span>
+            </div>
+            {(overview?.down_ospf ?? 0) > 0 && (
+              <span className="px-2 py-0.5 rounded text-xs font-semibold bg-amber-950 text-amber-400 border border-amber-800">
+                {overview?.down_ospf} Alerta
+              </span>
+            )}
+          </div>
+          <p className="text-xs text-slate-500 mt-2">
+            Total de {overview?.total_ospf_neighbors ?? 0} adjacências
+          </p>
+        </div>
+
+        {/* Total Prefixos */}
+        <div className="bg-slate-900/70 border border-slate-800 rounded-xl p-4 shadow-sm">
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Prefixos na Rede</span>
+            <Layers className="h-4 w-4 text-cyan-400" />
+          </div>
+          <div className="mt-2 flex items-baseline gap-2">
+            <span className="text-2xl font-bold text-white">
+              {(overview?.total_prefixes ?? 0).toLocaleString()}
+            </span>
+            <span className="text-xs text-slate-500">rotas ativas</span>
+          </div>
+          <p className="text-xs text-slate-500 mt-2">Recebidas de peers BGP</p>
+        </div>
+      </div>
+
+      {/* History Trend Mini-Chart (SVG) */}
+      {history.length > 1 && (
+        <div className="bg-slate-900/80 border border-slate-800 rounded-xl p-4 shadow-sm">
+          <div className="flex items-center justify-between mb-3">
+            <div className="flex items-center gap-2">
+              <Activity className="h-4 w-4 text-cyan-400" />
+              <h3 className="text-sm font-semibold text-white">Tendência Temporal das Últimas Coletas</h3>
+            </div>
+            <span className="text-xs text-slate-500">{history.length} amostras</span>
+          </div>
+          <div className="h-28 w-full flex items-end gap-1.5 pt-4">
+            {history.map((snap, idx) => {
+              const maxPfx = Math.max(...history.map(h => h.total_prefixes), 10)
+              const heightPct = Math.max((snap.total_prefixes / maxPfx) * 100, 8)
+              return (
+                <div
+                  key={idx}
+                  className="flex-1 flex flex-col items-center gap-1 group relative h-full justify-end"
+                >
+                  {/* Tooltip */}
+                  <div className="absolute bottom-full mb-2 hidden group-hover:flex flex-col items-center z-20 pointer-events-none">
+                    <div className="bg-slate-950 border border-slate-700 text-slate-200 text-xs rounded px-2 py-1 shadow-lg whitespace-nowrap">
+                      <p className="font-semibold text-white">{snap.device_name || 'Dispositivo'}</p>
+                      <p>Prefixos: {snap.total_prefixes.toLocaleString()}</p>
+                      <p>Peers Up: {snap.bgp_established}</p>
+                      <p className="text-[10px] text-slate-400">
+                        {new Date(snap.timestamp).toLocaleTimeString()}
+                      </p>
+                    </div>
+                  </div>
+                  <div
+                    style={{ height: `${heightPct}%` }}
+                    className={`w-full rounded-t transition-all ${
+                      snap.bgp_down > 0
+                        ? 'bg-rose-500/80 hover:bg-rose-400'
+                        : 'bg-cyan-500/60 hover:bg-cyan-400'
+                    }`}
+                  />
+                  <span className="text-[9px] text-slate-500 truncate w-full text-center">
+                    {new Date(snap.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                  </span>
+                </div>
+              )
+            })}
+          </div>
+        </div>
+      )}
+
+      {/* Alerts & Detection Feed */}
+      <div className="bg-slate-900/90 border border-slate-800 rounded-2xl shadow-xl overflow-hidden">
+        <div className="p-5 border-b border-slate-800 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+          <div className="flex items-center gap-3">
+            <div className="h-9 w-9 rounded-lg bg-rose-500/10 border border-rose-500/20 flex items-center justify-center text-rose-400">
+              <Bell className="h-5 w-5" />
+            </div>
+            <div>
+              <div className="flex items-center gap-2">
+                <h3 className="font-bold text-white text-base">Central de Alertas & Detecções</h3>
+                {activeAlertsCount > 0 && (
+                  <span className="px-2 py-0.5 text-xs font-bold rounded-full bg-rose-500/20 text-rose-400 border border-rose-500/40">
+                    {activeAlertsCount} pendente{activeAlertsCount > 1 ? 's' : ''}
+                  </span>
+                )}
+              </div>
+              <p className="text-xs text-slate-400">
+                Anomalias identificadas automaticamente por telemetria contínua e eventos Syslog
+              </p>
+            </div>
+          </div>
+
+          {/* Filter tabs */}
+          <div className="flex items-center bg-slate-800/80 p-1 rounded-xl border border-slate-700/60 text-xs">
+            <button
+              onClick={() => setAlertFilter('active')}
+              className={`px-3 py-1.5 rounded-lg font-medium transition cursor-pointer ${
+                alertFilter === 'active'
+                  ? 'bg-rose-500/20 text-rose-300 border border-rose-500/40 shadow-xs'
+                  : 'text-slate-400 hover:text-white'
+              }`}
+            >
+              Ativos ({alerts.filter(a => a.status === 'active').length})
+            </button>
+            <button
+              onClick={() => setAlertFilter('acknowledged')}
+              className={`px-3 py-1.5 rounded-lg font-medium transition cursor-pointer ${
+                alertFilter === 'acknowledged'
+                  ? 'bg-amber-500/20 text-amber-300 border border-amber-500/40 shadow-xs'
+                  : 'text-slate-400 hover:text-white'
+              }`}
+            >
+              Reconhecidos ({alerts.filter(a => a.status === 'acknowledged').length})
+            </button>
+            <button
+              onClick={() => setAlertFilter('resolved')}
+              className={`px-3 py-1.5 rounded-lg font-medium transition cursor-pointer ${
+                alertFilter === 'resolved'
+                  ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 shadow-xs'
+                  : 'text-slate-400 hover:text-white'
+              }`}
+            >
+              Resolvidos ({alerts.filter(a => a.status === 'resolved').length})
+            </button>
+            <button
+              onClick={() => setAlertFilter('all')}
+              className={`px-3 py-1.5 rounded-lg font-medium transition cursor-pointer ${
+                alertFilter === 'all'
+                  ? 'bg-cyan-500/20 text-cyan-300 border border-cyan-500/40 shadow-xs'
+                  : 'text-slate-400 hover:text-white'
+              }`}
+            >
+              Todos ({alerts.length})
+            </button>
+          </div>
+        </div>
+
+        {/* Alert List */}
+        {filteredAlerts.length === 0 ? (
+          <div className="p-12 text-center">
+            <div className="h-12 w-12 rounded-full bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 flex items-center justify-center mx-auto mb-3">
+              <ShieldCheck className="h-6 w-6" />
+            </div>
+            <h4 className="text-sm font-semibold text-white">Nenhum alerta nesta categoria</h4>
+            <p className="text-xs text-slate-500 mt-1 max-w-sm mx-auto">
+              Todas as sessões e equipamentos monitorados estão operando normalmente.
+            </p>
+          </div>
+        ) : (
+          <div className="divide-y divide-slate-800/60">
+            {filteredAlerts.map(alert => {
+              const isCrit = alert.severity === 'critical'
+              const isWarn = alert.severity === 'warning'
+
+              return (
+                <div
+                  key={alert.id}
+                  className={`p-4 sm:p-5 transition hover:bg-slate-800/30 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 ${
+                    alert.status === 'active' ? 'bg-slate-900/40' : 'opacity-80'
+                  }`}
+                >
+                  <div className="flex items-start gap-3.5 flex-1">
+                    {/* Severity Icon */}
+                    <div
+                      className={`h-9 w-9 rounded-xl flex items-center justify-center shrink-0 mt-0.5 ${
+                        isCrit
+                          ? 'bg-rose-500/15 text-rose-400 border border-rose-500/30'
+                          : isWarn
+                          ? 'bg-amber-500/15 text-amber-400 border border-amber-500/30'
+                          : 'bg-blue-500/15 text-blue-400 border border-blue-500/30'
+                      }`}
+                    >
+                      {isCrit ? (
+                        <XCircle className="h-5 w-5" />
+                      ) : isWarn ? (
+                        <AlertTriangle className="h-5 w-5" />
+                      ) : (
+                        <CheckCircle2 className="h-5 w-5" />
+                      )}
+                    </div>
+
+                    <div className="space-y-1">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span
+                          className={`text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded ${
+                            isCrit
+                              ? 'bg-rose-950 text-rose-400 border border-rose-800'
+                              : isWarn
+                              ? 'bg-amber-950 text-amber-400 border border-amber-800'
+                              : 'bg-blue-950 text-blue-400 border border-blue-800'
+                          }`}
+                        >
+                          {alert.severity}
+                        </span>
+
+                        <span className="font-semibold text-sm text-white">{alert.device_name}</span>
+                        <span className="text-slate-500">&bull;</span>
+                        <span className="text-xs font-mono text-cyan-400">{alert.target}</span>
+
+                        <span className="text-xs text-slate-500 ml-auto sm:ml-0">
+                          {formatRelativeTime(alert.started_at)}
+                        </span>
+                      </div>
+
+                      <p className="text-xs text-slate-300 whitespace-pre-line leading-relaxed">{alert.message}</p>
+
+                      {alert.resolved_at && (
+                        <p className="text-[11px] text-emerald-400/90 flex items-center gap-1">
+                          <Check className="h-3 w-3" />
+                          <span>Resolvido às {new Date(alert.resolved_at).toLocaleTimeString()}</span>
+                        </p>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Actions */}
+                  <div className="flex items-center gap-2 shrink-0 self-end sm:self-center">
+                    {alert.status === 'active' && (
+                      <button
+                        onClick={() => handleAcknowledge(alert.id)}
+                        className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 transition cursor-pointer"
+                      >
+                        <Check className="h-3.5 w-3.5 text-cyan-400" />
+                        <span>Reconhecer</span>
+                      </button>
+                    )}
+                    {alert.status === 'acknowledged' && (
+                      <span className="text-xs text-amber-400/80 italic font-medium px-2 py-1 bg-amber-950/40 rounded border border-amber-900/60">
+                        Reconhecido pelo NOC
+                      </span>
+                    )}
+                    {alert.status === 'resolved' && (
+                      <span className="text-xs text-emerald-400/80 italic font-medium px-2 py-1 bg-emerald-950/40 rounded border border-emerald-900/60">
+                        Resolvido
+                      </span>
+                    )}
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+        )}
+      </div>
+
+      {/* Syslog Setup Guide Accordion */}
+      <div className="bg-slate-900/70 border border-slate-800 rounded-xl overflow-hidden">
+        <button
+          onClick={() => setShowSyslogGuide(!showSyslogGuide)}
+          className="w-full p-4 flex items-center justify-between text-left hover:bg-slate-800/40 transition cursor-pointer"
+        >
+          <div className="flex items-center gap-3">
+            <Terminal className="h-4 w-4 text-cyan-400" />
+            <div>
+              <h4 className="text-sm font-semibold text-white">
+                Como configurar os Roteadores para enviar Eventos Syslog ao NetPulse
+              </h4>
+              <p className="text-xs text-slate-400">
+                Receba alertas instantâneos de queda de BGP/OSPF no mesmo segundo em que ocorrem (UDP 1514)
+              </p>
+            </div>
+          </div>
+          {showSyslogGuide ? (
+            <ChevronUp className="h-4 w-4 text-slate-400" />
+          ) : (
+            <ChevronDown className="h-4 w-4 text-slate-400" />
+          )}
+        </button>
+
+        {showSyslogGuide && (
+          <div className="p-4 border-t border-slate-800/80 bg-slate-950/50 space-y-4 text-xs font-mono">
+            {/* Huawei */}
+            <div>
+              <p className="text-cyan-400 font-semibold mb-1">Huawei VRP (NE8000 / CloudEngine / S6730):</p>
+              <div className="bg-slate-900 p-3 rounded-lg border border-slate-800 text-slate-300 select-all">
+                system-view<br />
+                info-center enable<br />
+                info-center loghost &lt;IP-DO-NETPULSE&gt; port 1514
+              </div>
+            </div>
+
+            {/* Datacom */}
+            <div>
+              <p className="text-cyan-400 font-semibold mb-1">Datacom (DmOS):</p>
+              <div className="bg-slate-900 p-3 rounded-lg border border-slate-800 text-slate-300 select-all">
+                configure terminal<br />
+                logging host &lt;IP-DO-NETPULSE&gt; transport udp port 1514
+              </div>
+            </div>
+
+            {/* MikroTik */}
+            <div>
+              <p className="text-cyan-400 font-semibold mb-1">MikroTik RouterOS (v6 & v7):</p>
+              <div className="bg-slate-900 p-3 rounded-lg border border-slate-800 text-slate-300 select-all">
+                /system logging action add name=netpulse target=remote remote=&lt;IP-DO-NETPULSE&gt; remote-port=1514<br />
+                /system logging add topics=bgp,info action=netpulse<br />
+                /system logging add topics=ospf,info action=netpulse
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}

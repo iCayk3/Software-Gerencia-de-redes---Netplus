@@ -1,0 +1,23 @@
+[
+  {
+    "asn": "266445",
+    "alias": "SEA Telecom (Tr�nsito Principal)",
+    "description": "Circuito IP Tr�nsito Principal 10Gbps",
+    "role": "transit_primary",
+    "updated_at": "2026-09-22T09:06:30.1018928-03:00"
+  },
+  {
+    "asn": "262503",
+    "alias": "WIKI Telecom (Tr�nsito Secund�rio)",
+    "description": "Link de Tr�nsito IP via WIKI",
+    "role": "transit_secondary",
+    "updated_at": "2026-09-22T09:30:12.8620212-03:00"
+  },
+  {
+    "asn": "26162",
+    "alias": "IX.br / PTT Metro",
+    "description": "Ponto de Troca de Tr�fego Internet (IX.br)",
+    "role": "ix_ptt",
+    "updated_at": "2026-09-22T09:30:38.7596698-03:00"
+  }
+]
