@@ -195,6 +195,19 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({
           onNavigate('diagnostics', 'ping')
           onClose()
         },
+      },
+      {
+        id: 'nav-audit',
+        title: 'Trilha de Auditoria (Audit Trail)',
+        subtitle: 'Histórico imutável de ações de operadores, IPs de origem e comandos executados',
+        category: 'Navegação',
+        icon: ShieldCheck,
+        badge: 'Auditoria',
+        badgeColor: 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30',
+        onSelect: () => {
+          onNavigate('audit', 'logs')
+          onClose()
+        },
       }
     )
 

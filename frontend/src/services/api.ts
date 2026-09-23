@@ -254,23 +254,102 @@ export interface TelemetryOverview {
   recent_snapshots?: TelemetrySnapshot[]
 }
 
+// --- Authentication & RBAC Types ---
+
+export type UserRole = 'admin' | 'noc_operator' | 'viewer'
+
+export interface UserProfile {
+  id: string
+  tenant_id: string
+  name: string
+  email: string
+  role: UserRole
+  status: string
+  created_at: string
+  last_login?: string
+}
+
+export interface LoginRequest {
+  email: string
+  password: string
+}
+
+export interface LoginResponse {
+  token: string
+  expires_at: string
+  user: UserProfile
+}
+
+export interface AuditLog {
+  id: string
+  tenant_id: string
+  timestamp: string
+  user_id: string
+  user_name: string
+  user_email: string
+  client_ip: string
+  action: string
+  target_device_id?: string
+  target_device_name?: string
+  command_executed: string
+  status: string
+  metadata?: Record<string, any>
+}
+
+export interface AuditFilter {
+  device_id?: string
+  user_id?: string
+  action?: string
+  limit?: number
+  offset?: number
+}
+
+export interface AuditListResponse {
+  logs: AuditLog[]
+  total: number
+  limit: number
+  offset: number
+}
+
 const API_BASE = '/api'
+const AUTH_TOKEN_KEY = 'netpulse_auth_token'
+
+export function getStoredToken(): string | null {
+  return localStorage.getItem(AUTH_TOKEN_KEY)
+}
+
+export function setStoredToken(token: string | null): void {
+  if (token) {
+    localStorage.setItem(AUTH_TOKEN_KEY, token)
+  } else {
+    localStorage.removeItem(AUTH_TOKEN_KEY)
+  }
+}
+
+export async function apiFetch(input: string, init: RequestInit = {}): Promise<Response> {
+  const token = getStoredToken()
+  const headers = new Headers(init.headers || {})
+  if (token && !headers.has('Authorization')) {
+    headers.set('Authorization', `Bearer ${token}`)
+  }
+  return fetch(input, { ...init, headers })
+}
 
 // Base & Diagnostic APIs
 export async function fetchHealth(): Promise<HealthResponse> {
-  const res = await fetch(`${API_BASE}/health`)
+  const res = await apiFetch(`${API_BASE}/health`)
   if (!res.ok) throw new Error(`Falha no healthcheck: HTTP ${res.status}`)
   return res.json()
 }
 
 export async function fetchInterfaces(): Promise<NetworkInterface[]> {
-  const res = await fetch(`${API_BASE}/network/interfaces`)
+  const res = await apiFetch(`${API_BASE}/network/interfaces`)
   if (!res.ok) throw new Error(`Erro ao buscar interfaces: HTTP ${res.status}`)
   return res.json()
 }
 
 export async function sendPing(req: PingRequest): Promise<PingResponse> {
-  const res = await fetch(`${API_BASE}/network/ping`, {
+  const res = await apiFetch(`${API_BASE}/network/ping`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(req),
@@ -280,7 +359,7 @@ export async function sendPing(req: PingRequest): Promise<PingResponse> {
 }
 
 export async function scanPorts(host: string, ports?: number[], timeoutMs?: number): Promise<PortScanResponse> {
-  const res = await fetch(`${API_BASE}/network/scan-ports`, {
+  const res = await apiFetch(`${API_BASE}/network/scan-ports`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ host, ports, timeout_ms: timeoutMs }),
@@ -290,20 +369,20 @@ export async function scanPorts(host: string, ports?: number[], timeoutMs?: numb
 }
 
 export async function lookupDNS(domain: string): Promise<DNSLookupResponse> {
-  const res = await fetch(`${API_BASE}/network/dns?domain=${encodeURIComponent(domain)}`)
+  const res = await apiFetch(`${API_BASE}/network/dns?domain=${encodeURIComponent(domain)}`)
   if (!res.ok) throw new Error(`Erro no lookup DNS: HTTP ${res.status}`)
   return res.json()
 }
 
 // Devices APIs
 export async function fetchDevices(): Promise<Device[]> {
-  const res = await fetch(`${API_BASE}/devices`)
+  const res = await apiFetch(`${API_BASE}/devices`)
   if (!res.ok) throw new Error(`Erro ao buscar equipamentos: HTTP ${res.status}`)
   return res.json()
 }
 
 export async function createDevice(device: Partial<Device>): Promise<Device> {
-  const res = await fetch(`${API_BASE}/devices`, {
+  const res = await apiFetch(`${API_BASE}/devices`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(device),
@@ -316,7 +395,7 @@ export async function createDevice(device: Partial<Device>): Promise<Device> {
 }
 
 export async function updateDevice(id: string, device: Partial<Device>): Promise<Device> {
-  const res = await fetch(`${API_BASE}/devices/${encodeURIComponent(id)}`, {
+  const res = await apiFetch(`${API_BASE}/devices/${encodeURIComponent(id)}`, {
     method: 'PUT',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(device),
@@ -329,14 +408,14 @@ export async function updateDevice(id: string, device: Partial<Device>): Promise
 }
 
 export async function deleteDevice(id: string): Promise<void> {
-  const res = await fetch(`${API_BASE}/devices/${encodeURIComponent(id)}`, {
+  const res = await apiFetch(`${API_BASE}/devices/${encodeURIComponent(id)}`, {
     method: 'DELETE',
   })
   if (!res.ok) throw new Error(`Erro ao excluir equipamento: HTTP ${res.status}`)
 }
 
 export async function testDeviceSSH(id: string): Promise<SSHTestResult> {
-  const res = await fetch(`${API_BASE}/devices/${encodeURIComponent(id)}/test`, {
+  const res = await apiFetch(`${API_BASE}/devices/${encodeURIComponent(id)}/test`, {
     method: 'POST',
   })
   if (!res.ok) {
@@ -349,7 +428,7 @@ export async function testDeviceSSH(id: string): Promise<SSHTestResult> {
 // Routing APIs (Supports ?fresh=true to bypass telemetry cache)
 export async function fetchDeviceBGP(id: string, fresh = false): Promise<BGPSession[]> {
   const url = `${API_BASE}/devices/${encodeURIComponent(id)}/bgp${fresh ? '?fresh=true' : ''}`
-  const res = await fetch(url)
+  const res = await apiFetch(url)
   if (!res.ok) {
     const err = await res.json().catch(() => ({}))
     throw new Error(err.error || `Erro ao buscar BGP: HTTP ${res.status}`)
@@ -359,14 +438,14 @@ export async function fetchDeviceBGP(id: string, fresh = false): Promise<BGPSess
 
 export async function fetchAllBGP(fresh = false): Promise<BGPSession[]> {
   const url = `${API_BASE}/bgp/all${fresh ? '?fresh=true' : ''}`
-  const res = await fetch(url)
+  const res = await apiFetch(url)
   if (!res.ok) throw new Error(`Erro ao buscar sessões BGP: HTTP ${res.status}`)
   return res.json()
 }
 
 export async function fetchDeviceOSPF(id: string, fresh = false): Promise<OSPFNeighbor[]> {
   const url = `${API_BASE}/devices/${encodeURIComponent(id)}/ospf${fresh ? '?fresh=true' : ''}`
-  const res = await fetch(url)
+  const res = await apiFetch(url)
   if (!res.ok) {
     const err = await res.json().catch(() => ({}))
     throw new Error(err.error || `Erro ao buscar OSPF: HTTP ${res.status}`)
@@ -376,13 +455,13 @@ export async function fetchDeviceOSPF(id: string, fresh = false): Promise<OSPFNe
 
 export async function fetchAllOSPF(fresh = false): Promise<OSPFNeighbor[]> {
   const url = `${API_BASE}/ospf/all${fresh ? '?fresh=true' : ''}`
-  const res = await fetch(url)
+  const res = await apiFetch(url)
   if (!res.ok) throw new Error(`Erro ao buscar vizinhos OSPF: HTTP ${res.status}`)
   return res.json()
 }
 
 export async function execDeviceCommand(id: string, command: string): Promise<CommandExecResponse> {
-  const res = await fetch(`${API_BASE}/devices/${encodeURIComponent(id)}/exec`, {
+  const res = await apiFetch(`${API_BASE}/devices/${encodeURIComponent(id)}/exec`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ command }),
@@ -397,37 +476,37 @@ export async function execDeviceCommand(id: string, command: string): Promise<Co
 // --- Telemetry & Alerts APIs ---
 
 export async function fetchTelemetryStatus(): Promise<TelemetryStatus> {
-  const res = await fetch(`${API_BASE}/telemetry/status`)
+  const res = await apiFetch(`${API_BASE}/telemetry/status`)
   if (!res.ok) throw new Error(`Erro ao buscar status de telemetria: HTTP ${res.status}`)
   return res.json()
 }
 
 export async function fetchTelemetryOverview(): Promise<TelemetryOverview> {
-  const res = await fetch(`${API_BASE}/telemetry/overview`)
+  const res = await apiFetch(`${API_BASE}/telemetry/overview`)
   if (!res.ok) throw new Error(`Erro ao buscar overview de telemetria: HTTP ${res.status}`)
   return res.json()
 }
 
 export async function triggerTelemetryCollect(): Promise<{ message: string }> {
-  const res = await fetch(`${API_BASE}/telemetry/collect`, { method: 'POST' })
+  const res = await apiFetch(`${API_BASE}/telemetry/collect`, { method: 'POST' })
   if (!res.ok) throw new Error(`Erro ao disparar coleta: HTTP ${res.status}`)
   return res.json()
 }
 
 export async function fetchTelemetryHistory(limit = 30): Promise<TelemetrySnapshot[]> {
-  const res = await fetch(`${API_BASE}/telemetry/history?limit=${limit}`)
+  const res = await apiFetch(`${API_BASE}/telemetry/history?limit=${limit}`)
   if (!res.ok) throw new Error(`Erro ao buscar histórico: HTTP ${res.status}`)
   return res.json()
 }
 
 export async function fetchAlerts(status = 'all'): Promise<Alert[]> {
-  const res = await fetch(`${API_BASE}/alerts?status=${encodeURIComponent(status)}`)
+  const res = await apiFetch(`${API_BASE}/alerts?status=${encodeURIComponent(status)}`)
   if (!res.ok) throw new Error(`Erro ao buscar alertas: HTTP ${res.status}`)
   return res.json()
 }
 
 export async function acknowledgeAlert(id: string): Promise<Alert> {
-  const res = await fetch(`${API_BASE}/alerts/${encodeURIComponent(id)}/ack`, { method: 'POST' })
+  const res = await apiFetch(`${API_BASE}/alerts/${encodeURIComponent(id)}/ack`, { method: 'POST' })
   if (!res.ok) {
     const err = await res.json().catch(() => ({}))
     throw new Error(err.error || `Erro ao reconhecer alerta: HTTP ${res.status}`)
@@ -438,7 +517,7 @@ export async function acknowledgeAlert(id: string): Promise<Alert> {
 // Static Routes & Traffic Engineering APIs
 export async function fetchDeviceStaticRoutes(id: string, fresh = false): Promise<StaticRoute[]> {
   const url = `${API_BASE}/devices/${encodeURIComponent(id)}/routes/static${fresh ? '?fresh=true' : ''}`
-  const res = await fetch(url)
+  const res = await apiFetch(url)
   if (!res.ok) {
     const err = await res.json().catch(() => ({}))
     throw new Error(err.error || `Erro ao buscar rotas estáticas: HTTP ${res.status}`)
@@ -448,13 +527,13 @@ export async function fetchDeviceStaticRoutes(id: string, fresh = false): Promis
 
 export async function fetchAllStaticRoutes(fresh = false): Promise<StaticRoute[]> {
   const url = `${API_BASE}/routes/static/all${fresh ? '?fresh=true' : ''}`
-  const res = await fetch(url)
+  const res = await apiFetch(url)
   if (!res.ok) throw new Error(`Erro ao buscar todas as rotas estáticas: HTTP ${res.status}`)
   return res.json()
 }
 
 export async function createStaticRoute(deviceId: string, req: StaticRouteRequest): Promise<{ message: string }> {
-  const res = await fetch(`${API_BASE}/devices/${encodeURIComponent(deviceId)}/routes/static`, {
+  const res = await apiFetch(`${API_BASE}/devices/${encodeURIComponent(deviceId)}/routes/static`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(req),
@@ -468,7 +547,7 @@ export async function createStaticRoute(deviceId: string, req: StaticRouteReques
 
 export async function deleteStaticRoute(deviceId: string, destination: string, nextHop: string): Promise<{ message: string }> {
   const url = `${API_BASE}/devices/${encodeURIComponent(deviceId)}/routes/static?destination=${encodeURIComponent(destination)}&next_hop=${encodeURIComponent(nextHop)}`
-  const res = await fetch(url, { method: 'DELETE' })
+  const res = await apiFetch(url, { method: 'DELETE' })
   if (!res.ok) {
     const err = await res.json().catch(() => ({}))
     throw new Error(err.error || `Erro ao remover rota estática: HTTP ${res.status}`)
@@ -482,7 +561,7 @@ export interface TrafficSyncStatus {
 }
 
 export async function fetchTrafficStatus(): Promise<TrafficSyncStatus> {
-  const res = await fetch(`${API_BASE}/traffic/status`)
+  const res = await apiFetch(`${API_BASE}/traffic/status`)
   if (!res.ok) throw new Error(`Erro ao buscar status de sincronização: HTTP ${res.status}`)
   return res.json()
 }
@@ -490,7 +569,7 @@ export async function fetchTrafficStatus(): Promise<TrafficSyncStatus> {
 // BGP AS-Path Prepending (Download Traffic Engineering)
 export async function fetchDevicePrepends(deviceId: string, fresh = false): Promise<DevicePrependOverview> {
   const url = `${API_BASE}/devices/${encodeURIComponent(deviceId)}/bgp/prepends${fresh ? '?fresh=true' : ''}`
-  const res = await fetch(url)
+  const res = await apiFetch(url)
   if (!res.ok) {
     const err = await res.json().catch(() => ({}))
     throw new Error(err.error || `Erro ao buscar prepends: HTTP ${res.status}`)
@@ -500,7 +579,7 @@ export async function fetchDevicePrepends(deviceId: string, fresh = false): Prom
 
 export async function fetchAllPrepends(fresh = false): Promise<DevicePrependOverview[]> {
   const url = `${API_BASE}/bgp/prepends/all${fresh ? '?fresh=true' : ''}`
-  const res = await fetch(url)
+  const res = await apiFetch(url)
   if (!res.ok) throw new Error(`Erro ao buscar prepends de todos os equipamentos: HTTP ${res.status}`)
   return res.json()
 }
@@ -514,7 +593,7 @@ export interface PrependApplyRequest {
 }
 
 export async function applyPrepend(req: PrependApplyRequest): Promise<{ message: string }> {
-  const res = await fetch(`${API_BASE}/traffic/download/prepend`, {
+  const res = await apiFetch(`${API_BASE}/traffic/download/prepend`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(req),
@@ -575,7 +654,7 @@ export interface LocalPrefApplyRequest {
 
 export async function fetchUploadOverview(deviceId = 'all', fresh = false): Promise<UploadOverviewResponse> {
   const url = `${API_BASE}/traffic/upload/overview?device_id=${encodeURIComponent(deviceId)}${fresh ? '&fresh=true' : ''}`
-  const res = await fetch(url)
+  const res = await apiFetch(url)
   if (!res.ok) {
     const err = await res.json().catch(() => ({}))
     throw new Error(err.error || `Erro ao buscar visão geral de upload: HTTP ${res.status}`)
@@ -584,7 +663,7 @@ export async function fetchUploadOverview(deviceId = 'all', fresh = false): Prom
 }
 
 export async function applyLocalPreference(req: LocalPrefApplyRequest): Promise<{ message: string; peer_ip: string; local_pref: number }> {
-  const res = await fetch(`${API_BASE}/traffic/upload/local-pref`, {
+  const res = await apiFetch(`${API_BASE}/traffic/upload/local-pref`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(req),
@@ -597,13 +676,13 @@ export async function applyLocalPreference(req: LocalPrefApplyRequest): Promise<
 }
 
 export async function fetchASMetadata(): Promise<Record<string, ASMetadata>> {
-  const res = await fetch(`${API_BASE}/traffic/as-metadata`)
+  const res = await apiFetch(`${API_BASE}/traffic/as-metadata`)
   if (!res.ok) throw new Error(`Erro ao buscar metadados de AS: HTTP ${res.status}`)
   return res.json()
 }
 
 export async function updateASMetadata(meta: Partial<ASMetadata> & { asn: string }): Promise<{ message: string; metadata: ASMetadata }> {
-  const res = await fetch(`${API_BASE}/traffic/as-metadata`, {
+  const res = await apiFetch(`${API_BASE}/traffic/as-metadata`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(meta),
@@ -620,7 +699,7 @@ export async function uploadASImage(asn: string, file: File): Promise<{ message:
   formData.append('asn', asn)
   formData.append('image', file)
 
-  const res = await fetch(`${API_BASE}/traffic/as-metadata/upload-image`, {
+  const res = await apiFetch(`${API_BASE}/traffic/as-metadata/upload-image`, {
     method: 'POST',
     body: formData,
   })
@@ -631,5 +710,56 @@ export async function uploadASImage(asn: string, file: File): Promise<{ message:
   return res.json()
 }
 
+// --- Auth & Session APIs ---
 
+export async function loginUser(req: LoginRequest): Promise<LoginResponse> {
+  const res = await apiFetch(`${API_BASE}/auth/login`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(req),
+  })
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}))
+    throw new Error(err.error || `Erro de autenticação: HTTP ${res.status}`)
+  }
+  const data: LoginResponse = await res.json()
+  setStoredToken(data.token)
+  return data
+}
 
+export async function fetchMe(): Promise<UserProfile> {
+  const res = await apiFetch(`${API_BASE}/auth/me`)
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}))
+    throw new Error(err.error || `Não autenticado: HTTP ${res.status}`)
+  }
+  return res.json()
+}
+
+export async function fetchUsers(): Promise<UserProfile[]> {
+  const res = await apiFetch(`${API_BASE}/auth/users`)
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}))
+    throw new Error(err.error || `Erro ao listar usuários: HTTP ${res.status}`)
+  }
+  return res.json()
+}
+
+// --- Audit Trail APIs ---
+
+export async function fetchAuditLogs(filter?: AuditFilter): Promise<AuditListResponse> {
+  const params = new URLSearchParams()
+  if (filter?.device_id) params.set('device_id', filter.device_id)
+  if (filter?.user_id) params.set('user_id', filter.user_id)
+  if (filter?.action) params.set('action', filter.action)
+  if (filter?.limit) params.set('limit', String(filter.limit))
+  if (filter?.offset) params.set('offset', String(filter.offset))
+
+  const queryString = params.toString() ? `?${params.toString()}` : ''
+  const res = await apiFetch(`${API_BASE}/audit/logs${queryString}`)
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}))
+    throw new Error(err.error || `Erro ao consultar logs de auditoria: HTTP ${res.status}`)
+  }
+  return res.json()
+}

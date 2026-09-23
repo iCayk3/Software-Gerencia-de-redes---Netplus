@@ -21,14 +21,16 @@ type TrafficController struct {
 	asMetaStore *storage.ASMetadataStore
 	trafficSvc  *traffic.Service
 	uploadDir   string
+	auditStore  storage.IAuditStore
 }
 
-func NewTrafficController(store *storage.DeviceStore, asMetaStore *storage.ASMetadataStore, trafficSvc *traffic.Service, uploadDir string) *TrafficController {
+func NewTrafficController(store *storage.DeviceStore, asMetaStore *storage.ASMetadataStore, trafficSvc *traffic.Service, uploadDir string, auditStore storage.IAuditStore) *TrafficController {
 	return &TrafficController{
 		store:       store,
 		asMetaStore: asMetaStore,
 		trafficSvc:  trafficSvc,
 		uploadDir:   uploadDir,
+		auditStore:  auditStore,
 	}
 }
 
@@ -298,6 +300,29 @@ func (tc *TrafficController) ApplyPrepend(w http.ResponseWriter, r *http.Request
 	msg := fmt.Sprintf("[Modo Manual Ativo] Comandos de Prepend (%dx) gerados para %s. Nenhuma alteração foi executada no equipamento.", req.PrependCount, req.PeerIP)
 	if req.Block {
 		msg = fmt.Sprintf("[Modo Manual Ativo] Comandos de Bloqueio gerados para %s. Nenhuma alteração foi executada no equipamento.", req.PeerIP)
+	}
+
+	if tc.auditStore != nil {
+		user := GetAuthUser(r)
+		userName, userEmail, userID := "Sistema", "system@netpulse.com", "sys"
+		if user != nil {
+			userName, userEmail, userID = user.Name, user.Email, user.UserID
+		}
+		actionDesc := fmt.Sprintf("Prepend %dx aplicado para peer %s (bloco %s)", req.PrependCount, req.PeerIP, req.Prefix)
+		if req.Block {
+			actionDesc = fmt.Sprintf("Bloqueio de rota aplicado para peer %s (bloco %s)", req.PeerIP, req.Prefix)
+		}
+		_ = tc.auditStore.Record(&models.AuditLog{
+			TenantID:         "default-tenant",
+			UserID:           userID,
+			UserName:         userName,
+			UserEmail:        userEmail,
+			ClientIP:         r.RemoteAddr,
+			Action:           models.ActionApplyPrepend,
+			TargetDeviceID:   req.DeviceID,
+			CommandExecuted:  actionDesc,
+			Status:           "MANUAL_DISPATCH",
+		})
 	}
 
 	WriteJSON(w, http.StatusOK, map[string]any{

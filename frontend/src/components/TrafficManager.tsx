@@ -53,6 +53,7 @@ import {
   type ASMetadata
 } from '../services/api'
 import { CardSkeleton } from './common/Skeleton'
+import { useAuth } from '../context/AuthContext'
 
 export interface TrafficManagerProps {
   activeSubTab?: 'upload' | 'download'
@@ -67,6 +68,7 @@ export const TrafficManager: React.FC<TrafficManagerProps> = ({
   hideInternalSubTabs = false,
   density = 'comfortable',
 }) => {
+  const { canOperate } = useAuth()
   const [internalSubTab, setInternalSubTab] = useState<'upload' | 'download'>('download')
   const activeSubTab = externalSubTab || internalSubTab
   const setActiveSubTab = (tab: 'upload' | 'download') => {
@@ -180,6 +182,10 @@ export const TrafficManager: React.FC<TrafficManagerProps> = ({
 
   // --- Add Route Modal Triggers ---
   const openAddRouteForSection = (section: BGPASSection) => {
+    if (!canOperate) {
+      alert('Operação restrita: Apenas Administrador e Operador NOC podem adicionar rotas estáticas.')
+      return
+    }
     setTargetSection(section)
     setFormDevice(section.device_id)
     setFormNextHop(section.metadata.custom_gateway || section.peer_ip)
@@ -192,6 +198,10 @@ export const TrafficManager: React.FC<TrafficManagerProps> = ({
   }
 
   const openAddRouteGeneric = () => {
+    if (!canOperate) {
+      alert('Operação restrita: Apenas Administrador e Operador NOC podem adicionar rotas estáticas.')
+      return
+    }
     setTargetSection(null)
     if (devices.length > 0 && !formDevice) {
       setFormDevice(devices[0].id)
@@ -236,6 +246,10 @@ export const TrafficManager: React.FC<TrafficManagerProps> = ({
   }
 
   const handleDeleteRoute = async (route: StaticRoute) => {
+    if (!canOperate) {
+      alert('Operação restrita: Apenas Administrador e Operador NOC podem excluir rotas estáticas.')
+      return
+    }
     const confirmMsg = `Tem certeza que deseja remover a rota estática para ${route.destination} via ${route.next_hop} no equipamento ${route.device_name}?`
     if (!window.confirm(confirmMsg)) {
       return
@@ -319,6 +333,10 @@ export const TrafficManager: React.FC<TrafficManagerProps> = ({
 
   // --- Local-Preference Handlers (Upload) ---
   const openLocalPrefModal = (section: BGPASSection) => {
+    if (!canOperate) {
+      alert('Operação restrita: Apenas Administrador e Operador NOC podem alterar Local-Preference.')
+      return
+    }
     setLocalPrefSection(section)
     setTargetLocalPref(section.local_pref || 100)
     setLocalPrefError(null)
@@ -375,6 +393,10 @@ export const TrafficManager: React.FC<TrafficManagerProps> = ({
   }
 
   const openPrependModal = (prefixState: PrefixPrependState, group?: ASPrependGroup) => {
+    if (!canOperate) {
+      alert('Operação restrita: Apenas Administrador e Operador NOC podem alterar prepends BGP.')
+      return
+    }
     setTargetPrependPrefix(prefixState)
     setTargetPrependGroup(group || null)
     setPrependCountChoice(prefixState.prepend_count)
@@ -664,6 +686,16 @@ export const TrafficManager: React.FC<TrafficManagerProps> = ({
 
   return (
     <div className="space-y-6">
+      {/* Read-Only RBAC Alert for Viewers */}
+      {!canOperate && (
+        <div className="p-3.5 rounded-xl bg-amber-950/40 border border-amber-800/80 text-amber-300 text-xs flex items-center gap-2.5 shadow-lg">
+          <ShieldAlert className="h-4 w-4 text-amber-400 shrink-0" />
+          <span>
+            <strong>Modo Somente Leitura (Visualizador):</strong> Seu usuário possui permissão de leitura analítica. As ações de engenharia de tráfego (aplicação de prepends, rotas estáticas e local-preference) estão bloqueadas e restritas a <strong>Admin</strong> ou <strong>Operador NOC</strong>.
+          </span>
+        </div>
+      )}
+
       {/* Top Header & Subtabs */}
       {!hideInternalSubTabs && (
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-slate-800 pb-5">

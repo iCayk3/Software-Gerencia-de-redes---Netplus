@@ -1,0 +1,62 @@
+[
+  {
+    "id": "aud-c0399cb4676a2f06781d928bb8934f20",
+    "tenant_id": "default-tenant",
+    "timestamp": "2026-09-23T17:54:20.0014185-03:00",
+    "user_id": "usr-ddfef458081730af",
+    "user_name": "Diretoria / Visualizador",
+    "user_email": "diretoria@netpulse.com",
+    "client_ip": "[::1]:59982",
+    "action": "USER_LOGIN",
+    "command_executed": "User logged into Web Console",
+    "status": "SUCCESS"
+  },
+  {
+    "id": "aud-1af8aeb80958bcec2206c38795eb00b8",
+    "tenant_id": "default-tenant",
+    "timestamp": "2026-09-23T17:53:30.5031273-03:00",
+    "user_id": "usr-189a0e5b3e2f9852",
+    "user_name": "Administrador Geral",
+    "user_email": "admin@netpulse.com",
+    "client_ip": "[::1]:65376",
+    "action": "USER_LOGIN",
+    "command_executed": "User logged into Web Console",
+    "status": "SUCCESS"
+  },
+  {
+    "id": "aud-52cb9b4f26b8afdb0d6b94372afa81a4",
+    "tenant_id": "default-tenant",
+    "timestamp": "2026-09-23T17:53:00.8593114-03:00",
+    "user_id": "usr-189a0e5b3e2f9852",
+    "user_name": "Administrador Geral",
+    "user_email": "admin@netpulse.com",
+    "client_ip": "[::1]:62802",
+    "action": "USER_LOGIN",
+    "command_executed": "User logged into Web Console",
+    "status": "SUCCESS"
+  },
+  {
+    "id": "aud-b0361c0ae691e28c35f28e890dc7348b",
+    "tenant_id": "default-tenant",
+    "timestamp": "2026-09-23T17:39:14.2115935-03:00",
+    "user_id": "usr-189a0e5b3e2f9852",
+    "user_name": "Administrador Geral",
+    "user_email": "admin@netpulse.com",
+    "client_ip": "[::1]:61470",
+    "action": "USER_LOGIN",
+    "command_executed": "User logged into Web Console",
+    "status": "SUCCESS"
+  },
+  {
+    "id": "aud-b0bbd3aefd70900129485a0c6086c16d",
+    "tenant_id": "default-tenant",
+    "timestamp": "2026-09-23T17:38:28.315407-03:00",
+    "user_id": "usr-189a0e5b3e2f9852",
+    "user_name": "Administrador Geral",
+    "user_email": "admin@netpulse.com",
+    "client_ip": "[::1]:60664",
+    "action": "USER_LOGIN",
+    "command_executed": "User logged into Web Console",
+    "status": "SUCCESS"
+  }
+]

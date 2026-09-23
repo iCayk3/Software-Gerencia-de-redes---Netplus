@@ -2,6 +2,7 @@ package api
 
 import (
 	"encoding/json"
+	"fmt"
 	"net/http"
 
 	"network-software/internal/drivers"
@@ -13,10 +14,11 @@ import (
 type RoutesController struct {
 	store      *storage.DeviceStore
 	trafficSvc *traffic.Service
+	auditStore storage.IAuditStore
 }
 
-func NewRoutesController(store *storage.DeviceStore, trafficSvc *traffic.Service) *RoutesController {
-	return &RoutesController{store: store, trafficSvc: trafficSvc}
+func NewRoutesController(store *storage.DeviceStore, trafficSvc *traffic.Service, auditStore storage.IAuditStore) *RoutesController {
+	return &RoutesController{store: store, trafficSvc: trafficSvc, auditStore: auditStore}
 }
 
 // GetDeviceStaticRoutes handles GET /api/devices/{id}/routes/static
@@ -119,6 +121,26 @@ func (c *RoutesController) AddDeviceStaticRoute(w http.ResponseWriter, r *http.R
 		c.trafficSvc.InvalidateDevice(id)
 	}
 
+	if c.auditStore != nil {
+		user := GetAuthUser(r)
+		userName, userEmail, userID := "Sistema", "system@netpulse.com", "sys"
+		if user != nil {
+			userName, userEmail, userID = user.Name, user.Email, user.UserID
+		}
+		_ = c.auditStore.Record(&models.AuditLog{
+			TenantID:         "default-tenant",
+			UserID:           userID,
+			UserName:         userName,
+			UserEmail:        userEmail,
+			ClientIP:         r.RemoteAddr,
+			Action:           models.ActionAddStaticRoute,
+			TargetDeviceID:   device.ID,
+			TargetDeviceName: device.Name,
+			CommandExecuted:  fmt.Sprintf("ip route-static %s %s description %s", req.Destination, req.NextHop, req.Description),
+			Status:           "SUCCESS",
+		})
+	}
+
 	WriteJSON(w, http.StatusCreated, map[string]string{
 		"message": "Rota estática configurada com sucesso no roteador",
 	})
@@ -154,6 +176,26 @@ func (c *RoutesController) DeleteDeviceStaticRoute(w http.ResponseWriter, r *htt
 
 	if c.trafficSvc != nil {
 		c.trafficSvc.InvalidateDevice(id)
+	}
+
+	if c.auditStore != nil {
+		user := GetAuthUser(r)
+		userName, userEmail, userID := "Sistema", "system@netpulse.com", "sys"
+		if user != nil {
+			userName, userEmail, userID = user.Name, user.Email, user.UserID
+		}
+		_ = c.auditStore.Record(&models.AuditLog{
+			TenantID:         "default-tenant",
+			UserID:           userID,
+			UserName:         userName,
+			UserEmail:        userEmail,
+			ClientIP:         r.RemoteAddr,
+			Action:           models.ActionDeleteStaticRoute,
+			TargetDeviceID:   device.ID,
+			TargetDeviceName: device.Name,
+			CommandExecuted:  fmt.Sprintf("undo ip route-static %s %s", dest, nextHop),
+			Status:           "SUCCESS",
+		})
 	}
 
 	WriteJSON(w, http.StatusOK, map[string]string{

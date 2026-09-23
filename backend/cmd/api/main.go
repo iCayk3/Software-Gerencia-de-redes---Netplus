@@ -1,14 +1,17 @@
-﻿package main
+package main
 
 import (
 	"fmt"
 	"log"
 	"net/http"
 	"os"
+	"path/filepath"
 	"strconv"
 
 	"network-software/internal/api"
+	"network-software/internal/database"
 	"network-software/internal/storage"
+	"network-software/internal/storage/postgres"
 	"network-software/internal/telemetry"
 )
 
@@ -56,7 +59,24 @@ func main() {
 	telEngine.Start()
 	defer telEngine.Stop()
 
-	router := api.NewRouter(store, asMetaStore, telEngine, dataDir)
+	// Database & Enterprise Storage (PostgreSQL with graceful fallback)
+	var userStore storage.IUserStore
+	var auditStore storage.IAuditStore
+
+	db, err := database.Connect()
+	if err == nil && db != nil {
+		_ = database.RunMigrations(db, "migrations/001_init_schema.sql")
+		_ = database.AutoMigrateFromJSON(db)
+		userStore = postgres.NewUserStore(db)
+		auditStore = postgres.NewAuditStore(db)
+		log.Printf("[Database] 🐘 Repositório PostgreSQL ativado para Usuários e Trilha de Auditoria.")
+	} else {
+		log.Printf("[Database] ⚠️  PostgreSQL não conectado (%v). Usando armazenamento local em arquivo.", err)
+		userStore = storage.NewMemoryUserStore(filepath.Join(dataDir, "users.json"))
+		auditStore = storage.NewMemoryAuditStore(filepath.Join(dataDir, "audit_logs.json"))
+	}
+
+	router := api.NewRouter(store, asMetaStore, telEngine, dataDir, userStore, auditStore)
 	addr := fmt.Sprintf(":%s", port)
 
 	log.Printf("==================================================")

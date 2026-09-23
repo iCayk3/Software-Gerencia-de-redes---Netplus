@@ -5,13 +5,21 @@ import (
 	"os"
 	"path/filepath"
 
+	"network-software/internal/models"
 	"network-software/internal/storage"
 	"network-software/internal/telemetry"
 	"network-software/internal/traffic"
 )
 
 // NewRouter registers all routes and attaches middleware.
-func NewRouter(store *storage.DeviceStore, asMetaStore *storage.ASMetadataStore, engine *telemetry.Engine, dataDir string) http.Handler {
+func NewRouter(
+	store *storage.DeviceStore,
+	asMetaStore *storage.ASMetadataStore,
+	engine *telemetry.Engine,
+	dataDir string,
+	userStore storage.IUserStore,
+	auditStore storage.IAuditStore,
+) http.Handler {
 	mux := http.NewServeMux()
 
 	uploadDir := filepath.Join(dataDir, "uploads")
@@ -22,11 +30,21 @@ func NewRouter(store *storage.DeviceStore, asMetaStore *storage.ASMetadataStore,
 
 	devCtrl := NewDeviceController(store, engine)
 	telCtrl := NewTelemetryController(engine)
-	routesCtrl := NewRoutesController(store, trafficSvc)
-	trafficCtrl := NewTrafficController(store, asMetaStore, trafficSvc, uploadDir)
+	routesCtrl := NewRoutesController(store, trafficSvc, auditStore)
+	trafficCtrl := NewTrafficController(store, asMetaStore, trafficSvc, uploadDir, auditStore)
+	authCtrl := NewAuthController(userStore, auditStore)
+	auditCtrl := NewAuditController(auditStore)
 
 	// Base & Health check
 	mux.HandleFunc("GET /api/health", HandleHealth)
+
+	// Authentication & RBAC
+	mux.HandleFunc("POST /api/auth/login", authCtrl.Login)
+	mux.HandleFunc("GET /api/auth/me", authCtrl.Me)
+	mux.HandleFunc("GET /api/auth/users", RequireRole(models.RoleAdmin)(authCtrl.ListUsers))
+
+	// Audit Trail (Compliance & Operation Logging)
+	mux.HandleFunc("GET /api/audit/logs", auditCtrl.ListAuditLogs)
 
 	// Network diagnostic utilities
 	mux.HandleFunc("GET /api/network/interfaces", HandleGetInterfaces)
@@ -36,15 +54,15 @@ func NewRouter(store *storage.DeviceStore, asMetaStore *storage.ASMetadataStore,
 
 	// Device Inventory management
 	mux.HandleFunc("GET /api/devices", devCtrl.ListDevices)
-	mux.HandleFunc("POST /api/devices", devCtrl.CreateDevice)
-	mux.HandleFunc("PUT /api/devices/{id}", devCtrl.UpdateDevice)
-	mux.HandleFunc("DELETE /api/devices/{id}", devCtrl.DeleteDevice)
+	mux.HandleFunc("POST /api/devices", RequireRole(models.RoleAdmin)(devCtrl.CreateDevice))
+	mux.HandleFunc("PUT /api/devices/{id}", RequireRole(models.RoleAdmin)(devCtrl.UpdateDevice))
+	mux.HandleFunc("DELETE /api/devices/{id}", RequireRole(models.RoleAdmin)(devCtrl.DeleteDevice))
 	mux.HandleFunc("POST /api/devices/{id}/test", devCtrl.TestDevice)
 
 	// Routing inspection per device
 	mux.HandleFunc("GET /api/devices/{id}/bgp", devCtrl.GetDeviceBGP)
 	mux.HandleFunc("GET /api/devices/{id}/ospf", devCtrl.GetDeviceOSPF)
-	mux.HandleFunc("POST /api/devices/{id}/exec", devCtrl.ExecDeviceCommand)
+	mux.HandleFunc("POST /api/devices/{id}/exec", RequireRole(models.RoleAdmin, models.RoleNOCOperator)(devCtrl.ExecDeviceCommand))
 
 	// Consolidated routing inspection across all devices
 	mux.HandleFunc("GET /api/bgp/all", devCtrl.GetAllBGP)
@@ -53,15 +71,15 @@ func NewRouter(store *storage.DeviceStore, asMetaStore *storage.ASMetadataStore,
 	// Static Routes & Traffic Engineering (Upload)
 	mux.HandleFunc("GET /api/devices/{id}/routes/static", routesCtrl.GetDeviceStaticRoutes)
 	mux.HandleFunc("GET /api/routes/static/all", routesCtrl.GetAllStaticRoutes)
-	mux.HandleFunc("POST /api/devices/{id}/routes/static", routesCtrl.AddDeviceStaticRoute)
-	mux.HandleFunc("DELETE /api/devices/{id}/routes/static", routesCtrl.DeleteDeviceStaticRoute)
+	mux.HandleFunc("POST /api/devices/{id}/routes/static", RequireRole(models.RoleAdmin, models.RoleNOCOperator)(routesCtrl.AddDeviceStaticRoute))
+	mux.HandleFunc("DELETE /api/devices/{id}/routes/static", RequireRole(models.RoleAdmin, models.RoleNOCOperator)(routesCtrl.DeleteDeviceStaticRoute))
 
 	// Smart Traffic Engineering (Upload Overview by BGP AS)
 	mux.HandleFunc("GET /api/traffic/upload/overview", trafficCtrl.GetUploadOverview)
-	mux.HandleFunc("POST /api/traffic/upload/local-pref", trafficCtrl.SetLocalPreference)
+	mux.HandleFunc("POST /api/traffic/upload/local-pref", RequireRole(models.RoleAdmin, models.RoleNOCOperator)(trafficCtrl.SetLocalPreference))
 	mux.HandleFunc("GET /api/traffic/as-metadata", trafficCtrl.GetASMetadata)
-	mux.HandleFunc("POST /api/traffic/as-metadata", trafficCtrl.UpdateASMetadata)
-	mux.HandleFunc("POST /api/traffic/as-metadata/upload-image", trafficCtrl.UploadASImage)
+	mux.HandleFunc("POST /api/traffic/as-metadata", RequireRole(models.RoleAdmin, models.RoleNOCOperator)(trafficCtrl.UpdateASMetadata))
+	mux.HandleFunc("POST /api/traffic/as-metadata/upload-image", RequireRole(models.RoleAdmin)(trafficCtrl.UploadASImage))
 
 	// Static file server for uploaded AS logos/images
 	mux.Handle("GET /api/uploads/", http.StripPrefix("/api/uploads/", http.FileServer(http.Dir(uploadDir))))
@@ -70,8 +88,8 @@ func NewRouter(store *storage.DeviceStore, asMetaStore *storage.ASMetadataStore,
 	mux.HandleFunc("GET /api/traffic/status", trafficCtrl.GetSyncStatus)
 	mux.HandleFunc("GET /api/devices/{id}/bgp/prepends", trafficCtrl.GetDevicePrepends)
 	mux.HandleFunc("GET /api/bgp/prepends/all", trafficCtrl.GetAllPrepends)
-	mux.HandleFunc("POST /api/devices/{id}/bgp/prepends", trafficCtrl.ApplyPrepend)
-	mux.HandleFunc("POST /api/traffic/download/prepend", trafficCtrl.ApplyPrepend)
+	mux.HandleFunc("POST /api/devices/{id}/bgp/prepends", RequireRole(models.RoleAdmin, models.RoleNOCOperator)(trafficCtrl.ApplyPrepend))
+	mux.HandleFunc("POST /api/traffic/download/prepend", RequireRole(models.RoleAdmin, models.RoleNOCOperator)(trafficCtrl.ApplyPrepend))
 
 	// Telemetry & Anomaly Detections
 	mux.HandleFunc("GET /api/telemetry/status", telCtrl.GetStatus)
@@ -82,8 +100,9 @@ func NewRouter(store *storage.DeviceStore, asMetaStore *storage.ASMetadataStore,
 	mux.HandleFunc("POST /api/alerts/{id}/ack", telCtrl.AcknowledgeAlert)
 	mux.HandleFunc("GET /api/telemetry/events", telCtrl.StreamEvents)
 
-	// Wrap with middlewares
-	handler := RequestLogger(mux)
+	// Wrap with middlewares: CORS -> Logger -> Auth
+	handler := AuthMiddleware(mux)
+	handler = RequestLogger(handler)
 	handler = EnableCORS(handler)
 
 	return handler

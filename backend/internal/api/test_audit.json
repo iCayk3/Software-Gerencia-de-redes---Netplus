@@ -1,0 +1,14 @@
+[
+  {
+    "id": "aud-ba5fa89a58ac95eca5a51a51241d2d5e",
+    "tenant_id": "default-tenant",
+    "timestamp": "2026-09-23T17:37:41.9038985-03:00",
+    "user_id": "usr-0d094404b5c4f8dd",
+    "user_name": "Administrador Geral",
+    "user_email": "admin@netpulse.com",
+    "client_ip": "192.0.2.1:1234",
+    "action": "USER_LOGIN",
+    "command_executed": "User logged into Web Console",
+    "status": "SUCCESS"
+  }
+]

@@ -9,10 +9,15 @@ import { TerminalView } from './components/TerminalView'
 import { DiagnosticsView } from './components/DiagnosticsView'
 import { TrafficManager } from './components/TrafficManager'
 import { CommandPalette } from './components/CommandPalette'
+import { LoginPage } from './components/LoginPage'
+import { AuditView } from './components/AuditView'
+import { AuthProvider, useAuth } from './context/AuthContext'
 import { fetchHealth, fetchAlerts, fetchDevices, type HealthResponse, type Device } from './services/api'
 import { ShieldCheck, Terminal, Network } from 'lucide-react'
 
-export function App() {
+function AppContent() {
+  const { user, token, loading: authLoading } = useAuth()
+
   // Navigation State: Seção Lateral e Sub-Aba Superior
   const [activeSection, setActiveSection] = useState<MainSectionType>('traffic')
   const [activeSubTab, setActiveSubTab] = useState<string>('download')
@@ -97,6 +102,9 @@ export function App() {
       case 'diagnostics':
         setActiveSubTab('ping')
         break
+      case 'audit':
+        setActiveSubTab('logs')
+        break
     }
   }
 
@@ -115,6 +123,26 @@ export function App() {
   const handleOpenAlerts = () => {
     setActiveSection('telemetry')
     setActiveSubTab('alerts')
+  }
+
+  // Se estiver carregando verificação de autenticação
+  if (authLoading) {
+    return (
+      <div className="min-h-screen bg-slate-950 flex flex-col items-center justify-center text-slate-400 gap-3 selection:bg-cyan-500 selection:text-white">
+        <div className="h-12 w-12 rounded-2xl bg-gradient-to-tr from-cyan-500 via-blue-600 to-indigo-600 flex items-center justify-center text-white shadow-xl shadow-cyan-500/20 animate-pulse">
+          <Network className="h-6 w-6" />
+        </div>
+        <div className="flex items-center gap-2 text-xs font-medium text-slate-300">
+          <div className="h-3.5 w-3.5 border-2 border-cyan-500/30 border-t-cyan-500 rounded-full animate-spin" />
+          <span>Verificando sessão corporativa...</span>
+        </div>
+      </div>
+    )
+  }
+
+  // Se não autenticado, renderizar tela de login B2B
+  if (!token || !user) {
+    return <LoginPage />
   }
 
   return (
@@ -209,6 +237,11 @@ export function App() {
               hideInternalTabs={true}
             />
           )}
+
+          {/* ================= SEÇÃO 5: TRILHA DE AUDITORIA (AUDIT TRAIL) ================= */}
+          {activeSection === 'audit' && (
+            <AuditView density={density} />
+          )}
         </main>
 
         {/* Rodapé Compacto */}
@@ -244,4 +277,13 @@ export function App() {
   )
 }
 
+export function App() {
+  return (
+    <AuthProvider>
+      <AppContent />
+    </AuthProvider>
+  )
+}
+
 export default App
+

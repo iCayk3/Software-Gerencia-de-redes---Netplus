@@ -9,11 +9,14 @@ import {
   ChevronRight,
   Wifi,
   ShieldAlert,
+  ShieldCheck,
+  LogOut,
   X
 } from 'lucide-react'
 import type { HealthResponse } from '../services/api'
+import { useAuth } from '../context/AuthContext'
 
-export type MainSectionType = 'traffic' | 'devices' | 'telemetry' | 'diagnostics'
+export type MainSectionType = 'traffic' | 'devices' | 'telemetry' | 'diagnostics' | 'audit'
 
 interface NavSectionItem {
   id: MainSectionType
@@ -48,6 +51,8 @@ export const Sidebar: React.FC<SidebarProps> = ({
   health,
   loadingHealth,
 }) => {
+  const { user, logout } = useAuth()
+
   const navSections: NavSectionItem[] = [
     {
       id: 'traffic',
@@ -81,6 +86,14 @@ export const Sidebar: React.FC<SidebarProps> = ({
       description: 'Ping, portas, DNS e interfaces',
       icon: Cpu,
       defaultSubTab: 'ping',
+    },
+    {
+      id: 'audit',
+      label: 'Trilha de Auditoria',
+      shortLabel: 'Auditoria',
+      description: 'Logs imutáveis de ações e comandos',
+      icon: ShieldCheck,
+      defaultSubTab: 'logs',
     },
   ]
 
@@ -185,6 +198,59 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
       {/* Backend Status & Collapse Toggle */}
       <div className="p-3 border-t border-slate-800/80 space-y-2 bg-slate-950/40">
+        {/* Current Authenticated User Profile Pill */}
+        {user && (
+          <div className={`p-2 rounded-xl bg-slate-950/80 border border-slate-800/80 flex items-center gap-2 ${
+            isCollapsed ? 'justify-center' : 'justify-between'
+          }`}>
+            <div className="flex items-center gap-2 min-w-0">
+              <div
+                className={`h-7 w-7 rounded-lg flex items-center justify-center text-[10px] font-bold shrink-0 ${
+                  user.role === 'admin'
+                    ? 'bg-red-500/20 text-red-400 border border-red-500/30'
+                    : user.role === 'noc_operator'
+                    ? 'bg-cyan-500/20 text-cyan-400 border border-cyan-500/30'
+                    : 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30'
+                }`}
+                title={`${user.name} (${user.email})`}
+              >
+                {user.name ? user.name.slice(0, 2).toUpperCase() : 'U'}
+              </div>
+              {!isCollapsed && (
+                <div className="min-w-0 flex-1">
+                  <div className="text-xs font-semibold text-white truncate">{user.name}</div>
+                  <div className="flex items-center gap-1 mt-0.5">
+                    <span
+                      className={`text-[9px] font-bold px-1.5 py-0.2 rounded-full ${
+                        user.role === 'admin'
+                          ? 'bg-red-950 text-red-300 border border-red-800'
+                          : user.role === 'noc_operator'
+                          ? 'bg-cyan-950 text-cyan-300 border border-cyan-800'
+                          : 'bg-emerald-950 text-emerald-300 border border-emerald-800'
+                      }`}
+                    >
+                      {user.role === 'admin'
+                        ? 'Admin'
+                        : user.role === 'noc_operator'
+                        ? 'Operador'
+                        : 'Visualizador'}
+                    </span>
+                  </div>
+                </div>
+              )}
+            </div>
+            {!isCollapsed && (
+              <button
+                onClick={logout}
+                className="p-1.5 text-slate-400 hover:text-rose-400 hover:bg-slate-800 rounded-lg transition cursor-pointer"
+                title="Encerrar Sessão (Logout)"
+              >
+                <LogOut className="h-3.5 w-3.5" />
+              </button>
+            )}
+          </div>
+        )}
+
         {/* Backend Connectivity Status */}
         {!isCollapsed ? (
           <div className="p-2.5 rounded-xl bg-slate-950/80 border border-slate-800/80 text-[11px] flex items-center justify-between">

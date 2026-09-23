@@ -1,0 +1,31 @@
+[
+  {
+    "id": "usr-189a0e5b3e2f9852",
+    "tenant_id": "default-tenant",
+    "name": "Administrador Geral",
+    "email": "admin@netpulse.com",
+    "role": "admin",
+    "status": "active",
+    "created_at": "2026-09-23T17:38:08.4290468-03:00",
+    "last_login": "2026-09-23T17:53:30.5019969-03:00"
+  },
+  {
+    "id": "usr-6851b23126ba8051",
+    "tenant_id": "default-tenant",
+    "name": "Operador NOC",
+    "email": "operador@netpulse.com",
+    "role": "noc_operator",
+    "status": "active",
+    "created_at": "2026-09-23T17:38:08.4995314-03:00"
+  },
+  {
+    "id": "usr-ddfef458081730af",
+    "tenant_id": "default-tenant",
+    "name": "Diretoria / Visualizador",
+    "email": "diretoria@netpulse.com",
+    "role": "viewer",
+    "status": "active",
+    "created_at": "2026-09-23T17:38:08.5600859-03:00",
+    "last_login": "2026-09-23T17:54:20.0014185-03:00"
+  }
+]

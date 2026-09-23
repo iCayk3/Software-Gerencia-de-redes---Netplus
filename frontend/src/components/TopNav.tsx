@@ -18,6 +18,7 @@ import {
 } from 'lucide-react'
 import type { MainSectionType } from './Sidebar'
 import type { HealthResponse } from '../services/api'
+import { useAuth } from '../context/AuthContext'
 
 export interface SubTabItem {
   id: string
@@ -51,6 +52,8 @@ export const TopNav: React.FC<TopNavProps> = ({
   density,
   onToggleDensity,
 }) => {
+  const { user } = useAuth()
+
   // Configuração das sub-abas dinâmicas de cada seção
   const sectionSubTabs: Record<MainSectionType, { title: string; subtitle: string; tabs: SubTabItem[] }> = {
     traffic: {
@@ -87,6 +90,13 @@ export const TopNav: React.FC<TopNavProps> = ({
         { id: 'interfaces', label: 'Interfaces de Rede', icon: Wifi },
         { id: 'ports', label: 'Scanner de Portas', icon: Server },
         { id: 'dns', label: 'Consulta DNS', icon: Globe },
+      ],
+    },
+    audit: {
+      title: 'Trilha de Auditoria Imutável (Audit Trail)',
+      subtitle: 'Histórico de quem executou, quando, IP de origem, dispositivo afetado e comandos emitidos',
+      tabs: [
+        { id: 'logs', label: 'Trilha de Auditoria', icon: ShieldCheck },
       ],
     },
   }
@@ -174,6 +184,31 @@ export const TopNav: React.FC<TopNavProps> = ({
               <div className="hidden 2xl:flex items-center gap-1.5 text-xs text-slate-400 px-2.5 py-1.5 rounded-xl bg-slate-800/60 border border-slate-700/60 font-mono text-[11px]">
                 <Cpu className="h-3 w-3 text-cyan-400" />
                 <span>{health.go_version || 'Go 1.27'}</span>
+              </div>
+            )}
+
+            {/* Authenticated User Role Badge */}
+            {user && (
+              <div
+                className={`hidden sm:flex items-center gap-1.5 text-xs font-semibold px-2.5 py-1.5 rounded-xl border ${
+                  user.role === 'admin'
+                    ? 'bg-red-950/80 text-red-300 border-red-800/80'
+                    : user.role === 'noc_operator'
+                    ? 'bg-cyan-950/80 text-cyan-300 border-cyan-800/80'
+                    : 'bg-emerald-950/80 text-emerald-300 border-emerald-800/80'
+                }`}
+                title={`Logado como ${user.name} (${user.email})`}
+              >
+                <span
+                  className={`h-1.5 w-1.5 rounded-full ${
+                    user.role === 'admin'
+                      ? 'bg-red-400 animate-pulse'
+                      : user.role === 'noc_operator'
+                      ? 'bg-cyan-400 animate-pulse'
+                      : 'bg-emerald-400'
+                  }`}
+                />
+                <span className="truncate max-w-[120px]">{user.name}</span>
               </div>
             )}
           </div>

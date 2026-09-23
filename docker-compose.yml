@@ -1,0 +1,23 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: netpulse_postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: netpulse
+      POSTGRES_USER: netpulse
+      POSTGRES_PASSWORD: netpulse_secret
+    ports:
+      - "5432:5432"
+    volumes:
+      - netpulse_postgres_data:/var/lib/postgresql/data
+      - ./backend/migrations/001_init_schema.sql:/docker-entrypoint-initdb.d/001_init_schema.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U netpulse -d netpulse"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  netpulse_postgres_data:
+    name: netpulse_postgres_data
