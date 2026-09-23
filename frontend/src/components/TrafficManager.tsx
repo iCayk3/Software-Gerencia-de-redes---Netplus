@@ -52,9 +52,27 @@ import {
   type UploadOverviewResponse,
   type ASMetadata
 } from '../services/api'
+import { CardSkeleton } from './common/Skeleton'
 
-export const TrafficManager: React.FC = () => {
-  const [activeSubTab, setActiveSubTab] = useState<'upload' | 'download'>('upload')
+export interface TrafficManagerProps {
+  activeSubTab?: 'upload' | 'download'
+  onSubTabChange?: (tab: 'upload' | 'download') => void
+  hideInternalSubTabs?: boolean
+  density?: 'comfortable' | 'compact'
+}
+
+export const TrafficManager: React.FC<TrafficManagerProps> = ({
+  activeSubTab: externalSubTab,
+  onSubTabChange,
+  hideInternalSubTabs = false,
+  density = 'comfortable',
+}) => {
+  const [internalSubTab, setInternalSubTab] = useState<'upload' | 'download'>('download')
+  const activeSubTab = externalSubTab || internalSubTab
+  const setActiveSubTab = (tab: 'upload' | 'download') => {
+    setInternalSubTab(tab)
+    if (onSubTabChange) onSubTabChange(tab)
+  }
   const [devices, setDevices] = useState<Device[]>([])
 
   // --- Upload State (Intelligent AS Sections & Rotas Estáticas) ---
@@ -647,50 +665,52 @@ export const TrafficManager: React.FC = () => {
   return (
     <div className="space-y-6">
       {/* Top Header & Subtabs */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-slate-800 pb-5">
-        <div>
-          <div className="flex items-center gap-2.5">
-            <div className="h-9 w-9 rounded-xl bg-cyan-500/10 border border-cyan-500/30 flex items-center justify-center text-cyan-400">
-              <ArrowUpDown className="h-5 w-5" />
-            </div>
-            <div>
-              <h2 className="text-xl font-bold text-white tracking-tight">Engenharia de Tráfego BGP</h2>
-              <p className="text-xs text-slate-400">
-                Gerenciamento inteligente de Upload por AS (rotas estáticas direcionadas) e Download (AS-Path Prepending)
-              </p>
+      {!hideInternalSubTabs && (
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-slate-800 pb-5">
+          <div>
+            <div className="flex items-center gap-2.5">
+              <div className="h-9 w-9 rounded-xl bg-cyan-500/10 border border-cyan-500/30 flex items-center justify-center text-cyan-400">
+                <ArrowUpDown className="h-5 w-5" />
+              </div>
+              <div>
+                <h2 className="text-xl font-bold text-white tracking-tight">Engenharia de Tráfego BGP</h2>
+                <p className="text-xs text-slate-400">
+                  Gerenciamento inteligente de Upload por AS (rotas estáticas direcionadas) e Download (AS-Path Prepending)
+                </p>
+              </div>
             </div>
           </div>
-        </div>
 
-        {/* Sub-tab Switcher */}
-        <div className="flex bg-slate-900 border border-slate-800 p-1 rounded-xl">
-          <button
-            onClick={() => setActiveSubTab('upload')}
-            className={`flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-semibold transition cursor-pointer ${
-              activeSubTab === 'upload'
-                ? 'bg-gradient-to-r from-cyan-600 to-blue-600 text-white shadow-md'
-                : 'text-slate-400 hover:text-white'
-            }`}
-          >
-            <Upload className="h-3.5 w-3.5" />
-            <span>Upload (Quadrados por AS & Rotas)</span>
-          </button>
-          <button
-            onClick={() => {
-              setActiveSubTab('download')
-              if (selectedPrependDevice) loadPrepends(selectedPrependDevice)
-            }}
-            className={`flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-semibold transition cursor-pointer ${
-              activeSubTab === 'download'
-                ? 'bg-gradient-to-r from-indigo-600 to-purple-600 text-white shadow-md'
-                : 'text-slate-400 hover:text-white'
-            }`}
-          >
-            <Download className="h-3.5 w-3.5" />
-            <span>Download (AS-Path Prepending)</span>
-          </button>
+          {/* Sub-tab Switcher */}
+          <div className="flex bg-slate-900 border border-slate-800 p-1 rounded-xl">
+            <button
+              onClick={() => setActiveSubTab('upload')}
+              className={`flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-semibold transition cursor-pointer ${
+                activeSubTab === 'upload'
+                  ? 'bg-gradient-to-r from-cyan-600 to-blue-600 text-white shadow-md'
+                  : 'text-slate-400 hover:text-white'
+              }`}
+            >
+              <Upload className="h-3.5 w-3.5" />
+              <span>Upload (Quadrados por AS & Rotas)</span>
+            </button>
+            <button
+              onClick={() => {
+                setActiveSubTab('download')
+                if (selectedPrependDevice) loadPrepends(selectedPrependDevice)
+              }}
+              className={`flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-semibold transition cursor-pointer ${
+                activeSubTab === 'download'
+                  ? 'bg-gradient-to-r from-indigo-600 to-purple-600 text-white shadow-md'
+                  : 'text-slate-400 hover:text-white'
+              }`}
+            >
+              <Download className="h-3.5 w-3.5" />
+              <span>Download (AS-Path Prepending)</span>
+            </button>
+          </div>
         </div>
-      </div>
+      )}
 
       {/* ===================== ABA 1: UPLOAD (QUADRADOS POR AS / ROTAS ESTÁTICAS) ===================== */}
       {activeSubTab === 'upload' && (
@@ -794,9 +814,10 @@ export const TrafficManager: React.FC = () => {
           )}
 
           {loading && !uploadOverview ? (
-            <div className="p-16 text-center text-slate-400 text-xs flex flex-col items-center gap-3 bg-slate-900/60 border border-slate-800 rounded-2xl">
-              <RefreshCw className="h-7 w-7 text-cyan-400 animate-spin" />
-              <span className="font-semibold text-slate-300">Identificando sessões BGP e mapeando rotas estáticas nos roteadores...</span>
+            <div className={`grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 ${density === 'compact' ? 'gap-3.5' : 'gap-6'}`}>
+              {Array.from({ length: 6 }).map((_, i) => (
+                <CardSkeleton key={i} compact={density === 'compact'} />
+              ))}
             </div>
           ) : uploadViewMode === 'cards' ? (
             /* ================= MODO CARDS / QUADRADOS POR AS ================= */
@@ -810,7 +831,7 @@ export const TrafficManager: React.FC = () => {
                   </p>
                 </div>
               ) : (
-                <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
+                <div className={`grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 ${density === 'compact' ? 'gap-3.5' : 'gap-6'}`}>
                   {filteredSections.map((sec) => {
                     const isEstablished = sec.bgp_state.toLowerCase() === 'established'
 
@@ -820,14 +841,16 @@ export const TrafficManager: React.FC = () => {
                         className="flex flex-col bg-slate-900/90 border border-slate-800/90 hover:border-slate-700 rounded-2xl shadow-xl overflow-hidden transition duration-200"
                       >
                         {/* AS Card Header */}
-                        <div className="p-5 border-b border-slate-800/80 bg-slate-950/40">
+                        <div className={`border-b border-slate-800/80 bg-slate-950/40 ${density === 'compact' ? 'p-3.5' : 'p-5'}`}>
                           <div className="flex items-start justify-between gap-3">
                             {/* Logo / Image Box */}
                             <div className="flex items-center gap-3.5">
                               <div
                                 onClick={() => openCustomizeASModal(sec)}
                                 title="Clique para trocar imagem ou editar AS"
-                                className="h-14 w-14 rounded-2xl bg-slate-800/90 border border-slate-700 flex items-center justify-center overflow-hidden shrink-0 hover:border-cyan-500/60 transition cursor-pointer group relative shadow-md"
+                                className={`rounded-2xl bg-slate-800/90 border border-slate-700 flex items-center justify-center overflow-hidden shrink-0 hover:border-cyan-500/60 transition cursor-pointer group relative shadow-md ${
+                                  density === 'compact' ? 'h-11 w-11' : 'h-14 w-14'
+                                }`}
                               >
                                 {renderASLogo(sec.metadata, sec.peer_name)}
                                 <div className="absolute inset-0 bg-cyan-950/70 backdrop-blur-xs opacity-0 group-hover:opacity-100 flex items-center justify-center transition">
@@ -1271,9 +1294,10 @@ export const TrafficManager: React.FC = () => {
 
           {/* Download Peers & Policy Cards */}
           {prependsLoading ? (
-            <div className="p-12 text-center text-slate-400 text-xs flex flex-col items-center gap-3 bg-slate-900/60 border border-slate-800 rounded-2xl">
-              <RefreshCw className="h-6 w-6 text-indigo-400 animate-spin" />
-              <span>Consultando route-policies e sessões BGP via SSH...</span>
+            <div className={`grid grid-cols-1 lg:grid-cols-2 2xl:grid-cols-3 ${density === 'compact' ? 'gap-3.5' : 'gap-6'}`}>
+              {Array.from({ length: 6 }).map((_, i) => (
+                <CardSkeleton key={i} compact={density === 'compact'} />
+              ))}
             </div>
           ) : prependOverview ? (
             <div className="space-y-6">
@@ -1289,7 +1313,7 @@ export const TrafficManager: React.FC = () => {
                 </div>
                 {prependOverview.local_as && (
                   <span className="font-mono">
-                    ASN Local do Roteador: <strong className="text-indigo-300">AS{prependOverview.local_as}</strong>
+                    ASN Local do Roteador: <strong className="text-indigo-300 font-mono tracking-tight">AS{prependOverview.local_as}</strong>
                   </span>
                 )}
               </div>
@@ -1328,21 +1352,23 @@ export const TrafficManager: React.FC = () => {
                     }
 
                     return (
-                      <div className="grid grid-cols-1 lg:grid-cols-2 2xl:grid-cols-3 gap-6">
+                      <div className={`grid grid-cols-1 lg:grid-cols-2 2xl:grid-cols-3 ${density === 'compact' ? 'gap-3.5' : 'gap-6'}`}>
                         {filtered.map((grp) => (
                           <div
                             key={grp.id}
                             className="flex flex-col bg-slate-900/90 border border-slate-800/90 hover:border-slate-700 rounded-2xl shadow-xl overflow-hidden transition duration-200"
                           >
                             {/* AS Card Header */}
-                            <div className="p-5 border-b border-slate-800/80 bg-slate-950/40">
+                            <div className={`border-b border-slate-800/80 bg-slate-950/40 ${density === 'compact' ? 'p-3.5' : 'p-5'}`}>
                               <div className="flex items-start justify-between gap-3">
                                 <div className="flex items-center gap-3.5">
-                                  <div className="h-12 w-12 rounded-2xl bg-slate-800/90 border border-slate-700 flex items-center justify-center shrink-0 shadow-md">
+                                  <div className={`rounded-2xl bg-slate-800/90 border border-slate-700 flex items-center justify-center shrink-0 shadow-md ${
+                                    density === 'compact' ? 'h-9 w-9' : 'h-12 w-12'
+                                  }`}>
                                     {grp.role === 'ix_ptt' ? (
-                                      <Globe className="h-6 w-6 text-purple-400" />
+                                      <Globe className={`${density === 'compact' ? 'h-4 w-4' : 'h-6 w-6'} text-purple-400`} />
                                     ) : (
-                                      <Network className="h-6 w-6 text-indigo-400" />
+                                      <Network className={`${density === 'compact' ? 'h-4 w-4' : 'h-6 w-6'} text-indigo-400`} />
                                     )}
                                   </div>
                                   <div>

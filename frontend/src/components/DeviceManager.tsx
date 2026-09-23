@@ -23,10 +23,12 @@ import {
   type VendorType,
   type SSHTestResult
 } from '../services/api'
+import { DeviceCardSkeleton } from './common/Skeleton'
 
 interface DeviceManagerProps {
   onSelectDeviceForTerminal?: (device: Device) => void
   onSelectDeviceForBGP?: (device: Device) => void
+  density?: 'comfortable' | 'compact'
 }
 
 const VENDOR_OPTIONS: { id: VendorType; label: string; badge: string; color: string }[] = [
@@ -39,6 +41,7 @@ const VENDOR_OPTIONS: { id: VendorType; label: string; badge: string; color: str
 export const DeviceManager: React.FC<DeviceManagerProps> = ({
   onSelectDeviceForTerminal,
   onSelectDeviceForBGP,
+  density = 'comfortable',
 }) => {
   const [devices, setDevices] = useState<Device[]>([])
   const [loading, setLoading] = useState(false)
@@ -207,7 +210,13 @@ export const DeviceManager: React.FC<DeviceManagerProps> = ({
       )}
 
       {/* Grid of Devices */}
-      {devices.length === 0 && !loading ? (
+      {loading && devices.length === 0 ? (
+        <div className={`grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 ${density === 'compact' ? 'gap-3.5' : 'gap-5'}`}>
+          {Array.from({ length: 3 }).map((_, i) => (
+            <DeviceCardSkeleton key={i} compact={density === 'compact'} />
+          ))}
+        </div>
+      ) : devices.length === 0 ? (
         <div className="bg-slate-900/40 border border-slate-800 rounded-2xl p-12 text-center">
           <Network className="h-12 w-12 text-slate-600 mx-auto mb-3" />
           <h3 className="text-base font-semibold text-slate-300">Nenhum equipamento cadastrado ainda</h3>
@@ -223,7 +232,7 @@ export const DeviceManager: React.FC<DeviceManagerProps> = ({
           </button>
         </div>
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
+        <div className={`grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 ${density === 'compact' ? 'gap-3.5' : 'gap-5'}`}>
           {devices.map((dev) => {
             const vendorInfo = VENDOR_OPTIONS.find((v) => v.id === dev.vendor) || {
               badge: dev.vendor,
@@ -235,17 +244,19 @@ export const DeviceManager: React.FC<DeviceManagerProps> = ({
             return (
               <div
                 key={dev.id}
-                className="bg-slate-900/50 border border-slate-800 hover:border-slate-700 rounded-xl p-5 shadow-lg flex flex-col justify-between transition-all"
+                className={`bg-slate-900/50 border border-slate-800 hover:border-slate-700 rounded-xl shadow-lg flex flex-col justify-between transition-all ${
+                  density === 'compact' ? 'p-3.5' : 'p-5'
+                }`}
               >
                 <div>
                   {/* Top card header */}
-                  <div className="flex items-start justify-between gap-2 mb-3">
+                  <div className={`flex items-start justify-between gap-2 ${density === 'compact' ? 'mb-2' : 'mb-3'}`}>
                     <div>
                       <h3 className="font-semibold text-slate-100 text-base flex items-center gap-1.5">
                         <span>{dev.name}</span>
                       </h3>
                       {dev.model && (
-                        <span className="text-[11px] text-slate-400 font-mono">{dev.model}</span>
+                        <span className="text-[11px] text-slate-400 font-mono tracking-tight">{dev.model}</span>
                       )}
                     </div>
                     <div className="flex items-center gap-1.5 flex-wrap justify-end">
@@ -268,14 +279,16 @@ export const DeviceManager: React.FC<DeviceManagerProps> = ({
                   </div>
 
                   {/* Connection Details */}
-                  <div className="space-y-1.5 text-xs text-slate-300 mb-4 bg-slate-950/50 p-3 rounded-lg border border-slate-800/80">
+                  <div className={`text-slate-300 bg-slate-950/50 rounded-lg border border-slate-800/80 ${
+                    density === 'compact' ? 'space-y-1 text-[11px] p-2.5 mb-2.5' : 'space-y-1.5 text-xs p-3 mb-4'
+                  }`}>
                     <div className="flex items-center justify-between">
                       <span className="text-slate-500">Host / IP:</span>
-                      <span className="font-mono text-cyan-300">{dev.host}:{dev.port}</span>
+                      <span className="font-mono text-cyan-300 tracking-tight">{dev.host}:{dev.port}</span>
                     </div>
                     <div className="flex items-center justify-between">
                       <span className="text-slate-500">Usuário SSH:</span>
-                      <span className="font-mono text-slate-300">{dev.username}</span>
+                      <span className="font-mono text-slate-300 tracking-tight">{dev.username}</span>
                     </div>
                     <div className="flex items-center justify-between">
                       <span className="text-slate-500">Status SSH:</span>

@@ -734,7 +734,7 @@ func ParseHuaweiBGPPrepends(bgpCfg, tagPol string, sessions []models.BGPSession,
 				clean := strings.ReplaceAll(pfx, "45.166.", "")
 				clean = strings.ReplaceAll(clean, ".0/", "")
 				clean = strings.ReplaceAll(clean, "/", "")
-				if strings.Contains(tTrimmed, clean) {
+				if strings.Contains(tTrimmed, clean) || (pfx == "45.166.28.0/22" && strings.Contains(tTrimmed, "2228")) {
 					currentPrefixTag = pfx
 					break
 				}

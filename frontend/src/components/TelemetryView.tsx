@@ -16,7 +16,13 @@ import {
   Layers,
   ShieldCheck,
   Terminal,
-  Zap
+  Zap,
+  ChevronLeft,
+  ChevronRight,
+  ChevronsLeft,
+  ChevronsRight,
+  Search,
+  CheckCheck
 } from 'lucide-react'
 import {
   fetchTelemetryOverview,
@@ -30,12 +36,14 @@ import {
   type Alert,
   type TelemetrySnapshot
 } from '../services/api'
+import { MetricCardSkeleton } from './common/Skeleton'
 
-interface TelemetryViewProps {
+export interface TelemetryViewProps {
   onAlertsUpdated?: (count: number) => void
+  activeSubTab?: 'overview' | 'alerts'
 }
 
-export const TelemetryView: React.FC<TelemetryViewProps> = ({ onAlertsUpdated }) => {
+export const TelemetryView: React.FC<TelemetryViewProps> = ({ onAlertsUpdated, activeSubTab }) => {
   const [overview, setOverview] = useState<TelemetryOverview | null>(null)
   const [status, setStatus] = useState<TelemetryStatus | null>(null)
   const [alerts, setAlerts] = useState<Alert[]>([])
@@ -45,6 +53,12 @@ export const TelemetryView: React.FC<TelemetryViewProps> = ({ onAlertsUpdated })
   const [alertFilter, setAlertFilter] = useState<'active' | 'acknowledged' | 'resolved' | 'all'>('active')
   const [showSyslogGuide, setShowSyslogGuide] = useState(false)
   const [actionMessage, setActionMessage] = useState<string | null>(null)
+
+  // Estados de Paginação e Busca para a Central de Logs / Alertas
+  const [currentPage, setCurrentPage] = useState<number>(1)
+  const [pageSize, setPageSize] = useState<number>(10)
+  const [searchQuery, setSearchQuery] = useState<string>('')
+  const [acknowledgingAll, setAcknowledgingAll] = useState<boolean>(false)
 
   const loadData = useCallback(async () => {
     try {
@@ -106,9 +120,39 @@ export const TelemetryView: React.FC<TelemetryViewProps> = ({ onAlertsUpdated })
   }
 
   const filteredAlerts = alerts.filter(a => {
-    if (alertFilter === 'all') return true
-    return a.status === alertFilter
+    if (alertFilter !== 'all' && a.status !== alertFilter) return false
+    if (!searchQuery.trim()) return true
+    const q = searchQuery.toLowerCase()
+    return (
+      a.device_name.toLowerCase().includes(q) ||
+      a.message.toLowerCase().includes(q) ||
+      (a.target && a.target.toLowerCase().includes(q)) ||
+      a.severity.toLowerCase().includes(q) ||
+      a.type.toLowerCase().includes(q)
+    )
   })
+
+  const totalAlerts = filteredAlerts.length
+  const totalPages = Math.max(1, Math.ceil(totalAlerts / pageSize))
+  const safeCurrentPage = Math.min(Math.max(1, currentPage), totalPages)
+  const startIndex = (safeCurrentPage - 1) * pageSize
+  const endIndex = Math.min(startIndex + pageSize, totalAlerts)
+  const paginatedAlerts = filteredAlerts.slice(startIndex, endIndex)
+  const activeOnPageCount = paginatedAlerts.filter(a => a.status === 'active').length
+
+  const handleAcknowledgeAllVisible = async () => {
+    const activeVisible = paginatedAlerts.filter(a => a.status === 'active')
+    if (activeVisible.length === 0) return
+    setAcknowledgingAll(true)
+    try {
+      await Promise.all(activeVisible.map(a => acknowledgeAlert(a.id)))
+      await loadData()
+    } catch (err: any) {
+      alert(err.message || 'Falha ao reconhecer alertas')
+    } finally {
+      setAcknowledgingAll(false)
+    }
+  }
 
   const activeAlertsCount = alerts.filter(a => a.status === 'active' || a.status === 'acknowledged').length
 
@@ -131,7 +175,8 @@ export const TelemetryView: React.FC<TelemetryViewProps> = ({ onAlertsUpdated })
   return (
     <div className="space-y-6">
       {/* Top Banner & Control Bar */}
-      <div className="bg-slate-900/90 border border-slate-800 rounded-2xl p-5 shadow-xl">
+      {(!activeSubTab || activeSubTab === 'overview') && (
+        <div className="bg-slate-900/90 border border-slate-800 rounded-2xl p-5 shadow-xl">
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
           <div className="flex items-start gap-4">
             <div className="h-12 w-12 rounded-xl bg-cyan-500/10 border border-cyan-500/30 flex items-center justify-center text-cyan-400 shrink-0">
@@ -188,9 +233,20 @@ export const TelemetryView: React.FC<TelemetryViewProps> = ({ onAlertsUpdated })
           </div>
         )}
       </div>
+      )}
 
-      {/* KPI Cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+      {/* KPI Cards & History Trend */}
+      {(!activeSubTab || activeSubTab === 'overview') && (
+        <>
+          {/* KPI Cards */}
+          {loading && !overview ? (
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+              {Array.from({ length: 4 }).map((_, i) => (
+                <MetricCardSkeleton key={i} />
+              ))}
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         {/* Roteadores */}
         <div className="bg-slate-900/70 border border-slate-800 rounded-xl p-4 shadow-sm">
           <div className="flex items-center justify-between">
@@ -262,7 +318,7 @@ export const TelemetryView: React.FC<TelemetryViewProps> = ({ onAlertsUpdated })
             <Layers className="h-4 w-4 text-cyan-400" />
           </div>
           <div className="mt-2 flex items-baseline gap-2">
-            <span className="text-2xl font-bold text-white">
+            <span className="text-2xl font-bold text-white font-mono">
               {(overview?.total_prefixes ?? 0).toLocaleString()}
             </span>
             <span className="text-xs text-slate-500">rotas ativas</span>
@@ -270,6 +326,7 @@ export const TelemetryView: React.FC<TelemetryViewProps> = ({ onAlertsUpdated })
           <p className="text-xs text-slate-500 mt-2">Recebidas de peers BGP</p>
         </div>
       </div>
+    )}
 
       {/* History Trend Mini-Chart (SVG) */}
       {history.length > 1 && (
@@ -318,6 +375,8 @@ export const TelemetryView: React.FC<TelemetryViewProps> = ({ onAlertsUpdated })
           </div>
         </div>
       )}
+      </>
+      )}
 
       {/* Alerts & Detection Feed */}
       <div className="bg-slate-900/90 border border-slate-800 rounded-2xl shadow-xl overflow-hidden">
@@ -344,7 +403,10 @@ export const TelemetryView: React.FC<TelemetryViewProps> = ({ onAlertsUpdated })
           {/* Filter tabs */}
           <div className="flex items-center bg-slate-800/80 p-1 rounded-xl border border-slate-700/60 text-xs">
             <button
-              onClick={() => setAlertFilter('active')}
+              onClick={() => {
+                setAlertFilter('active')
+                setCurrentPage(1)
+              }}
               className={`px-3 py-1.5 rounded-lg font-medium transition cursor-pointer ${
                 alertFilter === 'active'
                   ? 'bg-rose-500/20 text-rose-300 border border-rose-500/40 shadow-xs'
@@ -354,7 +416,10 @@ export const TelemetryView: React.FC<TelemetryViewProps> = ({ onAlertsUpdated })
               Ativos ({alerts.filter(a => a.status === 'active').length})
             </button>
             <button
-              onClick={() => setAlertFilter('acknowledged')}
+              onClick={() => {
+                setAlertFilter('acknowledged')
+                setCurrentPage(1)
+              }}
               className={`px-3 py-1.5 rounded-lg font-medium transition cursor-pointer ${
                 alertFilter === 'acknowledged'
                   ? 'bg-amber-500/20 text-amber-300 border border-amber-500/40 shadow-xs'
@@ -364,7 +429,10 @@ export const TelemetryView: React.FC<TelemetryViewProps> = ({ onAlertsUpdated })
               Reconhecidos ({alerts.filter(a => a.status === 'acknowledged').length})
             </button>
             <button
-              onClick={() => setAlertFilter('resolved')}
+              onClick={() => {
+                setAlertFilter('resolved')
+                setCurrentPage(1)
+              }}
               className={`px-3 py-1.5 rounded-lg font-medium transition cursor-pointer ${
                 alertFilter === 'resolved'
                   ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 shadow-xs'
@@ -374,7 +442,10 @@ export const TelemetryView: React.FC<TelemetryViewProps> = ({ onAlertsUpdated })
               Resolvidos ({alerts.filter(a => a.status === 'resolved').length})
             </button>
             <button
-              onClick={() => setAlertFilter('all')}
+              onClick={() => {
+                setAlertFilter('all')
+                setCurrentPage(1)
+              }}
               className={`px-3 py-1.5 rounded-lg font-medium transition cursor-pointer ${
                 alertFilter === 'all'
                   ? 'bg-cyan-500/20 text-cyan-300 border border-cyan-500/40 shadow-xs'
@@ -386,20 +457,57 @@ export const TelemetryView: React.FC<TelemetryViewProps> = ({ onAlertsUpdated })
           </div>
         </div>
 
+        {/* Search & Actions Sub-Toolbar */}
+        <div className="px-5 py-3 border-b border-slate-800 bg-slate-950/40 flex flex-col sm:flex-row items-center justify-between gap-3">
+          <div className="relative w-full sm:w-80">
+            <Search className="h-4 w-4 text-slate-500 absolute left-3 top-1/2 -translate-y-1/2" />
+            <input
+              type="text"
+              placeholder="Filtrar logs por IP, roteador, mensagem..."
+              value={searchQuery}
+              onChange={(e) => {
+                setSearchQuery(e.target.value)
+                setCurrentPage(1)
+              }}
+              className="w-full pl-9 pr-3 py-1.5 bg-slate-900 border border-slate-700/80 rounded-xl text-xs text-slate-100 placeholder-slate-500 focus:outline-none focus:border-cyan-500"
+            />
+          </div>
+
+          <div className="flex items-center gap-3 w-full sm:w-auto justify-between sm:justify-end">
+            {activeOnPageCount > 0 && (
+              <button
+                onClick={handleAcknowledgeAllVisible}
+                disabled={acknowledgingAll}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-slate-800 hover:bg-slate-700 text-cyan-300 border border-slate-700 transition cursor-pointer disabled:opacity-50"
+                title="Reconhecer todos os alertas ativos desta página"
+              >
+                <CheckCheck className={`h-3.5 w-3.5 ${acknowledgingAll ? 'animate-spin' : 'text-cyan-400'}`} />
+                <span>Reconhecer Visíveis ({activeOnPageCount})</span>
+              </button>
+            )}
+
+            <div className="text-xs text-slate-400 font-medium whitespace-nowrap">
+              <span>Total: <strong className="text-white font-mono">{totalAlerts}</strong> logs</span>
+            </div>
+          </div>
+        </div>
+
         {/* Alert List */}
-        {filteredAlerts.length === 0 ? (
+        {paginatedAlerts.length === 0 ? (
           <div className="p-12 text-center">
             <div className="h-12 w-12 rounded-full bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 flex items-center justify-center mx-auto mb-3">
               <ShieldCheck className="h-6 w-6" />
             </div>
             <h4 className="text-sm font-semibold text-white">Nenhum alerta nesta categoria</h4>
             <p className="text-xs text-slate-500 mt-1 max-w-sm mx-auto">
-              Todas as sessões e equipamentos monitorados estão operando normalmente.
+              {searchQuery
+                ? `Nenhum alerta corresponde à busca "${searchQuery}".`
+                : 'Todas as sessões e equipamentos monitorados estão operando normalmente.'}
             </p>
           </div>
         ) : (
           <div className="divide-y divide-slate-800/60">
-            {filteredAlerts.map(alert => {
+            {paginatedAlerts.map(alert => {
               const isCrit = alert.severity === 'critical'
               const isWarn = alert.severity === 'warning'
 
@@ -489,6 +597,108 @@ export const TelemetryView: React.FC<TelemetryViewProps> = ({ onAlertsUpdated })
                 </div>
               )
             })}
+          </div>
+        )}
+
+        {/* Pagination Footer */}
+        {totalAlerts > 0 && (
+          <div className="p-4 border-t border-slate-800 bg-slate-950/60 flex flex-col sm:flex-row items-center justify-between gap-4 text-xs text-slate-400">
+            {/* Left Info & Page Size */}
+            <div className="flex items-center gap-4 flex-wrap">
+              <span>
+                Exibindo <strong className="text-white font-mono">{startIndex + 1}</strong> a{' '}
+                <strong className="text-white font-mono">{endIndex}</strong> de{' '}
+                <strong className="text-cyan-400 font-mono">{totalAlerts}</strong> eventos
+              </span>
+
+              <div className="flex items-center gap-1.5 border-l border-slate-800 pl-4">
+                <span className="text-slate-500">Por página:</span>
+                <select
+                  value={pageSize}
+                  onChange={(e) => {
+                    setPageSize(Number(e.target.value))
+                    setCurrentPage(1)
+                  }}
+                  className="bg-slate-800 border border-slate-700 text-slate-200 text-xs rounded-lg px-2 py-1 focus:outline-none focus:border-cyan-500 cursor-pointer font-mono"
+                >
+                  <option value={5}>5</option>
+                  <option value={10}>10</option>
+                  <option value={20}>20</option>
+                  <option value={50}>50</option>
+                </select>
+              </div>
+            </div>
+
+            {/* Right Navigation Buttons */}
+            {totalPages > 1 && (
+              <div className="flex items-center gap-1">
+                {/* Primeira Página */}
+                <button
+                  onClick={() => setCurrentPage(1)}
+                  disabled={safeCurrentPage === 1}
+                  className="p-1.5 rounded-lg bg-slate-800/80 hover:bg-slate-700 text-slate-300 disabled:opacity-30 disabled:cursor-not-allowed border border-slate-700/60 transition cursor-pointer"
+                  title="Primeira página"
+                >
+                  <ChevronsLeft className="h-4 w-4" />
+                </button>
+
+                {/* Página Anterior */}
+                <button
+                  onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
+                  disabled={safeCurrentPage === 1}
+                  className="p-1.5 rounded-lg bg-slate-800/80 hover:bg-slate-700 text-slate-300 disabled:opacity-30 disabled:cursor-not-allowed border border-slate-700/60 transition cursor-pointer"
+                  title="Página anterior"
+                >
+                  <ChevronLeft className="h-4 w-4" />
+                </button>
+
+                {/* Números das Páginas */}
+                <div className="flex items-center gap-1 px-1">
+                  {Array.from({ length: totalPages }, (_, i) => i + 1)
+                    .filter(p => p === 1 || p === totalPages || Math.abs(p - safeCurrentPage) <= 1)
+                    .map((p, idx, arr) => {
+                      const prevPage = arr[idx - 1]
+                      const showEllipsis = prevPage && p - prevPage > 1
+
+                      return (
+                        <React.Fragment key={p}>
+                          {showEllipsis && <span className="text-slate-600 px-1 font-mono">...</span>}
+                          <button
+                            onClick={() => setCurrentPage(p)}
+                            className={`min-w-[28px] h-7 px-2 rounded-lg text-xs font-semibold font-mono transition cursor-pointer ${
+                              safeCurrentPage === p
+                                ? 'bg-cyan-600 text-white shadow-md shadow-cyan-600/30'
+                                : 'bg-slate-800/80 hover:bg-slate-700 text-slate-400 hover:text-white border border-slate-700/60'
+                            }`}
+                          >
+                            {p}
+                          </button>
+                        </React.Fragment>
+                      )
+                    })}
+                </div>
+
+                {/* Próxima Página */}
+                <button
+                  onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))}
+                  disabled={safeCurrentPage === totalPages}
+                  className="p-1.5 rounded-lg bg-slate-800/80 hover:bg-slate-700 text-slate-300 disabled:opacity-30 disabled:cursor-not-allowed border border-slate-700/60 transition cursor-pointer"
+                  title="Próxima página"
+                >
+                  <ChevronRight className="h-4 w-4" />
+                </button>
+
+                {/* Última Página */}
+                <button
+                  onClick={() => setCurrentPage(totalPages)}
+                  disabled={safeCurrentPage === totalPages}
+                  className="p-1.5 rounded-lg bg-slate-800/80 hover:bg-slate-700 text-slate-300 disabled:opacity-30 disabled:cursor-not-allowed border border-slate-700/60 transition cursor-pointer"
+                  title="Última página"
+                >
+                  <ChevronsRight className="h-4 w-4" />
+                </button>
+              </div>
+            )}
           </div>
         )}
       </div>

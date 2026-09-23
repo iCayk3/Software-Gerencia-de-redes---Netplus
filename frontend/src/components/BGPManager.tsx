@@ -16,6 +16,7 @@ import {
   type Device,
   type BGPSession
 } from '../services/api'
+import { TableRowSkeleton } from './common/Skeleton'
 
 export const BGPManager: React.FC = () => {
   const [devices, setDevices] = useState<Device[]>([])
@@ -210,11 +211,30 @@ export const BGPManager: React.FC = () => {
 
       {/* Sessions Table */}
       <div className="bg-slate-900/50 border border-slate-800 rounded-xl overflow-hidden shadow-lg">
-        {filteredSessions.length === 0 ? (
+        {loading && sessions.length === 0 ? (
+          <div className="overflow-x-auto">
+            <table className="w-full text-left text-xs">
+              <thead className="bg-slate-950/60 text-slate-400 uppercase tracking-wider text-[11px] border-b border-slate-800">
+                <tr>
+                  <th className="py-3 px-4 font-medium">Equipamento</th>
+                  <th className="py-3 px-4 font-medium">Peer BGP</th>
+                  <th className="py-3 px-4 font-medium">AS Remoto</th>
+                  <th className="py-3 px-4 font-medium">Estado</th>
+                  <th className="py-3 px-4 font-medium">Uptime</th>
+                  <th className="py-3 px-4 font-medium">Prefixos</th>
+                  <th className="py-3 px-4 font-medium text-right">Ação</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-800/40 text-slate-300">
+                {Array.from({ length: 5 }).map((_, i) => (
+                  <TableRowSkeleton key={i} columns={7} />
+                ))}
+              </tbody>
+            </table>
+          </div>
+        ) : filteredSessions.length === 0 ? (
           <div className="p-12 text-center text-slate-500 text-sm">
-            {loading
-              ? 'Conectando via SSH aos roteadores e consultando BGP...'
-              : 'Nenhuma sessão BGP encontrada para os critérios selecionados.'}
+            Nenhuma sessão BGP encontrada para os critérios selecionados.
           </div>
         ) : (
           <div className="overflow-x-auto">

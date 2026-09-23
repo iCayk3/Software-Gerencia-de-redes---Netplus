@@ -4,6 +4,8 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"sort"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -155,6 +157,7 @@ func (s *Service) SyncAll(ctx context.Context) {
 	wg.Wait()
 	now := time.Now()
 	s.mu.Lock()
+	s.harmonizeASPrependsLocked()
 	s.lastSyncTime = &now
 	s.mu.Unlock()
 	log.Printf("[TrafficSync] ✅ Sincronização da Engenharia de Tráfego concluída. %d dispositivo(s) atualizado(s).", len(devices))
@@ -270,8 +273,10 @@ func (s *Service) GetPrepends(deviceID string, fresh bool) (*models.DevicePrepen
 
 	s.mu.Lock()
 	s.prepends[deviceID] = prepends
+	s.harmonizeASPrependsLocked()
+	res := s.prepends[deviceID]
 	s.mu.Unlock()
-	return prepends, nil
+	return res, nil
 }
 
 // GetAllPrepends returns all cached prepends or syncs if empty for BGP-enabled devices.
@@ -288,29 +293,30 @@ func (s *Service) GetAllPrepends(fresh bool) ([]models.DevicePrependOverview, er
 			_, _ = s.GetPrepends(d.ID, true)
 		}
 	} else {
-		// Check if we have prepends in cache for BGP devices
+		// Check if we have prepends in cache for all BGP devices
 		s.mu.RLock()
-		hasAny := false
+		missingAny := false
 		for _, d := range bgpDevices {
-			if _, ok := s.prepends[d.ID]; ok {
-				hasAny = true
+			if _, ok := s.prepends[d.ID]; !ok {
+				missingAny = true
 				break
 			}
 		}
 		s.mu.RUnlock()
-		if !hasAny {
+		if missingAny {
 			s.SyncAll(context.Background())
 		}
 	}
 
-	s.mu.RLock()
-	defer s.mu.RUnlock()
+	s.mu.Lock()
+	s.harmonizeASPrependsLocked()
 	all := make([]models.DevicePrependOverview, 0)
 	for _, d := range bgpDevices {
 		if p, ok := s.prepends[d.ID]; ok && p != nil {
 			all = append(all, *p)
 		}
 	}
+	s.mu.Unlock()
 	return all, nil
 }
 
@@ -600,4 +606,211 @@ func deduceRole(alias, peerName, asn string) string {
 		return "peering"
 	}
 	return "transit_primary"
+}
+
+// harmonizeASPrependsLocked ensures all routers within the same LocalAS share knowledge of all announced AS prefixes
+// and their origin community tags (e.g. routes originated on BGP1 and propagated via iBGP to BGP2).
+func (s *Service) harmonizeASPrependsLocked() {
+	type asData struct {
+		prefixes    []string
+		seenPrefix  map[string]bool
+		communities map[string]string // prefix -> master community string
+	}
+	asInfo := make(map[string]*asData)
+
+	// 1. Collect all distinct announced prefixes and community mappings per LocalAS
+	for _, ov := range s.prepends {
+		if ov == nil || ov.LocalAS == "" {
+			continue
+		}
+		data, ok := asInfo[ov.LocalAS]
+		if !ok {
+			data = &asData{
+				seenPrefix:  make(map[string]bool),
+				communities: make(map[string]string),
+			}
+			asInfo[ov.LocalAS] = data
+		}
+
+		// Collect from ASGroups
+		for _, grp := range ov.ASGroups {
+			for _, p := range grp.Prefixes {
+				if p.Prefix != "" && !data.seenPrefix[p.Prefix] {
+					data.seenPrefix[p.Prefix] = true
+					data.prefixes = append(data.prefixes, p.Prefix)
+				}
+				if p.Prefix != "" && p.Community != "" {
+					if existing, exists := data.communities[p.Prefix]; !exists || len(p.Community) > len(existing) {
+						data.communities[p.Prefix] = p.Community
+					}
+				}
+			}
+		}
+
+		// Collect from Prefixes (flat list)
+		for _, p := range ov.Prefixes {
+			if p.Prefix != "" && !data.seenPrefix[p.Prefix] {
+				data.seenPrefix[p.Prefix] = true
+				data.prefixes = append(data.prefixes, p.Prefix)
+			}
+			if p.Prefix != "" && p.Community != "" {
+				if existing, exists := data.communities[p.Prefix]; !exists || len(p.Community) > len(existing) {
+					data.communities[p.Prefix] = p.Community
+				}
+			}
+		}
+	}
+
+	// Sort prefixes in logical CIDR order: /22, then /23s, then /24s
+	for _, data := range asInfo {
+		sortPrefixList(data.prefixes)
+	}
+
+	// 2. Propagate missing prefixes to every router in the LocalAS
+	for _, ov := range s.prepends {
+		if ov == nil || ov.LocalAS == "" {
+			continue
+		}
+		data, ok := asInfo[ov.LocalAS]
+		if !ok || len(data.prefixes) == 0 {
+			continue
+		}
+
+		// A. Enrich ASGroups
+		for gIdx := range ov.ASGroups {
+			grp := &ov.ASGroups[gIdx]
+			grpPrefixMap := make(map[string]int)
+			for pIdx, p := range grp.Prefixes {
+				grpPrefixMap[p.Prefix] = pIdx
+			}
+
+			for _, pfx := range data.prefixes {
+				commStr := data.communities[pfx]
+				if pIdx, exists := grpPrefixMap[pfx]; exists {
+					// Update community and prepend if missing or more detailed
+					existing := &grp.Prefixes[pIdx]
+					if (existing.Community == "" || existing.Community == "-" || len(commStr) > len(existing.Community)) && commStr != "" {
+						existing.Community = commStr
+					}
+					if grp.CommunityBase != "" && existing.Community != "" {
+						calculatePrependState(existing, grp.CommunityBase)
+					}
+				} else {
+					// Add missing prefix to this AS Group
+					pState := models.PrefixPrependState{
+						ID:           fmt.Sprintf("grp-pfx-%s-%s-%s", ov.DeviceID, grp.CommunityBase, strings.ReplaceAll(pfx, "/", "_")),
+						DeviceID:     ov.DeviceID,
+						DeviceName:   ov.DeviceName,
+						Prefix:       pfx,
+						PeerIP:       strings.Join(grp.PeerIPs, ", "),
+						PeerName:     grp.GroupName,
+						PrependCount: 0,
+						IsBlocked:    false,
+						Community:    commStr,
+						PolicyName:   fmt.Sprintf("Base %s (%s)", grp.CommunityBase, grp.GroupName),
+					}
+					if grp.CommunityBase != "" {
+						calculatePrependState(&pState, grp.CommunityBase)
+					}
+					grp.Prefixes = append(grp.Prefixes, pState)
+				}
+			}
+
+			// Re-sort grp.Prefixes to match logical order
+			orderMap := make(map[string]int)
+			for idx, pfx := range data.prefixes {
+				orderMap[pfx] = idx
+			}
+			sort.SliceStable(grp.Prefixes, func(i, j int) bool {
+				return orderMap[grp.Prefixes[i].Prefix] < orderMap[grp.Prefixes[j].Prefix]
+			})
+		}
+
+		// B. Enrich flat Prefixes list for external peers
+		existingFlatMap := make(map[string]bool)
+		for _, p := range ov.Prefixes {
+			existingFlatMap[fmt.Sprintf("%s_%s", p.Prefix, p.PeerIP)] = true
+		}
+
+		for _, peer := range ov.Peers {
+			if peer.RemoteAS == ov.LocalAS {
+				continue
+			}
+			base := drivers.DetermineHuaweiPeerCommunityBase(peer.PeerIP, peer.RemoteAS, peer.PeerName, peer.PolicyName)
+			for _, pfx := range data.prefixes {
+				key := fmt.Sprintf("%s_%s", pfx, peer.PeerIP)
+				if !existingFlatMap[key] {
+					commStr := data.communities[pfx]
+					pState := models.PrefixPrependState{
+						ID:           fmt.Sprintf("pfx-%s-%s-%s", ov.DeviceID, strings.ReplaceAll(pfx, "/", "_"), peer.PeerIP),
+						DeviceID:     ov.DeviceID,
+						DeviceName:   ov.DeviceName,
+						Prefix:       pfx,
+						PeerIP:       peer.PeerIP,
+						PeerName:     peer.PeerName,
+						PrependCount: 0,
+						IsBlocked:    peer.IsBlocked,
+						PolicyName:   peer.PolicyName,
+						Community:    commStr,
+					}
+					if base != "" {
+						calculatePrependState(&pState, base)
+					}
+					ov.Prefixes = append(ov.Prefixes, pState)
+					existingFlatMap[key] = true
+				}
+			}
+		}
+	}
+}
+
+func calculatePrependState(pState *models.PrefixPrependState, base string) {
+	if base == "" || pState.Community == "" {
+		return
+	}
+	if strings.Contains(pState.Community, fmt.Sprintf("1:%s1", base)) {
+		pState.PrependCount = 1
+		pState.IsBlocked = false
+	} else if strings.Contains(pState.Community, fmt.Sprintf("1:%s2", base)) {
+		pState.PrependCount = 2
+		pState.IsBlocked = false
+	} else if strings.Contains(pState.Community, fmt.Sprintf("1:%s3", base)) {
+		pState.PrependCount = 3
+		pState.IsBlocked = false
+	} else if strings.Contains(pState.Community, fmt.Sprintf("0:%s0", base)) || strings.Contains(pState.Community, "0:10000") {
+		pState.IsBlocked = true
+	} else if strings.Contains(pState.Community, fmt.Sprintf("1:%s0", base)) {
+		pState.PrependCount = 0
+		pState.IsBlocked = false
+	}
+}
+
+func parsePrefixSortKey(pfx string) (maskLen int, ipNum uint32) {
+	parts := strings.Split(pfx, "/")
+	if len(parts) == 2 {
+		if m, err := strconv.Atoi(parts[1]); err == nil {
+			maskLen = m
+		}
+	}
+	ipStr := parts[0]
+	octets := strings.Split(ipStr, ".")
+	if len(octets) == 4 {
+		b0, _ := strconv.Atoi(octets[0])
+		b1, _ := strconv.Atoi(octets[1])
+		b2, _ := strconv.Atoi(octets[2])
+		b3, _ := strconv.Atoi(octets[3])
+		ipNum = uint32(b0)<<24 | uint32(b1)<<16 | uint32(b2)<<8 | uint32(b3)
+	}
+	return maskLen, ipNum
+}
+
+func sortPrefixList(list []string) {
+	sort.SliceStable(list, func(i, j int) bool {
+		maskI, ipI := parsePrefixSortKey(list[i])
+		maskJ, ipJ := parsePrefixSortKey(list[j])
+		if maskI != maskJ {
+			return maskI < maskJ
+		}
+		return ipI < ipJ
+	})
 }

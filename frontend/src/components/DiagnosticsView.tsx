@@ -5,8 +5,23 @@ import { InterfacesList } from './InterfacesList'
 import { PortScanner } from './PortScanner'
 import { DNSLookup } from './DNSLookup'
 
-export const DiagnosticsView: React.FC = () => {
-  const [subTab, setSubTab] = useState<'ping' | 'interfaces' | 'ports' | 'dns'>('ping')
+export interface DiagnosticsViewProps {
+  activeSubTab?: 'ping' | 'interfaces' | 'ports' | 'dns'
+  onSubTabChange?: (tab: 'ping' | 'interfaces' | 'ports' | 'dns') => void
+  hideInternalTabs?: boolean
+}
+
+export const DiagnosticsView: React.FC<DiagnosticsViewProps> = ({
+  activeSubTab: externalSubTab,
+  onSubTabChange,
+  hideInternalTabs = false,
+}) => {
+  const [internalSubTab, setInternalSubTab] = useState<'ping' | 'interfaces' | 'ports' | 'dns'>('ping')
+  const subTab = externalSubTab || internalSubTab
+  const setSubTab = (t: 'ping' | 'interfaces' | 'ports' | 'dns') => {
+    setInternalSubTab(t)
+    if (onSubTabChange) onSubTabChange(t)
+  }
 
   const subTabs = [
     { id: 'ping', label: 'Ping & Latência', icon: Activity },
@@ -18,7 +33,8 @@ export const DiagnosticsView: React.FC = () => {
   return (
     <div className="space-y-6">
       {/* Subtab navigation */}
-      <div className="flex space-x-2 border-b border-slate-800 pb-3">
+      {!hideInternalTabs && (
+        <div className="flex space-x-2 border-b border-slate-800 pb-3">
         {subTabs.map((t) => {
           const Icon = t.icon
           const isActive = subTab === t.id
@@ -38,6 +54,7 @@ export const DiagnosticsView: React.FC = () => {
           )
         })}
       </div>
+    )}
 
       {subTab === 'ping' && <PingTool />}
       {subTab === 'interfaces' && <InterfacesList />}
