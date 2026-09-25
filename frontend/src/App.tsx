@@ -11,12 +11,14 @@ import { TrafficManager } from './components/TrafficManager'
 import { CommandPalette } from './components/CommandPalette'
 import { LoginPage } from './components/LoginPage'
 import { AuditView } from './components/AuditView'
+import { TenantManager } from './components/TenantManager'
+import { UserManager } from './components/UserManager'
 import { AuthProvider, useAuth } from './context/AuthContext'
 import { fetchHealth, fetchAlerts, fetchDevices, type HealthResponse, type Device } from './services/api'
 import { ShieldCheck, Terminal, Network } from 'lucide-react'
 
 function AppContent() {
-  const { user, token, loading: authLoading } = useAuth()
+  const { user, token, activeTenantId, loading: authLoading } = useAuth()
 
   // Navigation State: Seção Lateral e Sub-Aba Superior
   const [activeSection, setActiveSection] = useState<MainSectionType>('traffic')
@@ -80,7 +82,7 @@ function AppContent() {
     checkHealthAndAlerts()
     const timer = setInterval(checkHealthAndAlerts, 10000)
     return () => clearInterval(timer)
-  }, [checkHealthAndAlerts])
+  }, [checkHealthAndAlerts, activeTenantId])
 
   // Troca de Seção Lateral com definição inteligente da sub-aba padrão
   const handleSectionChange = (section: MainSectionType, subTab?: string) => {
@@ -104,6 +106,12 @@ function AppContent() {
         break
       case 'audit':
         setActiveSubTab('logs')
+        break
+      case 'tenants':
+        setActiveSubTab('list')
+        break
+      case 'users':
+        setActiveSubTab('list')
         break
     }
   }
@@ -242,6 +250,16 @@ function AppContent() {
           {/* ================= SEÇÃO 5: TRILHA DE AUDITORIA (AUDIT TRAIL) ================= */}
           {activeSection === 'audit' && (
             <AuditView density={density} />
+          )}
+
+          {/* ================= SEÇÃO 6: EMPRESAS CLIENTES (MULTI-TENANCY) ================= */}
+          {activeSection === 'tenants' && (
+            <TenantManager />
+          )}
+
+          {/* ================= SEÇÃO 7: GESTÃO DE USUÁRIOS (RBAC) ================= */}
+          {activeSection === 'users' && (
+            <UserManager />
           )}
         </main>
 

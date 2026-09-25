@@ -13,6 +13,8 @@ import {
   ShieldCheck,
   Globe,
   SlidersHorizontal,
+  Building2,
+  Users,
   X,
   CornerDownLeft
 } from 'lucide-react'
@@ -206,6 +208,32 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({
         badgeColor: 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30',
         onSelect: () => {
           onNavigate('audit', 'logs')
+          onClose()
+        },
+      },
+      {
+        id: 'nav-tenants',
+        title: 'Empresas Clientes & Provedores (Multi-Tenancy)',
+        subtitle: 'Cadastro de empresas parceiras, ASNs e isolamento BGP',
+        category: 'Navegação',
+        icon: Building2,
+        badge: 'Multi-Tenant',
+        badgeColor: 'bg-cyan-500/10 text-cyan-400 border-cyan-500/30',
+        onSelect: () => {
+          onNavigate('tenants', 'list')
+          onClose()
+        },
+      },
+      {
+        id: 'nav-users',
+        title: 'Gestão de Usuários & Controle de Acesso',
+        subtitle: 'Gerenciamento de operadores NOC, RBAC e empresas vinculadas',
+        category: 'Navegação',
+        icon: Users,
+        badge: 'Acessos',
+        badgeColor: 'bg-indigo-500/10 text-indigo-400 border-indigo-500/30',
+        onSelect: () => {
+          onNavigate('users', 'list')
           onClose()
         },
       }

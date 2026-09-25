@@ -63,6 +63,8 @@ export type VendorType = 'huawei' | 'datacom' | 'mikrotik_v6' | 'mikrotik_v7'
 
 export interface Device {
   id: string
+  tenant_id?: string
+  tenant_name?: string
   name: string
   host: string
   port: number
@@ -408,15 +410,52 @@ export interface TelemetryOverview {
 
 export type UserRole = 'admin' | 'noc_operator' | 'viewer'
 
+export interface Tenant {
+  id: string
+  name: string
+  slug: string
+  asn: string
+  document: string
+  contact_email: string
+  contact_phone: string
+  logo_url: string
+  plan: string
+  status: 'active' | 'suspended'
+  created_at: string
+  device_count?: number
+  user_count?: number
+}
+
 export interface UserProfile {
   id: string
   tenant_id: string
+  tenant_name?: string
   name: string
   email: string
   role: UserRole
+  is_superadmin?: boolean
   status: string
   created_at: string
   last_login?: string
+}
+
+export interface CreateUserRequest {
+  tenant_id: string
+  name: string
+  email: string
+  password: string
+  role: UserRole
+  is_superadmin?: boolean
+}
+
+export interface UpdateUserRequest {
+  tenant_id?: string
+  name?: string
+  email?: string
+  password?: string
+  role?: UserRole
+  status?: string
+  is_superadmin?: boolean
 }
 
 export interface LoginRequest {
@@ -463,6 +502,7 @@ export interface AuditListResponse {
 
 const API_BASE = '/api'
 const AUTH_TOKEN_KEY = 'netpulse_auth_token'
+const ACTIVE_TENANT_KEY = 'netpulse_active_tenant_id'
 
 export function getStoredToken(): string | null {
   return localStorage.getItem(AUTH_TOKEN_KEY)
@@ -476,11 +516,27 @@ export function setStoredToken(token: string | null): void {
   }
 }
 
+export function getActiveTenantId(): string | null {
+  return localStorage.getItem(ACTIVE_TENANT_KEY)
+}
+
+export function setActiveTenantId(tenantId: string | null): void {
+  if (tenantId && tenantId !== 'all') {
+    localStorage.setItem(ACTIVE_TENANT_KEY, tenantId)
+  } else {
+    localStorage.removeItem(ACTIVE_TENANT_KEY)
+  }
+}
+
 export async function apiFetch(input: string, init: RequestInit = {}): Promise<Response> {
   const token = getStoredToken()
+  const activeTenant = getActiveTenantId()
   const headers = new Headers(init.headers || {})
   if (token && !headers.has('Authorization')) {
     headers.set('Authorization', `Bearer ${token}`)
+  }
+  if (activeTenant && !headers.has('X-Tenant-ID')) {
+    headers.set('X-Tenant-ID', activeTenant)
   }
   return fetch(input, { ...init, headers })
 }
@@ -1029,15 +1085,6 @@ export async function fetchMe(): Promise<UserProfile> {
   return res.json()
 }
 
-export async function fetchUsers(): Promise<UserProfile[]> {
-  const res = await apiFetch(`${API_BASE}/auth/users`)
-  if (!res.ok) {
-    const err = await res.json().catch(() => ({}))
-    throw new Error(err.error || `Erro ao listar usuários: HTTP ${res.status}`)
-  }
-  return res.json()
-}
-
 // --- Audit Trail APIs ---
 
 export async function fetchAuditLogs(filter?: AuditFilter): Promise<AuditListResponse> {
@@ -1257,4 +1304,109 @@ export async function applyTrafficProfile(id: string): Promise<ApplyProfileResul
   }
   return res.json()
 }
+
+// --- Multi-Tenant & Company Management APIs ---
+
+export async function fetchTenants(): Promise<Tenant[]> {
+  const res = await apiFetch(`${API_BASE}/tenants`)
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}))
+    throw new Error(err.error || `Erro ao consultar empresas parceiras: HTTP ${res.status}`)
+  }
+  return res.json()
+}
+
+export async function fetchTenant(id: string): Promise<Tenant> {
+  const res = await apiFetch(`${API_BASE}/tenants/${encodeURIComponent(id)}`)
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}))
+    throw new Error(err.error || `Erro ao consultar empresa: HTTP ${res.status}`)
+  }
+  return res.json()
+}
+
+export async function createTenant(tenant: Partial<Tenant>): Promise<Tenant> {
+  const res = await apiFetch(`${API_BASE}/tenants`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(tenant),
+  })
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}))
+    throw new Error(err.error || `Erro ao cadastrar empresa: HTTP ${res.status}`)
+  }
+  return res.json()
+}
+
+export async function updateTenant(id: string, tenant: Partial<Tenant>): Promise<Tenant> {
+  const res = await apiFetch(`${API_BASE}/tenants/${encodeURIComponent(id)}`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(tenant),
+  })
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}))
+    throw new Error(err.error || `Erro ao atualizar empresa: HTTP ${res.status}`)
+  }
+  return res.json()
+}
+
+export async function deleteTenant(id: string): Promise<void> {
+  const res = await apiFetch(`${API_BASE}/tenants/${encodeURIComponent(id)}`, {
+    method: 'DELETE',
+  })
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}))
+    throw new Error(err.error || `Erro ao excluir empresa: HTTP ${res.status}`)
+  }
+}
+
+// --- Multi-Tenant User Management APIs ---
+
+export async function fetchUsers(tenantId?: string): Promise<UserProfile[]> {
+  const query = tenantId ? `?tenant_id=${encodeURIComponent(tenantId)}` : ''
+  const res = await apiFetch(`${API_BASE}/auth/users${query}`)
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}))
+    throw new Error(err.error || `Erro ao consultar usuários: HTTP ${res.status}`)
+  }
+  return res.json()
+}
+
+export async function createUser(user: CreateUserRequest): Promise<UserProfile> {
+  const res = await apiFetch(`${API_BASE}/auth/users`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(user),
+  })
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}))
+    throw new Error(err.error || `Erro ao criar usuário: HTTP ${res.status}`)
+  }
+  return res.json()
+}
+
+export async function updateUser(id: string, user: UpdateUserRequest): Promise<UserProfile> {
+  const res = await apiFetch(`${API_BASE}/auth/users/${encodeURIComponent(id)}`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(user),
+  })
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}))
+    throw new Error(err.error || `Erro ao atualizar usuário: HTTP ${res.status}`)
+  }
+  return res.json()
+}
+
+export async function deleteUser(id: string): Promise<void> {
+  const res = await apiFetch(`${API_BASE}/auth/users/${encodeURIComponent(id)}`, {
+    method: 'DELETE',
+  })
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}))
+    throw new Error(err.error || `Erro ao excluir usuário: HTTP ${res.status}`)
+  }
+}
+
 

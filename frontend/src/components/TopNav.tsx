@@ -14,7 +14,9 @@ import {
   Menu,
   ShieldCheck,
   Search,
-  SlidersHorizontal
+  SlidersHorizontal,
+  Building2,
+  Users
 } from 'lucide-react'
 import type { MainSectionType } from './Sidebar'
 import type { HealthResponse } from '../services/api'
@@ -52,7 +54,7 @@ export const TopNav: React.FC<TopNavProps> = ({
   density,
   onToggleDensity,
 }) => {
-  const { user } = useAuth()
+  const { user, isSuperAdmin, tenants, activeTenantId, currentTenant, setActiveTenant } = useAuth()
 
   // Configuração das sub-abas dinâmicas de cada seção
   const sectionSubTabs: Record<MainSectionType, { title: string; subtitle: string; tabs: SubTabItem[] }> = {
@@ -101,6 +103,20 @@ export const TopNav: React.FC<TopNavProps> = ({
         { id: 'logs', label: 'Trilha de Auditoria', icon: ShieldCheck },
       ],
     },
+    tenants: {
+      title: 'Empresas Clientes & Multi-Tenancy',
+      subtitle: 'Cadastro centralizado de empresas parceiras, ASNs autorizados, contatos e isolamento de rotas BGP',
+      tabs: [
+        { id: 'list', label: 'Empresas Cadastradas', icon: Building2 },
+      ],
+    },
+    users: {
+      title: 'Gestão de Usuários & Controle de Acesso (RBAC)',
+      subtitle: 'Gerenciamento de credenciais, níveis de permissão e vinculação de operadores às suas empresas',
+      tabs: [
+        { id: 'list', label: 'Usuários Cadastrados', icon: Users },
+      ],
+    },
   }
 
   const currentSectionConfig = sectionSubTabs[activeSection] || sectionSubTabs.traffic
@@ -129,6 +145,44 @@ export const TopNav: React.FC<TopNavProps> = ({
 
           {/* Right Status Controls */}
           <div className="flex items-center gap-2.5 sm:gap-3">
+            {/* Multi-Tenant Switcher (SuperAdmin) or Client Company Badge */}
+            {isSuperAdmin ? (
+              <div className="flex items-center gap-1.5 bg-slate-800/90 border border-slate-700/80 rounded-xl px-2.5 py-1 text-xs shadow-sm">
+                <Building2 className="h-3.5 w-3.5 text-cyan-400 shrink-0" />
+                <span className="text-slate-400 hidden xl:inline text-[11px] font-medium">Empresa:</span>
+                <select
+                  value={activeTenantId || ''}
+                  onChange={(e) => setActiveTenant(e.target.value || null)}
+                  className="bg-transparent text-white font-medium text-xs focus:outline-none cursor-pointer pr-1"
+                  title="Filtrar visão do sistema por empresa cliente"
+                >
+                  <option value="" className="bg-slate-900 text-cyan-300">
+                    🌐 Visão Global (Todas)
+                  </option>
+                  {tenants.map((t) => (
+                    <option key={t.id} value={t.id} className="bg-slate-900 text-slate-100">
+                      🏢 {t.name} {t.asn ? `(AS${t.asn})` : ''}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            ) : currentTenant ? (
+              <div
+                className="flex items-center gap-1.5 bg-cyan-950/60 border border-cyan-800/80 text-cyan-300 rounded-xl px-2.5 py-1 text-xs font-medium"
+                title={`Empresa vinculada: ${currentTenant.name}`}
+              >
+                <Building2 className="h-3.5 w-3.5 text-cyan-400 shrink-0" />
+                <span className="truncate max-w-[130px] sm:max-w-[170px]">
+                  {currentTenant.name}
+                </span>
+                {currentTenant.asn && (
+                  <span className="text-[10px] font-mono px-1.5 py-0.2 rounded bg-cyan-900/60 text-cyan-200 border border-cyan-700/60">
+                    AS{currentTenant.asn}
+                  </span>
+                )}
+              </div>
+            ) : null}
+
             {/* Quick Search Ctrl + K */}
             <button
               onClick={onOpenSearch}
@@ -193,7 +247,9 @@ export const TopNav: React.FC<TopNavProps> = ({
             {user && (
               <div
                 className={`hidden sm:flex items-center gap-1.5 text-xs font-semibold px-2.5 py-1.5 rounded-xl border ${
-                  user.role === 'admin'
+                  isSuperAdmin
+                    ? 'bg-amber-950/80 text-amber-300 border-amber-800/80'
+                    : user.role === 'admin'
                     ? 'bg-red-950/80 text-red-300 border-red-800/80'
                     : user.role === 'noc_operator'
                     ? 'bg-cyan-950/80 text-cyan-300 border-cyan-800/80'
@@ -203,7 +259,9 @@ export const TopNav: React.FC<TopNavProps> = ({
               >
                 <span
                   className={`h-1.5 w-1.5 rounded-full ${
-                    user.role === 'admin'
+                    isSuperAdmin
+                      ? 'bg-amber-400 animate-pulse'
+                      : user.role === 'admin'
                       ? 'bg-red-400 animate-pulse'
                       : user.role === 'noc_operator'
                       ? 'bg-cyan-400 animate-pulse'
@@ -211,6 +269,11 @@ export const TopNav: React.FC<TopNavProps> = ({
                   }`}
                 />
                 <span className="truncate max-w-[120px]">{user.name}</span>
+                {isSuperAdmin && (
+                  <span className="text-[9px] bg-amber-500/20 text-amber-300 px-1 py-0.2 rounded border border-amber-500/30">
+                    SUPER
+                  </span>
+                )}
               </div>
             )}
           </div>

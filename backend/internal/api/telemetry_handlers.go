@@ -5,16 +5,19 @@ import (
 	"net/http"
 	"strconv"
 
+	"network-software/internal/models"
+	"network-software/internal/storage"
 	"network-software/internal/telemetry"
 	"network-software/internal/telemetry/bmp"
 )
 
 type TelemetryController struct {
 	engine *telemetry.Engine
+	store  *storage.DeviceStore
 }
 
-func NewTelemetryController(engine *telemetry.Engine) *TelemetryController {
-	return &TelemetryController{engine: engine}
+func NewTelemetryController(engine *telemetry.Engine, store *storage.DeviceStore) *TelemetryController {
+	return &TelemetryController{engine: engine, store: store}
 }
 
 // GetStatus handles GET /api/telemetry/status
@@ -26,6 +29,34 @@ func (c *TelemetryController) GetStatus(w http.ResponseWriter, r *http.Request) 
 // GetOverview handles GET /api/telemetry/overview
 func (c *TelemetryController) GetOverview(w http.ResponseWriter, r *http.Request) {
 	overview := c.engine.GetOverview()
+	tenantScope := ResolveTenantScope(r)
+
+	if tenantScope != "" && c.store != nil {
+		devices := c.store.GetAllByTenant(tenantScope)
+		allowedMap := make(map[string]bool, len(devices))
+		onlineCount := 0
+		for _, d := range devices {
+			allowedMap[d.ID] = true
+			if d.Status == "online" {
+				onlineCount++
+			}
+		}
+
+		overview.TotalDevices = len(devices)
+		overview.OnlineDevices = onlineCount
+		overview.OfflineDevices = len(devices) - onlineCount
+
+		if overview.RecentSnapshots != nil {
+			filteredSnapshots := make([]models.TelemetrySnapshot, 0)
+			for _, snap := range overview.RecentSnapshots {
+				if allowedMap[snap.DeviceID] {
+					filteredSnapshots = append(filteredSnapshots, snap)
+				}
+			}
+			overview.RecentSnapshots = filteredSnapshots
+		}
+	}
+
 	WriteJSON(w, http.StatusOK, overview)
 }
 
@@ -48,6 +79,23 @@ func (c *TelemetryController) GetHistory(w http.ResponseWriter, r *http.Request)
 	}
 
 	snapshots := c.engine.GetAlertStore().GetSnapshots(limit)
+	tenantScope := ResolveTenantScope(r)
+	if tenantScope != "" && c.store != nil {
+		devices := c.store.GetAllByTenant(tenantScope)
+		allowedMap := make(map[string]bool, len(devices))
+		for _, d := range devices {
+			allowedMap[d.ID] = true
+		}
+		filtered := make([]models.TelemetrySnapshot, 0)
+		for _, s := range snapshots {
+			if allowedMap[s.DeviceID] {
+				filtered = append(filtered, s)
+			}
+		}
+		WriteJSON(w, http.StatusOK, filtered)
+		return
+	}
+
 	WriteJSON(w, http.StatusOK, snapshots)
 }
 
@@ -59,6 +107,24 @@ func (c *TelemetryController) ListAlerts(w http.ResponseWriter, r *http.Request)
 	}
 
 	alerts := c.engine.GetAlertStore().GetAllAlerts(statusFilter)
+	tenantScope := ResolveTenantScope(r)
+
+	if tenantScope != "" && c.store != nil {
+		devices := c.store.GetAllByTenant(tenantScope)
+		allowedMap := make(map[string]bool, len(devices))
+		for _, d := range devices {
+			allowedMap[d.ID] = true
+		}
+		filteredAlerts := make([]models.Alert, 0)
+		for _, a := range alerts {
+			if allowedMap[a.DeviceID] {
+				filteredAlerts = append(filteredAlerts, a)
+			}
+		}
+		WriteJSON(w, http.StatusOK, filteredAlerts)
+		return
+	}
+
 	WriteJSON(w, http.StatusOK, alerts)
 }
 

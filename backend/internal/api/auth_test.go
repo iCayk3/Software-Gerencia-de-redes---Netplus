@@ -15,15 +15,18 @@ import (
 
 func TestAuthAndRBAC(t *testing.T) {
 	_ = os.Remove("test_users.json")
+	_ = os.Remove("test_tenants.json")
 	_ = os.Remove("test_audit.json")
 	defer os.Remove("test_users.json")
+	defer os.Remove("test_tenants.json")
 	defer os.Remove("test_audit.json")
 
 	// Initialize memory stores
+	tenantStore := storage.NewMemoryTenantStore("test_tenants.json")
 	userStore := storage.NewMemoryUserStore("test_users.json")
 	auditStore := storage.NewMemoryAuditStore("test_audit.json")
 
-	authCtrl := NewAuthController(userStore, auditStore)
+	authCtrl := NewAuthController(userStore, tenantStore, auditStore)
 
 	// 1. Test Login with valid credentials
 	loginBody, _ := json.Marshal(models.LoginRequest{

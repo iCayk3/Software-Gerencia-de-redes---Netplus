@@ -17,40 +17,44 @@ const (
 
 // User represents an operator or tenant administrator.
 type User struct {
-	ID           string    `json:"id"`
-	TenantID     string    `json:"tenant_id"`
-	Name         string    `json:"name"`
-	Email        string    `json:"email"`
-	PasswordHash string    `json:"-"` // Never serialized to JSON
-	Role         UserRole  `json:"role"`
-	Status       string    `json:"status"` // "active", "suspended"
-	CreatedAt    time.Time `json:"created_at"`
+	ID           string     `json:"id"`
+	TenantID     string     `json:"tenant_id"`
+	Name         string     `json:"name"`
+	Email        string     `json:"email"`
+	PasswordHash string     `json:"-"` // Never serialized to JSON
+	Role         UserRole   `json:"role"`
+	IsSuperAdmin bool       `json:"is_superadmin"`
+	Status       string     `json:"status"` // "active", "suspended"
+	CreatedAt    time.Time  `json:"created_at"`
 	LastLogin    *time.Time `json:"last_login,omitempty"`
 }
 
 // UserProfile is the safe public view of a User.
 type UserProfile struct {
-	ID        string     `json:"id"`
-	TenantID  string     `json:"tenant_id"`
-	Name      string     `json:"name"`
-	Email     string     `json:"email"`
-	Role      UserRole   `json:"role"`
-	Status    string     `json:"status"`
-	CreatedAt time.Time  `json:"created_at"`
-	LastLogin *time.Time `json:"last_login,omitempty"`
+	ID           string     `json:"id"`
+	TenantID     string     `json:"tenant_id"`
+	TenantName   string     `json:"tenant_name,omitempty"`
+	Name         string     `json:"name"`
+	Email        string     `json:"email"`
+	Role         UserRole   `json:"role"`
+	IsSuperAdmin bool       `json:"is_superadmin"`
+	Status       string     `json:"status"`
+	CreatedAt    time.Time  `json:"created_at"`
+	LastLogin    *time.Time `json:"last_login,omitempty"`
 }
 
 // ToProfile converts a User to a safe UserProfile.
 func (u *User) ToProfile() UserProfile {
 	return UserProfile{
-		ID:        u.ID,
-		TenantID:  u.TenantID,
-		Name:      u.Name,
-		Email:     u.Email,
-		Role:      u.Role,
-		Status:    u.Status,
-		CreatedAt: u.CreatedAt,
-		LastLogin: u.LastLogin,
+		ID:           u.ID,
+		TenantID:     u.TenantID,
+		Name:         u.Name,
+		Email:        u.Email,
+		Role:         u.Role,
+		IsSuperAdmin: u.IsSuperAdmin,
+		Status:       u.Status,
+		CreatedAt:    u.CreatedAt,
+		LastLogin:    u.LastLogin,
 	}
 }
 
@@ -69,10 +73,32 @@ type LoginResponse struct {
 
 // UserClaims is the JWT claims payload.
 type UserClaims struct {
-	UserID   string   `json:"user_id"`
-	TenantID string   `json:"tenant_id"`
-	Email    string   `json:"email"`
-	Name     string   `json:"name"`
-	Role     UserRole `json:"role"`
+	UserID       string   `json:"user_id"`
+	TenantID     string   `json:"tenant_id"`
+	Email        string   `json:"email"`
+	Name         string   `json:"name"`
+	Role         UserRole `json:"role"`
+	IsSuperAdmin bool     `json:"is_superadmin"`
 	jwt.RegisteredClaims
+}
+
+// CreateUserRequest is the payload to create a new user.
+type CreateUserRequest struct {
+	TenantID     string   `json:"tenant_id"`
+	Name         string   `json:"name"`
+	Email        string   `json:"email"`
+	Password     string   `json:"password"`
+	Role         UserRole `json:"role"`
+	IsSuperAdmin bool     `json:"is_superadmin"`
+}
+
+// UpdateUserRequest is the payload to update an existing user.
+type UpdateUserRequest struct {
+	TenantID     string   `json:"tenant_id,omitempty"`
+	Name         string   `json:"name,omitempty"`
+	Email        string   `json:"email,omitempty"`
+	Password     string   `json:"password,omitempty"`
+	Role         UserRole `json:"role,omitempty"`
+	Status       string   `json:"status,omitempty"`
+	IsSuperAdmin *bool    `json:"is_superadmin,omitempty"`
 }

@@ -60,6 +60,9 @@ func (s *DeviceStore) load() error {
 
 	s.devices = make(map[string]models.Device)
 	for _, d := range list {
+		if d.TenantID == "" {
+			d.TenantID = "default-tenant"
+		}
 		s.devices[d.ID] = d
 	}
 	return nil
@@ -89,24 +92,38 @@ func generateID() string {
 
 // GetAll returns a list of all devices in the store.
 func (s *DeviceStore) GetAll() []models.Device {
+	return s.GetAllByTenant("")
+}
+
+// GetAllByTenant returns devices belonging to a specific tenant (or all if tenantID is empty or "all").
+func (s *DeviceStore) GetAllByTenant(tenantID string) []models.Device {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
 	result := make([]models.Device, 0, len(s.devices))
 	for _, d := range s.devices {
-		result = append(result, d)
+		if tenantID == "" || tenantID == "all" || d.TenantID == tenantID {
+			result = append(result, d)
+		}
 	}
 	return result
 }
 
 // GetAllSafe returns devices with sensitive credentials masked.
 func (s *DeviceStore) GetAllSafe() []models.SafeDevice {
+	return s.GetAllSafeByTenant("")
+}
+
+// GetAllSafeByTenant returns safe devices filtered by tenantID (or all if empty or "all").
+func (s *DeviceStore) GetAllSafeByTenant(tenantID string) []models.SafeDevice {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
 	result := make([]models.SafeDevice, 0, len(s.devices))
 	for _, d := range s.devices {
-		result = append(result, d.ToSafe())
+		if tenantID == "" || tenantID == "all" || d.TenantID == tenantID {
+			result = append(result, d.ToSafe())
+		}
 	}
 	return result
 }
@@ -123,6 +140,21 @@ func (s *DeviceStore) GetByID(id string) (*models.Device, error) {
 	return &d, nil
 }
 
+// GetByIDAndTenant returns a device by ID ensuring it belongs to tenantID (unless tenantID is empty/all).
+func (s *DeviceStore) GetByIDAndTenant(id, tenantID string) (*models.Device, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	d, ok := s.devices[id]
+	if !ok {
+		return nil, ErrDeviceNotFound
+	}
+	if tenantID != "" && tenantID != "all" && d.TenantID != tenantID {
+		return nil, ErrDeviceNotFound
+	}
+	return &d, nil
+}
+
 // Create inserts a new device.
 func (s *DeviceStore) Create(d models.Device) (*models.Device, error) {
 	s.mu.Lock()
@@ -130,6 +162,9 @@ func (s *DeviceStore) Create(d models.Device) (*models.Device, error) {
 
 	if d.ID == "" {
 		d.ID = generateID()
+	}
+	if d.TenantID == "" {
+		d.TenantID = "default-tenant"
 	}
 	if d.Port <= 0 {
 		d.Port = 22
@@ -159,6 +194,9 @@ func (s *DeviceStore) Update(d models.Device) error {
 	// Preserve password if blank in update request
 	if d.Password == "" {
 		d.Password = existing.Password
+	}
+	if d.TenantID == "" {
+		d.TenantID = existing.TenantID
 	}
 	if d.Port <= 0 {
 		d.Port = 22

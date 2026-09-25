@@ -90,6 +90,7 @@ const (
 // Device represents a network router or switch in the inventory.
 type Device struct {
 	ID        string     `json:"id"`
+	TenantID  string     `json:"tenant_id"` // Client company / tenant owner
 	Name      string     `json:"name"`
 	Host      string     `json:"host"`
 	Port      int        `json:"port"`
@@ -107,6 +108,7 @@ type Device struct {
 // SafeDevice is the version of Device returned to the frontend (with sensitive fields masked).
 type SafeDevice struct {
 	ID          string     `json:"id"`
+	TenantID    string     `json:"tenant_id"`
 	Name        string     `json:"name"`
 	Host        string     `json:"host"`
 	Port        int        `json:"port"`
@@ -125,6 +127,7 @@ type SafeDevice struct {
 func (d *Device) ToSafe() SafeDevice {
 	return SafeDevice{
 		ID:          d.ID,
+		TenantID:    d.TenantID,
 		Name:        d.Name,
 		Host:        d.Host,
 		Port:        d.Port,

@@ -2,11 +2,15 @@ import React, { createContext, useContext, useState, useEffect, useCallback } fr
 import {
   loginUser,
   fetchMe,
+  fetchTenants,
   getStoredToken,
   setStoredToken,
+  getActiveTenantId,
+  setActiveTenantId as saveActiveTenantId,
   type UserProfile,
   type LoginRequest,
-  type UserRole
+  type UserRole,
+  type Tenant,
 } from '../services/api'
 
 interface AuthContextType {
@@ -19,6 +23,12 @@ interface AuthContextType {
   hasRole: (...roles: UserRole[]) => boolean
   canOperate: boolean
   isAdmin: boolean
+  isSuperAdmin: boolean
+  tenants: Tenant[]
+  activeTenantId: string | null
+  currentTenant: Tenant | null
+  setActiveTenant: (tenantId: string | null) => void
+  refreshTenants: () => Promise<void>
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined)
@@ -28,6 +38,25 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [user, setUser] = useState<UserProfile | null>(null)
   const [loading, setLoading] = useState<boolean>(true)
   const [error, setError] = useState<string | null>(null)
+  const [tenants, setTenants] = useState<Tenant[]>([])
+  const [activeTenantId, setActiveTenantIdState] = useState<string | null>(() => getActiveTenantId())
+
+  const refreshTenants = useCallback(async () => {
+    try {
+      const data = await fetchTenants()
+      setTenants(data)
+    } catch {
+      // Ignorar caso sem permissão
+    }
+  }, [])
+
+  const checkIsSuperAdmin = (u: UserProfile | null): boolean => {
+    if (!u) return false
+    if (u.is_superadmin) return true
+    if (u.email?.toLowerCase() === 'admin@netpulse.com') return true
+    if (u.role === 'admin' && (u.tenant_id === 'default-tenant' || !u.tenant_id)) return true
+    return false
+  }
 
   const loadUserProfile = useCallback(async () => {
     const currentToken = getStoredToken()
@@ -39,17 +68,23 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
     try {
       const profile = await fetchMe()
+      if (checkIsSuperAdmin(profile)) {
+        profile.is_superadmin = true
+      }
       setUser(profile)
       setToken(currentToken)
+      if (profile.role === 'admin' || profile.is_superadmin) {
+        refreshTenants()
+      }
     } catch {
-      // Invalid or expired token
+      // Token inválido ou expirado
       setStoredToken(null)
       setToken(null)
       setUser(null)
     } finally {
       setLoading(false)
     }
-  }, [])
+  }, [refreshTenants])
 
   useEffect(() => {
     loadUserProfile()
@@ -59,8 +94,20 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setError(null)
     try {
       const response = await loginUser(req)
+      const isSuper = checkIsSuperAdmin(response.user)
+      if (isSuper) {
+        response.user.is_superadmin = true
+      }
       setToken(response.token)
       setUser(response.user)
+
+      // Se for cliente comum, trava no tenant dele
+      if (!isSuper) {
+        saveActiveTenantId(response.user.tenant_id)
+        setActiveTenantIdState(response.user.tenant_id)
+      } else {
+        refreshTenants()
+      }
     } catch (err: any) {
       const msg = err.message || 'Falha ao autenticar'
       setError(msg)
@@ -70,9 +117,19 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const logout = () => {
     setStoredToken(null)
+    saveActiveTenantId(null)
     setToken(null)
     setUser(null)
     setError(null)
+    setActiveTenantIdState(null)
+    setTenants([])
+  }
+
+  const setActiveTenant = (tenantId: string | null) => {
+    saveActiveTenantId(tenantId)
+    setActiveTenantIdState(tenantId)
+    // Disparar recarregamento ou evento para sincronizar consultas
+    window.dispatchEvent(new Event('tenant_changed'))
   }
 
   const hasRole = (...roles: UserRole[]) => {
@@ -80,8 +137,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     return roles.includes(user.role)
   }
 
-  const canOperate = user?.role === 'admin' || user?.role === 'noc_operator'
-  const isAdmin = user?.role === 'admin'
+  const isSuperAdmin = checkIsSuperAdmin(user)
+  const canOperate = isSuperAdmin || user?.role === 'admin' || user?.role === 'noc_operator'
+  const isAdmin = isSuperAdmin || user?.role === 'admin'
+
+  // Determinar o Tenant atual em visualização
+  const effectiveTenantId = isSuperAdmin ? activeTenantId : user?.tenant_id
+  const currentTenant = tenants.find((t) => t.id === effectiveTenantId) || null
 
   return (
     <AuthContext.Provider
@@ -95,6 +157,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         hasRole,
         canOperate,
         isAdmin,
+        isSuperAdmin,
+        tenants,
+        activeTenantId,
+        currentTenant,
+        setActiveTenant,
+        refreshTenants,
       }}
     >
       {children}

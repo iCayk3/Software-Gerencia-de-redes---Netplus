@@ -30,11 +30,12 @@ func getEnv(key, fallback string) string {
 func GenerateJWT(u *models.User) (string, time.Time, error) {
 	exp := time.Now().Add(24 * time.Hour)
 	claims := &models.UserClaims{
-		UserID:   u.ID,
-		TenantID: u.TenantID,
-		Email:    u.Email,
-		Name:     u.Name,
-		Role:     u.Role,
+		UserID:       u.ID,
+		TenantID:     u.TenantID,
+		Email:        u.Email,
+		Name:         u.Name,
+		Role:         u.Role,
+		IsSuperAdmin: u.IsSuperAdmin,
 		RegisteredClaims: jwt.RegisteredClaims{
 			ExpiresAt: jwt.NewNumericDate(exp),
 			IssuedAt:  jwt.NewNumericDate(time.Now()),
@@ -101,6 +102,30 @@ func RequireAuth(next http.HandlerFunc) http.HandlerFunc {
 	}
 }
 
+// RequireSuperAdmin ensures only global platform superadmins can access.
+func RequireSuperAdmin(next http.HandlerFunc) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		user := GetAuthUser(r)
+		if user == nil {
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusUnauthorized)
+			_ = json.NewEncoder(w).Encode(map[string]string{
+				"error": "Autenticação obrigatória.",
+			})
+			return
+		}
+		if !user.IsSuperAdmin {
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusForbidden)
+			_ = json.NewEncoder(w).Encode(map[string]string{
+				"error": "Acesso exclusivo para administradores globais da plataforma.",
+			})
+			return
+		}
+		next(w, r)
+	}
+}
+
 // RequireRole checks if the user possesses at least one of the allowed roles.
 func RequireRole(allowedRoles ...models.UserRole) func(http.HandlerFunc) http.HandlerFunc {
 	return func(next http.HandlerFunc) http.HandlerFunc {
@@ -115,8 +140,8 @@ func RequireRole(allowedRoles ...models.UserRole) func(http.HandlerFunc) http.Ha
 				return
 			}
 
-			// Admin has full access to everything
-			if user.Role == models.RoleAdmin {
+			// SuperAdmin or Admin has full access to everything
+			if user.IsSuperAdmin || user.Role == models.RoleAdmin {
 				next(w, r)
 				return
 			}

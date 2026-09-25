@@ -67,6 +67,7 @@ func main() {
 	defer telEngine.Stop()
 
 	// Database & Enterprise Storage (PostgreSQL with graceful fallback)
+	var tenantStore storage.ITenantStore
 	var userStore storage.IUserStore
 	var auditStore storage.IAuditStore
 
@@ -74,16 +75,18 @@ func main() {
 	if err == nil && db != nil {
 		_ = database.RunMigrations(db, "migrations/001_init_schema.sql")
 		_ = database.AutoMigrateFromJSON(db)
+		tenantStore = postgres.NewTenantStore(db)
 		userStore = postgres.NewUserStore(db)
 		auditStore = postgres.NewAuditStore(db)
-		log.Printf("[Database] 🐘 Repositório PostgreSQL ativado para Usuários e Trilha de Auditoria.")
+		log.Printf("[Database] 🐘 Repositório PostgreSQL ativado para Empresas, Usuários e Trilha de Auditoria.")
 	} else {
 		log.Printf("[Database] ⚠️  PostgreSQL não conectado (%v). Usando armazenamento local em arquivo.", err)
+		tenantStore = storage.NewMemoryTenantStore(filepath.Join(dataDir, "tenants.json"))
 		userStore = storage.NewMemoryUserStore(filepath.Join(dataDir, "users.json"))
 		auditStore = storage.NewMemoryAuditStore(filepath.Join(dataDir, "audit_logs.json"))
 	}
 
-	router := api.NewRouter(store, asMetaStore, telEngine, dataDir, userStore, auditStore)
+	router := api.NewRouter(store, asMetaStore, telEngine, dataDir, tenantStore, userStore, auditStore)
 	addr := fmt.Sprintf(":%s", port)
 
 	log.Printf("==================================================")

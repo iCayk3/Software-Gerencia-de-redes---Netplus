@@ -2,6 +2,7 @@ package api
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -42,6 +43,17 @@ func (tc *TrafficController) SetPeerMetadataStore(p *storage.PeerMetadataStore) 
 // GetUploadOverview handles GET /api/traffic/upload/overview
 func (tc *TrafficController) GetUploadOverview(w http.ResponseWriter, r *http.Request) {
 	deviceID := r.URL.Query().Get("device_id")
+	if deviceID != "" {
+		if _, err := CheckDeviceTenantAccess(r, tc.store, deviceID); err != nil {
+			if errors.Is(err, ErrAccessDeniedToDevice) {
+				WriteError(w, http.StatusForbidden, err.Error())
+				return
+			}
+			WriteError(w, http.StatusNotFound, "Dispositivo não encontrado")
+			return
+		}
+	}
+
 	fresh := r.URL.Query().Get("fresh") == "true"
 
 	if tc.trafficSvc == nil {
@@ -53,6 +65,32 @@ func (tc *TrafficController) GetUploadOverview(w http.ResponseWriter, r *http.Re
 	if err != nil {
 		WriteError(w, http.StatusInternalServerError, "Erro ao obter visão geral de upload: "+err.Error())
 		return
+	}
+
+	// Filter sections and routes if scoped to a specific tenant
+	tenantScope := ResolveTenantScope(r)
+	if tenantScope != "" && deviceID == "" {
+		devices := tc.store.GetAllByTenant(tenantScope)
+		allowedMap := make(map[string]bool, len(devices))
+		for _, d := range devices {
+			allowedMap[d.ID] = true
+		}
+
+		filteredSections := make([]models.BGPASSection, 0)
+		for _, sec := range overview.Sections {
+			if allowedMap[sec.DeviceID] {
+				filteredSections = append(filteredSections, sec)
+			}
+		}
+		overview.Sections = filteredSections
+
+		filteredOtherRoutes := make([]models.StaticRoute, 0)
+		for _, rt := range overview.OtherRoutes {
+			if allowedMap[rt.DeviceID] {
+				filteredOtherRoutes = append(filteredOtherRoutes, rt)
+			}
+		}
+		overview.OtherRoutes = filteredOtherRoutes
 	}
 
 	WriteJSON(w, http.StatusOK, overview)
@@ -240,6 +278,16 @@ func (tc *TrafficController) UploadASImage(w http.ResponseWriter, r *http.Reques
 // GetDevicePrepends handles GET /api/devices/{id}/bgp/prepends
 func (tc *TrafficController) GetDevicePrepends(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
+	device, err := CheckDeviceTenantAccess(r, tc.store, id)
+	if err != nil {
+		if errors.Is(err, ErrAccessDeniedToDevice) {
+			WriteError(w, http.StatusForbidden, err.Error())
+			return
+		}
+		WriteError(w, http.StatusNotFound, "Equipamento não encontrado")
+		return
+	}
+
 	fresh := r.URL.Query().Get("fresh") == "true"
 
 	if tc.trafficSvc != nil {
@@ -249,12 +297,6 @@ func (tc *TrafficController) GetDevicePrepends(w http.ResponseWriter, r *http.Re
 			return
 		}
 		WriteJSON(w, http.StatusOK, overview)
-		return
-	}
-
-	device, err := tc.store.GetByID(id)
-	if err != nil {
-		WriteError(w, http.StatusNotFound, "Device not found")
 		return
 	}
 
@@ -276,6 +318,13 @@ func (tc *TrafficController) GetDevicePrepends(w http.ResponseWriter, r *http.Re
 // GetAllPrepends handles GET /api/bgp/prepends/all
 func (tc *TrafficController) GetAllPrepends(w http.ResponseWriter, r *http.Request) {
 	fresh := r.URL.Query().Get("fresh") == "true"
+	tenantScope := ResolveTenantScope(r)
+
+	devices := tc.store.GetAllByTenant(tenantScope)
+	allowedMap := make(map[string]bool, len(devices))
+	for _, d := range devices {
+		allowedMap[d.ID] = true
+	}
 
 	if tc.trafficSvc != nil {
 		allOverviews, err := tc.trafficSvc.GetAllPrepends(fresh)
@@ -286,11 +335,22 @@ func (tc *TrafficController) GetAllPrepends(w http.ResponseWriter, r *http.Reque
 		if allOverviews == nil {
 			allOverviews = make([]models.DevicePrependOverview, 0)
 		}
+
+		if tenantScope != "" {
+			filtered := make([]models.DevicePrependOverview, 0)
+			for _, ov := range allOverviews {
+				if allowedMap[ov.DeviceID] {
+					filtered = append(filtered, ov)
+				}
+			}
+			WriteJSON(w, http.StatusOK, filtered)
+			return
+		}
+
 		WriteJSON(w, http.StatusOK, allOverviews)
 		return
 	}
 
-	devices := tc.store.GetAll()
 	allOverviews := make([]models.DevicePrependOverview, 0)
 	for _, d := range devices {
 		if !d.IsBGP {
@@ -335,17 +395,22 @@ func (tc *TrafficController) ApplyPrepend(w http.ResponseWriter, r *http.Request
 		return
 	}
 
+	device, err := CheckDeviceTenantAccess(r, tc.store, req.DeviceID)
+	if err != nil {
+		if errors.Is(err, ErrAccessDeniedToDevice) {
+			WriteError(w, http.StatusForbidden, err.Error())
+			return
+		}
+		WriteError(w, http.StatusNotFound, "Dispositivo não encontrado")
+		return
+	}
+
 	if tc.trafficSvc != nil {
 		if err := tc.trafficSvc.ApplyPrepend(req); err != nil {
 			WriteError(w, http.StatusInternalServerError, "Erro ao aplicar prepend no equipamento: "+err.Error())
 			return
 		}
 	} else {
-		device, err := tc.store.GetByID(req.DeviceID)
-		if err != nil {
-			WriteError(w, http.StatusNotFound, "Dispositivo não encontrado")
-			return
-		}
 		driver, err := drivers.NewDriver(device)
 		if err != nil {
 			WriteError(w, http.StatusBadRequest, err.Error())
@@ -362,8 +427,7 @@ func (tc *TrafficController) ApplyPrepend(w http.ResponseWriter, r *http.Request
 		msg = fmt.Sprintf("[Modo Manual Ativo] Comandos de Bloqueio gerados para %s. Nenhuma alteração foi executada no equipamento.", req.PeerIP)
 	}
 
-	dev, _ := tc.store.GetByID(req.DeviceID)
-	cmds, cliScript := buildPrependCLI(dev, req)
+	cmds, cliScript := buildPrependCLI(device, req)
 
 	if tc.auditStore != nil {
 		user := GetAuthUser(r)
@@ -372,13 +436,14 @@ func (tc *TrafficController) ApplyPrepend(w http.ResponseWriter, r *http.Request
 			userName, userEmail, userID = user.Name, user.Email, user.UserID
 		}
 		_ = tc.auditStore.Record(&models.AuditLog{
-			TenantID:         "default-tenant",
+			TenantID:         device.TenantID,
 			UserID:           userID,
 			UserName:         userName,
 			UserEmail:        userEmail,
 			ClientIP:         r.RemoteAddr,
 			Action:           models.ActionApplyPrepend,
 			TargetDeviceID:   req.DeviceID,
+			TargetDeviceName: device.Name,
 			CommandExecuted:  cliScript,
 			Status:           "MANUAL_DISPATCH",
 		})
@@ -411,18 +476,23 @@ func (tc *TrafficController) SetLocalPreference(w http.ResponseWriter, r *http.R
 		return
 	}
 
+	device, err := CheckDeviceTenantAccess(r, tc.store, req.DeviceID)
+	if err != nil {
+		if errors.Is(err, ErrAccessDeniedToDevice) {
+			WriteError(w, http.StatusForbidden, err.Error())
+			return
+		}
+		WriteError(w, http.StatusNotFound, "Dispositivo não encontrado")
+		return
+	}
+
 	if tc.trafficSvc != nil {
 		if err := tc.trafficSvc.SetBGPLocalPreference(req); err != nil {
 			WriteError(w, http.StatusInternalServerError, "Erro ao processar Local-Preference: "+err.Error())
 			return
 		}
 	} else {
-		dev, err := tc.store.GetByID(req.DeviceID)
-		if err != nil {
-			WriteError(w, http.StatusNotFound, "Dispositivo não encontrado")
-			return
-		}
-		driver, err := drivers.NewDriver(dev)
+		driver, err := drivers.NewDriver(device)
 		if err != nil {
 			WriteError(w, http.StatusBadRequest, err.Error())
 			return
@@ -433,8 +503,7 @@ func (tc *TrafficController) SetLocalPreference(w http.ResponseWriter, r *http.R
 		}
 	}
 
-	dev, _ := tc.store.GetByID(req.DeviceID)
-	cmds, cliScript := buildLocalPrefCLI(dev, req)
+	cmds, cliScript := buildLocalPrefCLI(device, req)
 
 	if tc.auditStore != nil {
 		user := GetAuthUser(r)
@@ -443,13 +512,14 @@ func (tc *TrafficController) SetLocalPreference(w http.ResponseWriter, r *http.R
 			userName, userEmail, userID = user.Name, user.Email, user.UserID
 		}
 		_ = tc.auditStore.Record(&models.AuditLog{
-			TenantID:         "default-tenant",
+			TenantID:         device.TenantID,
 			UserID:           userID,
 			UserName:         userName,
 			UserEmail:        userEmail,
 			ClientIP:         r.RemoteAddr,
 			Action:           "SET_LOCAL_PREFERENCE",
 			TargetDeviceID:   req.DeviceID,
+			TargetDeviceName: device.Name,
 			CommandExecuted:  cliScript,
 			Status:           "MANUAL_DISPATCH",
 		})

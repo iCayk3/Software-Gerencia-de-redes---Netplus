@@ -11,12 +11,14 @@ import {
   ShieldAlert,
   ShieldCheck,
   LogOut,
+  Building2,
+  Users,
   X
 } from 'lucide-react'
 import type { HealthResponse } from '../services/api'
 import { useAuth } from '../context/AuthContext'
 
-export type MainSectionType = 'traffic' | 'devices' | 'telemetry' | 'diagnostics' | 'audit'
+export type MainSectionType = 'traffic' | 'devices' | 'telemetry' | 'diagnostics' | 'audit' | 'tenants' | 'users'
 
 interface NavSectionItem {
   id: MainSectionType
@@ -51,7 +53,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
   health,
   loadingHealth,
 }) => {
-  const { user, logout } = useAuth()
+  const { user, isSuperAdmin, logout } = useAuth()
 
   const navSections: NavSectionItem[] = [
     {
@@ -95,6 +97,22 @@ export const Sidebar: React.FC<SidebarProps> = ({
       icon: ShieldCheck,
       defaultSubTab: 'logs',
     },
+    ...(isSuperAdmin ? [{
+      id: 'tenants' as MainSectionType,
+      label: 'Empresas Clientes',
+      shortLabel: 'Empresas',
+      description: 'Provedores, ASNs e isolamento BGP',
+      icon: Building2,
+      defaultSubTab: 'list',
+    }] : []),
+    ...(isSuperAdmin || user?.role === 'admin' ? [{
+      id: 'users' as MainSectionType,
+      label: 'Usuários & Permissões',
+      shortLabel: 'Usuários',
+      description: 'Operadores NOC, RBAC e empresas',
+      icon: Users,
+      defaultSubTab: 'list',
+    }] : []),
   ]
 
   const sidebarContent = (
@@ -206,7 +224,9 @@ export const Sidebar: React.FC<SidebarProps> = ({
             <div className="flex items-center gap-2 min-w-0">
               <div
                 className={`h-7 w-7 rounded-lg flex items-center justify-center text-[10px] font-bold shrink-0 ${
-                  user.role === 'admin'
+                  isSuperAdmin
+                    ? 'bg-amber-500/20 text-amber-300 border border-amber-500/30'
+                    : user.role === 'admin'
                     ? 'bg-red-500/20 text-red-400 border border-red-500/30'
                     : user.role === 'noc_operator'
                     ? 'bg-cyan-500/20 text-cyan-400 border border-cyan-500/30'
@@ -222,14 +242,18 @@ export const Sidebar: React.FC<SidebarProps> = ({
                   <div className="flex items-center gap-1 mt-0.5">
                     <span
                       className={`text-[9px] font-bold px-1.5 py-0.2 rounded-full ${
-                        user.role === 'admin'
+                        isSuperAdmin
+                          ? 'bg-amber-950 text-amber-300 border border-amber-800'
+                          : user.role === 'admin'
                           ? 'bg-red-950 text-red-300 border border-red-800'
                           : user.role === 'noc_operator'
                           ? 'bg-cyan-950 text-cyan-300 border border-cyan-800'
                           : 'bg-emerald-950 text-emerald-300 border border-emerald-800'
                       }`}
                     >
-                      {user.role === 'admin'
+                      {isSuperAdmin
+                        ? 'SuperAdmin'
+                        : user.role === 'admin'
                         ? 'Admin'
                         : user.role === 'noc_operator'
                         ? 'Operador'

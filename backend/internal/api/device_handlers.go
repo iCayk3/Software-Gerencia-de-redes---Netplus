@@ -2,6 +2,7 @@ package api
 
 import (
 	"encoding/json"
+	"errors"
 	"net/http"
 	"sync"
 	"time"
@@ -22,54 +23,100 @@ func NewDeviceController(store *storage.DeviceStore, engine *telemetry.Engine) *
 }
 
 // ListDevices handles GET /api/devices
+// Returns devices scoped strictly to the authenticated user's tenant (or all for SuperAdmin).
 func (c *DeviceController) ListDevices(w http.ResponseWriter, r *http.Request) {
-	devices := c.store.GetAllSafe()
+	tenantScope := ResolveTenantScope(r)
+	devices := c.store.GetAllSafeByTenant(tenantScope)
 	WriteJSON(w, http.StatusOK, devices)
 }
 
 // CreateDevice handles POST /api/devices
 func (c *DeviceController) CreateDevice(w http.ResponseWriter, r *http.Request) {
+	claims := GetAuthUser(r)
 	var d models.Device
 	if err := json.NewDecoder(r.Body).Decode(&d); err != nil {
-		WriteError(w, http.StatusBadRequest, "Invalid request body: "+err.Error())
+		WriteError(w, http.StatusBadRequest, "Corpo da requisição inválido: "+err.Error())
 		return
 	}
 
 	if d.Name == "" || d.Host == "" || d.Vendor == "" {
-		WriteError(w, http.StatusBadRequest, "Fields 'name', 'host' and 'vendor' are required")
+		WriteError(w, http.StatusBadRequest, "Campos 'name', 'host' e 'vendor' são obrigatórios")
 		return
+	}
+
+	// Security: If not SuperAdmin, force device to belong to user's tenant
+	if claims != nil && !claims.IsSuperAdmin {
+		d.TenantID = claims.TenantID
+	} else if d.TenantID == "" {
+		d.TenantID = "default-tenant"
 	}
 
 	created, err := c.store.Create(d)
 	if err != nil {
-		WriteError(w, http.StatusInternalServerError, "Failed to create device: "+err.Error())
+		WriteError(w, http.StatusInternalServerError, "Falha ao criar equipamento: "+err.Error())
 		return
 	}
 
 	WriteJSON(w, http.StatusCreated, created.ToSafe())
 }
 
+// GetDevice handles GET /api/devices/{id} with tenant access verification
+func (c *DeviceController) GetDevice(w http.ResponseWriter, r *http.Request) {
+	id := r.PathValue("id")
+	if id == "" {
+		WriteError(w, http.StatusBadRequest, "ID do equipamento é obrigatório")
+		return
+	}
+
+	dev, err := CheckDeviceTenantAccess(r, c.store, id)
+	if err != nil {
+		if errors.Is(err, ErrAccessDeniedToDevice) {
+			WriteError(w, http.StatusForbidden, err.Error())
+			return
+		}
+		WriteError(w, http.StatusNotFound, "Equipamento não encontrado")
+		return
+	}
+
+	WriteJSON(w, http.StatusOK, dev.ToSafe())
+}
+
 // UpdateDevice handles PUT /api/devices/{id}
 func (c *DeviceController) UpdateDevice(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
 	if id == "" {
-		WriteError(w, http.StatusBadRequest, "Device ID is required")
+		WriteError(w, http.StatusBadRequest, "ID do equipamento é obrigatório")
+		return
+	}
+
+	// Security: Check tenant ownership
+	if _, err := CheckDeviceTenantAccess(r, c.store, id); err != nil {
+		if errors.Is(err, ErrAccessDeniedToDevice) {
+			WriteError(w, http.StatusForbidden, err.Error())
+			return
+		}
+		WriteError(w, http.StatusNotFound, "Equipamento não encontrado")
 		return
 	}
 
 	var d models.Device
 	if err := json.NewDecoder(r.Body).Decode(&d); err != nil {
-		WriteError(w, http.StatusBadRequest, "Invalid request body: "+err.Error())
+		WriteError(w, http.StatusBadRequest, "Corpo da requisição inválido: "+err.Error())
 		return
 	}
 	d.ID = id
 
+	claims := GetAuthUser(r)
+	if claims != nil && !claims.IsSuperAdmin {
+		d.TenantID = claims.TenantID
+	}
+
 	if err := c.store.Update(d); err != nil {
 		if err == storage.ErrDeviceNotFound {
-			WriteError(w, http.StatusNotFound, "Device not found")
+			WriteError(w, http.StatusNotFound, "Equipamento não encontrado")
 			return
 		}
-		WriteError(w, http.StatusInternalServerError, "Failed to update device: "+err.Error())
+		WriteError(w, http.StatusInternalServerError, "Falha ao atualizar equipamento: "+err.Error())
 		return
 	}
 
@@ -81,28 +128,42 @@ func (c *DeviceController) UpdateDevice(w http.ResponseWriter, r *http.Request) 
 func (c *DeviceController) DeleteDevice(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
 	if id == "" {
-		WriteError(w, http.StatusBadRequest, "Device ID is required")
+		WriteError(w, http.StatusBadRequest, "ID do equipamento é obrigatório")
+		return
+	}
+
+	// Security: Check tenant ownership
+	if _, err := CheckDeviceTenantAccess(r, c.store, id); err != nil {
+		if errors.Is(err, ErrAccessDeniedToDevice) {
+			WriteError(w, http.StatusForbidden, err.Error())
+			return
+		}
+		WriteError(w, http.StatusNotFound, "Equipamento não encontrado")
 		return
 	}
 
 	if err := c.store.Delete(id); err != nil {
 		if err == storage.ErrDeviceNotFound {
-			WriteError(w, http.StatusNotFound, "Device not found")
+			WriteError(w, http.StatusNotFound, "Equipamento não encontrado")
 			return
 		}
-		WriteError(w, http.StatusInternalServerError, "Failed to delete device: "+err.Error())
+		WriteError(w, http.StatusInternalServerError, "Falha ao excluir equipamento: "+err.Error())
 		return
 	}
 
-	WriteJSON(w, http.StatusOK, map[string]string{"message": "Device deleted successfully"})
+	WriteJSON(w, http.StatusOK, map[string]string{"message": "Equipamento excluído com sucesso"})
 }
 
 // TestDevice handles POST /api/devices/{id}/test
 func (c *DeviceController) TestDevice(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
-	device, err := c.store.GetByID(id)
+	device, err := CheckDeviceTenantAccess(r, c.store, id)
 	if err != nil {
-		WriteError(w, http.StatusNotFound, "Device not found")
+		if errors.Is(err, ErrAccessDeniedToDevice) {
+			WriteError(w, http.StatusForbidden, err.Error())
+			return
+		}
+		WriteError(w, http.StatusNotFound, "Equipamento não encontrado")
 		return
 	}
 
@@ -125,17 +186,21 @@ func (c *DeviceController) TestDevice(w http.ResponseWriter, r *http.Request) {
 // GetDeviceBGP handles GET /api/devices/{id}/bgp
 func (c *DeviceController) GetDeviceBGP(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
+	device, err := CheckDeviceTenantAccess(r, c.store, id)
+	if err != nil {
+		if errors.Is(err, ErrAccessDeniedToDevice) {
+			WriteError(w, http.StatusForbidden, err.Error())
+			return
+		}
+		WriteError(w, http.StatusNotFound, "Equipamento não encontrado")
+		return
+	}
+
 	if r.URL.Query().Get("fresh") != "true" && c.engine != nil {
 		if cached, ok := c.engine.GetCollector().GetCachedBGP(id); ok && len(cached) > 0 {
 			WriteJSON(w, http.StatusOK, cached)
 			return
 		}
-	}
-
-	device, err := c.store.GetByID(id)
-	if err != nil {
-		WriteError(w, http.StatusNotFound, "Device not found")
-		return
 	}
 
 	// Se o roteador estiver conectado ao BMP (RFC 7854), entrega telemetria em tempo real sem SSH
@@ -157,7 +222,7 @@ func (c *DeviceController) GetDeviceBGP(w http.ResponseWriter, r *http.Request) 
 	sessions, err := driver.GetBGPSessions()
 	if err != nil {
 		c.store.UpdateStatus(device.ID, "offline")
-		WriteError(w, http.StatusInternalServerError, "Error retrieving BGP sessions: "+err.Error())
+		WriteError(w, http.StatusInternalServerError, "Erro ao obter sessões BGP: "+err.Error())
 		return
 	}
 	c.store.UpdateStatus(device.ID, "online")
@@ -172,17 +237,21 @@ func (c *DeviceController) GetDeviceBGP(w http.ResponseWriter, r *http.Request) 
 // GetDeviceOSPF handles GET /api/devices/{id}/ospf
 func (c *DeviceController) GetDeviceOSPF(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
+	device, err := CheckDeviceTenantAccess(r, c.store, id)
+	if err != nil {
+		if errors.Is(err, ErrAccessDeniedToDevice) {
+			WriteError(w, http.StatusForbidden, err.Error())
+			return
+		}
+		WriteError(w, http.StatusNotFound, "Equipamento não encontrado")
+		return
+	}
+
 	if r.URL.Query().Get("fresh") != "true" && c.engine != nil {
 		if cached, ok := c.engine.GetCollector().GetCachedOSPF(id); ok && len(cached) > 0 {
 			WriteJSON(w, http.StatusOK, cached)
 			return
 		}
-	}
-
-	device, err := c.store.GetByID(id)
-	if err != nil {
-		WriteError(w, http.StatusNotFound, "Device not found")
-		return
 	}
 
 	driver, err := drivers.NewDriver(device)
@@ -194,7 +263,7 @@ func (c *DeviceController) GetDeviceOSPF(w http.ResponseWriter, r *http.Request)
 	neighbors, err := driver.GetOSPFNeighbors()
 	if err != nil {
 		c.store.UpdateStatus(device.ID, "offline")
-		WriteError(w, http.StatusInternalServerError, "Error retrieving OSPF neighbors: "+err.Error())
+		WriteError(w, http.StatusInternalServerError, "Erro ao obter vizinhos OSPF: "+err.Error())
 		return
 	}
 	c.store.UpdateStatus(device.ID, "online")
@@ -205,20 +274,24 @@ func (c *DeviceController) GetDeviceOSPF(w http.ResponseWriter, r *http.Request)
 // ExecDeviceCommand handles POST /api/devices/{id}/exec
 func (c *DeviceController) ExecDeviceCommand(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
-	device, err := c.store.GetByID(id)
+	device, err := CheckDeviceTenantAccess(r, c.store, id)
 	if err != nil {
-		WriteError(w, http.StatusNotFound, "Device not found")
+		if errors.Is(err, ErrAccessDeniedToDevice) {
+			WriteError(w, http.StatusForbidden, err.Error())
+			return
+		}
+		WriteError(w, http.StatusNotFound, "Equipamento não encontrado")
 		return
 	}
 
 	var req models.CommandExecRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		WriteError(w, http.StatusBadRequest, "Invalid request body")
+		WriteError(w, http.StatusBadRequest, "Corpo da requisição inválido")
 		return
 	}
 
 	if req.Command == "" {
-		WriteError(w, http.StatusBadRequest, "Command cannot be empty")
+		WriteError(w, http.StatusBadRequest, "O comando não pode estar vazio")
 		return
 	}
 
@@ -248,16 +321,29 @@ func (c *DeviceController) ExecDeviceCommand(w http.ResponseWriter, r *http.Requ
 }
 
 // GetAllBGP handles GET /api/bgp/all
+// Returns BGP sessions strictly scoped to the tenant's devices.
 func (c *DeviceController) GetAllBGP(w http.ResponseWriter, r *http.Request) {
+	tenantScope := ResolveTenantScope(r)
+	devices := c.store.GetAllByTenant(tenantScope)
+	allowedMap := make(map[string]bool, len(devices))
+	for _, d := range devices {
+		allowedMap[d.ID] = true
+	}
+
 	if r.URL.Query().Get("fresh") != "true" && c.engine != nil {
 		cached := c.engine.GetCollector().GetAllCachedBGP()
 		if len(cached) > 0 {
-			WriteJSON(w, http.StatusOK, cached)
+			filtered := make([]models.BGPSession, 0)
+			for _, s := range cached {
+				if tenantScope == "" || allowedMap[s.DeviceID] {
+					filtered = append(filtered, s)
+				}
+			}
+			WriteJSON(w, http.StatusOK, filtered)
 			return
 		}
 	}
 
-	devices := c.store.GetAll()
 	var wg sync.WaitGroup
 	var mu sync.Mutex
 	allSessions := make([]models.BGPSession, 0)
@@ -300,16 +386,29 @@ func (c *DeviceController) GetAllBGP(w http.ResponseWriter, r *http.Request) {
 }
 
 // GetAllOSPF handles GET /api/ospf/all
+// Returns OSPF neighbors strictly scoped to the tenant's devices.
 func (c *DeviceController) GetAllOSPF(w http.ResponseWriter, r *http.Request) {
+	tenantScope := ResolveTenantScope(r)
+	devices := c.store.GetAllByTenant(tenantScope)
+	allowedMap := make(map[string]bool, len(devices))
+	for _, d := range devices {
+		allowedMap[d.ID] = true
+	}
+
 	if r.URL.Query().Get("fresh") != "true" && c.engine != nil {
 		cached := c.engine.GetCollector().GetAllCachedOSPF()
 		if len(cached) > 0 {
-			WriteJSON(w, http.StatusOK, cached)
+			filtered := make([]models.OSPFNeighbor, 0)
+			for _, n := range cached {
+				if tenantScope == "" || allowedMap[n.DeviceID] {
+					filtered = append(filtered, n)
+				}
+			}
+			WriteJSON(w, http.StatusOK, filtered)
 			return
 		}
 	}
 
-	devices := c.store.GetAll()
 	var wg sync.WaitGroup
 	var mu sync.Mutex
 	allNeighbors := make([]models.OSPFNeighbor, 0)

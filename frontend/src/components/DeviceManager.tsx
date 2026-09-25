@@ -11,7 +11,8 @@ import {
   ShieldCheck,
   AlertCircle,
   Network,
-  Activity
+  Activity,
+  Building2
 } from 'lucide-react'
 import {
   fetchDevices,
@@ -23,6 +24,7 @@ import {
   type VendorType,
   type SSHTestResult
 } from '../services/api'
+import { useAuth } from '../context/AuthContext'
 import { DeviceCardSkeleton } from './common/Skeleton'
 
 interface DeviceManagerProps {
@@ -43,6 +45,8 @@ export const DeviceManager: React.FC<DeviceManagerProps> = ({
   onSelectDeviceForBGP,
   density = 'comfortable',
 }) => {
+  const { isSuperAdmin, tenants, activeTenantId } = useAuth()
+
   const [devices, setDevices] = useState<Device[]>([])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -50,6 +54,7 @@ export const DeviceManager: React.FC<DeviceManagerProps> = ({
   // Modal State
   const [isModalOpen, setIsModalOpen] = useState(false)
   const [editingDevice, setEditingDevice] = useState<Device | null>(null)
+  const [formTenantId, setFormTenantId] = useState<string>('default-tenant')
   const [formName, setFormName] = useState('')
   const [formHost, setFormHost] = useState('')
   const [formPort, setFormPort] = useState(22)
@@ -78,10 +83,11 @@ export const DeviceManager: React.FC<DeviceManagerProps> = ({
 
   useEffect(() => {
     loadDevices()
-  }, [])
+  }, [activeTenantId])
 
   const openAddModal = () => {
     setEditingDevice(null)
+    setFormTenantId(activeTenantId || tenants[0]?.id || 'default-tenant')
     setFormName('')
     setFormHost('')
     setFormPort(22)
@@ -95,6 +101,7 @@ export const DeviceManager: React.FC<DeviceManagerProps> = ({
 
   const openEditModal = (dev: Device) => {
     setEditingDevice(dev)
+    setFormTenantId(dev.tenant_id || activeTenantId || tenants[0]?.id || 'default-tenant')
     setFormName(dev.name)
     setFormHost(dev.host)
     setFormPort(dev.port)
@@ -111,6 +118,7 @@ export const DeviceManager: React.FC<DeviceManagerProps> = ({
     try {
       if (editingDevice) {
         await updateDevice(editingDevice.id, {
+          tenant_id: isSuperAdmin ? formTenantId : undefined,
           name: formName,
           host: formHost,
           port: Number(formPort),
@@ -122,6 +130,7 @@ export const DeviceManager: React.FC<DeviceManagerProps> = ({
         })
       } else {
         await createDevice({
+          tenant_id: isSuperAdmin ? formTenantId : (activeTenantId || undefined),
           name: formName,
           host: formHost,
           port: Number(formPort),
@@ -260,6 +269,17 @@ export const DeviceManager: React.FC<DeviceManagerProps> = ({
                       )}
                     </div>
                     <div className="flex items-center gap-1.5 flex-wrap justify-end">
+                      {isSuperAdmin && dev.tenant_id && (
+                        <span
+                          className="text-[10px] font-medium px-2 py-0.5 rounded-full bg-slate-800 text-cyan-300 border border-slate-700 flex items-center gap-1"
+                          title={`Empresa: ${tenants.find((t) => t.id === dev.tenant_id)?.name || dev.tenant_name || dev.tenant_id}`}
+                        >
+                          <Building2 className="h-3 w-3 text-cyan-400 shrink-0" />
+                          <span className="truncate max-w-[100px]">
+                            {tenants.find((t) => t.id === dev.tenant_id)?.name || dev.tenant_name || dev.tenant_id}
+                          </span>
+                        </span>
+                      )}
                       <span
                         className={`text-[11px] font-semibold px-2 py-0.5 rounded-full border ${vendorInfo.color}`}
                       >
@@ -410,6 +430,26 @@ export const DeviceManager: React.FC<DeviceManagerProps> = ({
             </div>
 
             <form onSubmit={handleSave} className="p-6 space-y-4">
+              {/* Tenant Selector for SuperAdmin */}
+              {isSuperAdmin && (
+                <div>
+                  <label className="block text-xs font-medium text-slate-400 mb-1">
+                    Empresa Cliente (Tenant Proprietário) *
+                  </label>
+                  <select
+                    value={formTenantId}
+                    onChange={(e) => setFormTenantId(e.target.value)}
+                    className="w-full px-3 py-2 bg-slate-950/70 border border-slate-700 rounded-lg text-xs text-slate-100 focus:outline-none focus:border-cyan-500 cursor-pointer"
+                  >
+                    {tenants.map((t) => (
+                      <option key={t.id} value={t.id}>
+                        🏢 {t.name} {t.asn ? `(AS${t.asn})` : ''}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
+
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <label className="block text-xs font-medium text-slate-400 mb-1">

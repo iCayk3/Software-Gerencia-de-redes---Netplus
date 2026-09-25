@@ -2,6 +2,7 @@ package api
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net"
 	"net/http"
@@ -26,6 +27,16 @@ func NewRoutesController(store *storage.DeviceStore, trafficSvc *traffic.Service
 // GetDeviceStaticRoutes handles GET /api/devices/{id}/routes/static
 func (c *RoutesController) GetDeviceStaticRoutes(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
+	device, err := CheckDeviceTenantAccess(r, c.store, id)
+	if err != nil {
+		if errors.Is(err, ErrAccessDeniedToDevice) {
+			WriteError(w, http.StatusForbidden, err.Error())
+			return
+		}
+		WriteError(w, http.StatusNotFound, "Dispositivo não encontrado")
+		return
+	}
+
 	fresh := r.URL.Query().Get("fresh") == "true"
 
 	if c.trafficSvc != nil {
@@ -35,12 +46,6 @@ func (c *RoutesController) GetDeviceStaticRoutes(w http.ResponseWriter, r *http.
 			return
 		}
 		WriteJSON(w, http.StatusOK, routes)
-		return
-	}
-
-	device, err := c.store.GetByID(id)
-	if err != nil {
-		WriteError(w, http.StatusNotFound, "Dispositivo não encontrado")
 		return
 	}
 
@@ -61,7 +66,14 @@ func (c *RoutesController) GetDeviceStaticRoutes(w http.ResponseWriter, r *http.
 
 // GetAllStaticRoutes handles GET /api/routes/static/all
 func (c *RoutesController) GetAllStaticRoutes(w http.ResponseWriter, r *http.Request) {
+	tenantScope := ResolveTenantScope(r)
 	fresh := r.URL.Query().Get("fresh") == "true"
+
+	devices := c.store.GetAllByTenant(tenantScope)
+	allowedMap := make(map[string]bool, len(devices))
+	for _, d := range devices {
+		allowedMap[d.ID] = true
+	}
 
 	if c.trafficSvc != nil {
 		allRoutes, err := c.trafficSvc.GetAllStaticRoutes(fresh)
@@ -69,11 +81,20 @@ func (c *RoutesController) GetAllStaticRoutes(w http.ResponseWriter, r *http.Req
 			WriteError(w, http.StatusInternalServerError, "Erro ao obter rotas estáticas: "+err.Error())
 			return
 		}
+		if tenantScope != "" {
+			filtered := make([]models.StaticRoute, 0)
+			for _, rt := range allRoutes {
+				if allowedMap[rt.DeviceID] {
+					filtered = append(filtered, rt)
+				}
+			}
+			WriteJSON(w, http.StatusOK, filtered)
+			return
+		}
 		WriteJSON(w, http.StatusOK, allRoutes)
 		return
 	}
 
-	devices := c.store.GetAll()
 	allRoutes := make([]models.StaticRoute, 0)
 	for _, d := range devices {
 		dev := d
@@ -91,8 +112,12 @@ func (c *RoutesController) GetAllStaticRoutes(w http.ResponseWriter, r *http.Req
 // AddDeviceStaticRoute handles POST /api/devices/{id}/routes/static
 func (c *RoutesController) AddDeviceStaticRoute(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
-	device, err := c.store.GetByID(id)
+	device, err := CheckDeviceTenantAccess(r, c.store, id)
 	if err != nil {
+		if errors.Is(err, ErrAccessDeniedToDevice) {
+			WriteError(w, http.StatusForbidden, err.Error())
+			return
+		}
 		WriteError(w, http.StatusNotFound, "Dispositivo não encontrado")
 		return
 	}
@@ -145,8 +170,12 @@ func (c *RoutesController) AddDeviceStaticRoute(w http.ResponseWriter, r *http.R
 // DeleteDeviceStaticRoute handles DELETE /api/devices/{id}/routes/static
 func (c *RoutesController) DeleteDeviceStaticRoute(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
-	device, err := c.store.GetByID(id)
+	device, err := CheckDeviceTenantAccess(r, c.store, id)
 	if err != nil {
+		if errors.Is(err, ErrAccessDeniedToDevice) {
+			WriteError(w, http.StatusForbidden, err.Error())
+			return
+		}
 		WriteError(w, http.StatusNotFound, "Dispositivo não encontrado")
 		return
 	}
@@ -168,7 +197,7 @@ func (c *RoutesController) DeleteDeviceStaticRoute(w http.ResponseWriter, r *htt
 			userName, userEmail, userID = user.Name, user.Email, user.UserID
 		}
 		_ = c.auditStore.Record(&models.AuditLog{
-			TenantID:         "default-tenant",
+			TenantID:         device.TenantID,
 			UserID:           userID,
 			UserName:         userName,
 			UserEmail:        userEmail,

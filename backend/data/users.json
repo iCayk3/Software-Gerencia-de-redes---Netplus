@@ -6,6 +6,7 @@
     "email": "operador@netpulse.com",
     "password_hash": "$2a$10$VdM13wCN2i0hn08YAr.fW.i5HiGWC1GTWAQQaE4yAv2h2jnLzvf9y",
     "role": "noc_operator",
+    "is_superadmin": false,
     "status": "active",
     "created_at": "2026-09-24T11:01:42.1997094-03:00"
   },
@@ -16,6 +17,7 @@
     "email": "diretoria@netpulse.com",
     "password_hash": "$2a$10$1zX/VhNKAR/LoQQNcFIq8O3wW2Xe6BmPR9FLX06vv7h16ARY0xcGO",
     "role": "viewer",
+    "is_superadmin": false,
     "status": "active",
     "created_at": "2026-09-24T11:01:42.2571088-03:00"
   },
@@ -26,8 +28,9 @@
     "email": "admin@netpulse.com",
     "password_hash": "$2a$10$5OFF.siwxvv6PqR3Wl6.VuI9fHevpQ.EliWIrEqxaypp11RdBFity",
     "role": "admin",
+    "is_superadmin": true,
     "status": "active",
     "created_at": "2026-09-24T11:01:42.1421909-03:00",
-    "last_login": "2026-09-25T11:31:41.8060354-03:00"
+    "last_login": "2026-09-25T15:34:32.3444712-03:00"
   }
 ]

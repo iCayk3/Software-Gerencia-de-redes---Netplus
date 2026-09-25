@@ -19,6 +19,7 @@ func NewRouter(
 	asMetaStore *storage.ASMetadataStore,
 	engine *telemetry.Engine,
 	dataDir string,
+	tenantStore storage.ITenantStore,
 	userStore storage.IUserStore,
 	auditStore storage.IAuditStore,
 ) http.Handler {
@@ -38,7 +39,7 @@ func NewRouter(
 	profileCtrl := NewProfileController(profileSvc, auditStore)
 
 	devCtrl := NewDeviceController(store, engine)
-	telCtrl := NewTelemetryController(engine)
+	telCtrl := NewTelemetryController(engine, store)
 	routesCtrl := NewRoutesController(store, trafficSvc, auditStore)
 
 	peerMetaStore, err := storage.NewPeerMetadataStore(dataDir)
@@ -51,17 +52,28 @@ func NewRouter(
 		trafficCtrl.SetPeerMetadataStore(peerMetaStore)
 	}
 
-	authCtrl := NewAuthController(userStore, auditStore)
+	tenantCtrl := NewTenantController(tenantStore, auditStore)
+	authCtrl := NewAuthController(userStore, tenantStore, auditStore)
 	auditCtrl := NewAuditController(auditStore)
 	rpkiCtrl := NewRPKIController(rpki.NewValidator())
 
 	// Base & Health check
 	mux.HandleFunc("GET /api/health", HandleHealth)
 
-	// Authentication & RBAC
+	// Multi-Tenant Company Management
+	mux.HandleFunc("GET /api/tenants", tenantCtrl.ListTenants)
+	mux.HandleFunc("GET /api/tenants/{id}", tenantCtrl.GetTenant)
+	mux.HandleFunc("POST /api/tenants", RequireSuperAdmin(tenantCtrl.CreateTenant))
+	mux.HandleFunc("PUT /api/tenants/{id}", RequireRole(models.RoleAdmin)(tenantCtrl.UpdateTenant))
+	mux.HandleFunc("DELETE /api/tenants/{id}", RequireSuperAdmin(tenantCtrl.DeleteTenant))
+
+	// Authentication & Multi-Tenant User Management
 	mux.HandleFunc("POST /api/auth/login", authCtrl.Login)
 	mux.HandleFunc("GET /api/auth/me", authCtrl.Me)
 	mux.HandleFunc("GET /api/auth/users", RequireRole(models.RoleAdmin)(authCtrl.ListUsers))
+	mux.HandleFunc("POST /api/auth/users", RequireRole(models.RoleAdmin)(authCtrl.CreateUser))
+	mux.HandleFunc("PUT /api/auth/users/{id}", RequireRole(models.RoleAdmin)(authCtrl.UpdateUser))
+	mux.HandleFunc("DELETE /api/auth/users/{id}", RequireRole(models.RoleAdmin)(authCtrl.DeleteUser))
 
 	// Audit Trail (Compliance & Operation Logging)
 	mux.HandleFunc("GET /api/audit/logs", auditCtrl.ListAuditLogs)
@@ -74,6 +86,7 @@ func NewRouter(
 
 	// Device Inventory management
 	mux.HandleFunc("GET /api/devices", devCtrl.ListDevices)
+	mux.HandleFunc("GET /api/devices/{id}", devCtrl.GetDevice)
 	mux.HandleFunc("POST /api/devices", RequireRole(models.RoleAdmin)(devCtrl.CreateDevice))
 	mux.HandleFunc("PUT /api/devices/{id}", RequireRole(models.RoleAdmin)(devCtrl.UpdateDevice))
 	mux.HandleFunc("DELETE /api/devices/{id}", RequireRole(models.RoleAdmin)(devCtrl.DeleteDevice))

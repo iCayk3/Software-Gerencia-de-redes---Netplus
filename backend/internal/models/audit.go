@@ -14,6 +14,12 @@ const (
 	ActionDeleteDevice      = "DELETE_DEVICE"
 	ActionUpdateASMetadata  = "UPDATE_AS_METADATA"
 	ActionUserLogin         = "USER_LOGIN"
+	ActionCreateTenant      = "CREATE_TENANT"
+	ActionUpdateTenant      = "UPDATE_TENANT"
+	ActionDeleteTenant      = "DELETE_TENANT"
+	ActionCreateUser        = "CREATE_USER"
+	ActionUpdateUser        = "UPDATE_USER"
+	ActionDeleteUser        = "DELETE_USER"
 )
 
 // AuditLog represents an immutable record of an operator action.

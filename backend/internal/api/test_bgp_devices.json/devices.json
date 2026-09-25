@@ -1,0 +1,28 @@
+[
+  {
+    "id": "dev-netplus-01",
+    "tenant_id": "default-tenant",
+    "name": "Borda Central Netplus",
+    "host": "192.168.100.1",
+    "port": 22,
+    "vendor": "huawei",
+    "username": "admin",
+    "auth_type": "",
+    "is_bgp": true,
+    "created_at": "2026-09-25T15:26:55.2868073-03:00",
+    "status": "online"
+  },
+  {
+    "id": "dev-alpha-01",
+    "tenant_id": "tenant-alpha",
+    "name": "Borda BGP Alpha Fibra",
+    "host": "10.50.0.1",
+    "port": 22,
+    "vendor": "datacom",
+    "username": "admin",
+    "auth_type": "",
+    "is_bgp": true,
+    "created_at": "2026-09-25T15:26:55.2868073-03:00",
+    "status": "online"
+  }
+]

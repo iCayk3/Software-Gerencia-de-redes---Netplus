@@ -47,7 +47,7 @@ function sendJSON(res, statusCode, data) {
     'Content-Type': 'application/json; charset=utf-8',
     'Access-Control-Allow-Origin': '*',
     'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
-    'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+    'Access-Control-Allow-Headers': 'Content-Type, Authorization, X-Tenant-ID',
   })
   res.end(JSON.stringify(data))
 }
@@ -244,6 +244,56 @@ const MOCK_BGP_SESSIONS = [
     prefixes_received: 18400,
     prefixes_sent: 7,
     description: 'BGP-PTT-CE-RS1-IPV4',
+  },
+  // Alpha Fibra (dev-alpha-01 - NE40)
+  {
+    device_id: 'dev-alpha-01',
+    device_name: 'Alpha-Borda-NE40',
+    peer_ip: '187.16.218.69',
+    remote_as: '26162',
+    local_as: '26162',
+    state: 'Established',
+    uptime: '320h45m',
+    prefixes_received: 94210,
+    prefixes_sent: 4,
+    description: 'ALPHA-PTT-SP-RS1',
+  },
+  {
+    device_id: 'dev-alpha-01',
+    device_name: 'Alpha-Borda-NE40',
+    peer_ip: '177.100.0.1',
+    remote_as: '266445',
+    local_as: '26162',
+    state: 'Established',
+    uptime: '120h10m',
+    prefixes_received: 980100,
+    prefixes_sent: 4,
+    description: 'ALPHA-UPSTREAM-TRANSITO',
+  },
+  // Beta Telecom (dev-beta-01 - CCR2004)
+  {
+    device_id: 'dev-beta-01',
+    device_name: 'Beta-Core-CCR2004',
+    peer_ip: '170.82.183.217',
+    remote_as: '266445',
+    local_as: '266445',
+    state: 'Established',
+    uptime: '840h15m',
+    prefixes_received: 1045200,
+    prefixes_sent: 6,
+    description: 'BETA-TRANSITO-SEA-IPV4',
+  },
+  {
+    device_id: 'dev-beta-01',
+    device_name: 'Beta-Core-CCR2004',
+    peer_ip: '45.184.145.253',
+    remote_as: '26162',
+    local_as: '266445',
+    state: 'Established',
+    uptime: '410h00m',
+    prefixes_received: 14210,
+    prefixes_sent: 6,
+    description: 'BETA-PTT-BSB-RS1',
   },
 ]
 
@@ -498,35 +548,251 @@ const server = http.createServer(async (req, res) => {
   const parsedUrl = new URL(req.url, `http://${req.headers.host || 'localhost'}`)
   const pathname = parsedUrl.pathname
   const method = req.method.toUpperCase()
+  const query = Object.fromEntries(parsedUrl.searchParams.entries())
+  const tenantScope = req.headers['x-tenant-id'] || query.tenant_id || ''
 
   // Tratamento de pre-flight CORS
   if (method === 'OPTIONS') {
     res.writeHead(204, {
       'Access-Control-Allow-Origin': '*',
       'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
-      'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+      'Access-Control-Allow-Headers': 'Content-Type, Authorization, X-Tenant-ID',
     })
     res.end()
     return
   }
 
-  console.log(`[MockServer] ${method} ${pathname}`)
+  console.log(`[MockServer] ${method} ${pathname} ${tenantScope ? `[Tenant: ${tenantScope}]` : ''}`)
 
   // 1. Health Check
   if (pathname === '/api/health') {
     return sendJSON(res, 200, {
       status: 'ok (Modo Simulação Node.js)',
-      version: '1.0.0-dev-offline',
-      go_version: 'node-mock-v1.0',
+      version: '2.0.0-multi-tenant-mock',
+      go_version: 'node-mock-v2.0',
       uptime: '3h12m',
       timestamp: new Date().toISOString(),
     })
   }
 
-  // 2. Dispositivos (CRUD)
+  // --- 1.1 Autenticação & Gestão de Usuários (RBAC) ---
+  if (pathname === '/api/auth/login' && method === 'POST') {
+    const body = await parseBody(req)
+    const users = readJSON('users.json', [])
+    const found = users.find((u) => u.email?.toLowerCase() === body.email?.toLowerCase())
+    if (found) {
+      const { password_hash, ...safeUser } = found
+      if (found.email?.toLowerCase() === 'admin@netpulse.com' || (found.role === 'admin' && (found.tenant_id === 'default-tenant' || !found.tenant_id))) {
+        safeUser.is_superadmin = true
+      }
+      return sendJSON(res, 200, {
+        token: `mock-jwt-token-${safeUser.id}-${Date.now()}`,
+        expires_at: new Date(Date.now() + 86400000).toISOString(),
+        user: safeUser,
+      })
+    }
+    // Fallback default admin if no specific user matched
+    return sendJSON(res, 200, {
+      token: `mock-jwt-token-admin-${Date.now()}`,
+      expires_at: new Date(Date.now() + 86400000).toISOString(),
+      user: {
+        id: 'usr-admin-default',
+        tenant_id: 'default-tenant',
+        name: 'Administrador NOC (Mock)',
+        email: body.email || 'admin@netpulse.com',
+        role: 'admin',
+        is_superadmin: true,
+        status: 'active',
+        created_at: new Date().toISOString(),
+      },
+    })
+  }
+
+  if (pathname === '/api/auth/me' && method === 'GET') {
+    const users = readJSON('users.json', [])
+    const adminUser = users.find((u) => u.is_superadmin) || users[0] || {
+      id: 'usr-admin-default',
+      tenant_id: 'default-tenant',
+      name: 'Administrador NOC (Mock)',
+      email: 'admin@netpulse.com',
+      role: 'admin',
+      is_superadmin: true,
+      status: 'active',
+      created_at: new Date().toISOString(),
+    }
+    const { password_hash, ...safeUser } = adminUser
+    return sendJSON(res, 200, safeUser)
+  }
+
+  if (pathname === '/api/auth/logout' && method === 'POST') {
+    return sendJSON(res, 200, { message: 'Sessão encerrada com sucesso' })
+  }
+
+  if (pathname === '/api/auth/users' && method === 'GET') {
+    const users = readJSON('users.json', [])
+    const tenants = readJSON('tenants.json', [])
+    let filtered = users
+    if (tenantScope) {
+      filtered = users.filter((u) => u.tenant_id === tenantScope)
+    }
+    const safeUsers = filtered.map(({ password_hash, ...u }) => {
+      const t = tenants.find((item) => item.id === u.tenant_id)
+      return {
+        ...u,
+        tenant_name: t ? t.name : u.tenant_id,
+      }
+    })
+    return sendJSON(res, 200, safeUsers)
+  }
+
+  if (pathname === '/api/auth/users' && method === 'POST') {
+    const body = await parseBody(req)
+    const users = readJSON('users.json', [])
+    const newUser = {
+      id: `usr-${Math.random().toString(16).substring(2, 10)}`,
+      tenant_id: body.tenant_id || tenantScope || 'default-tenant',
+      name: body.name || 'Novo Usuário',
+      email: body.email || 'user@empresa.com.br',
+      password_hash: '$2a$10$mockHashPlaceholder',
+      role: body.role || 'noc_operator',
+      is_superadmin: Boolean(body.is_superadmin),
+      status: 'active',
+      created_at: new Date().toISOString(),
+    }
+    users.push(newUser)
+    writeJSON('users.json', users)
+    const { password_hash, ...safeUser } = newUser
+    return sendJSON(res, 201, safeUser)
+  }
+
+  const putUserMatch = pathname.match(/^\/api\/auth\/users\/([^/]+)$/)
+  if (putUserMatch && method === 'PUT') {
+    const userId = putUserMatch[1]
+    const body = await parseBody(req)
+    const users = readJSON('users.json', [])
+    const idx = users.findIndex((u) => u.id === userId)
+    if (idx !== -1) {
+      users[idx] = {
+        ...users[idx],
+        name: body.name !== undefined ? body.name : users[idx].name,
+        email: body.email !== undefined ? body.email : users[idx].email,
+        role: body.role !== undefined ? body.role : users[idx].role,
+        tenant_id: body.tenant_id !== undefined ? body.tenant_id : users[idx].tenant_id,
+        is_superadmin: body.is_superadmin !== undefined ? Boolean(body.is_superadmin) : users[idx].is_superadmin,
+        status: body.status !== undefined ? body.status : users[idx].status,
+      }
+      writeJSON('users.json', users)
+      const { password_hash, ...safeUser } = users[idx]
+      return sendJSON(res, 200, safeUser)
+    }
+    return sendError(res, 404, 'Usuário não encontrado')
+  }
+
+  if (putUserMatch && method === 'DELETE') {
+    const userId = putUserMatch[1]
+    const users = readJSON('users.json', [])
+    const filtered = users.filter((u) => u.id !== userId)
+    writeJSON('users.json', filtered)
+    return sendJSON(res, 200, { message: 'Usuário removido com sucesso' })
+  }
+
+  // --- 1.2 Empresas Clientes (Tenants CRUD) ---
+  if (pathname === '/api/tenants' && method === 'GET') {
+    const tenants = readJSON('tenants.json', [])
+    const devices = readJSON('devices.json', [])
+    const users = readJSON('users.json', [])
+    const enriched = tenants.map((t) => ({
+      ...t,
+      device_count: devices.filter((d) => d.tenant_id === t.id).length,
+      user_count: users.filter((u) => u.tenant_id === t.id).length,
+    }))
+    return sendJSON(res, 200, enriched)
+  }
+
+  if (pathname === '/api/tenants' && method === 'POST') {
+    const body = await parseBody(req)
+    const tenants = readJSON('tenants.json', [])
+    const newTenant = {
+      id: `tenant-${Math.random().toString(16).substring(2, 10)}`,
+      name: body.name || 'Nova Empresa Cliente',
+      slug: body.slug || body.name?.toLowerCase().replace(/\s+/g, '-') || 'cliente',
+      asn: body.asn ? String(body.asn) : '',
+      document: body.document || '',
+      contact_email: body.contact_email || '',
+      contact_phone: body.contact_phone || '',
+      logo_url: body.logo_url || '',
+      plan: body.plan || 'standard',
+      status: body.status || 'active',
+      created_at: new Date().toISOString(),
+    }
+    tenants.push(newTenant)
+    writeJSON('tenants.json', tenants)
+    return sendJSON(res, 201, {
+      ...newTenant,
+      device_count: 0,
+      user_count: 0,
+    })
+  }
+
+  const tenantMatch = pathname.match(/^\/api\/tenants\/([^/]+)$/)
+  if (tenantMatch && method === 'GET') {
+    const tenantId = tenantMatch[1]
+    const tenants = readJSON('tenants.json', [])
+    const target = tenants.find((t) => t.id === tenantId)
+    if (target) {
+      const devices = readJSON('devices.json', [])
+      const users = readJSON('users.json', [])
+      return sendJSON(res, 200, {
+        ...target,
+        device_count: devices.filter((d) => d.tenant_id === target.id).length,
+        user_count: users.filter((u) => u.tenant_id === target.id).length,
+      })
+    }
+    return sendError(res, 404, 'Empresa cliente não encontrada')
+  }
+
+  if (tenantMatch && method === 'PUT') {
+    const tenantId = tenantMatch[1]
+    const body = await parseBody(req)
+    const tenants = readJSON('tenants.json', [])
+    const idx = tenants.findIndex((t) => t.id === tenantId)
+    if (idx !== -1) {
+      tenants[idx] = {
+        ...tenants[idx],
+        ...body,
+        id: tenantId,
+      }
+      writeJSON('tenants.json', tenants)
+      return sendJSON(res, 200, tenants[idx])
+    }
+    return sendError(res, 404, 'Empresa cliente não encontrada')
+  }
+
+  if (tenantMatch && method === 'DELETE') {
+    const tenantId = tenantMatch[1]
+    const tenants = readJSON('tenants.json', [])
+    const filtered = tenants.filter((t) => t.id !== tenantId)
+    writeJSON('tenants.json', filtered)
+    return sendJSON(res, 200, { message: 'Empresa cliente removida com sucesso' })
+  }
+
+  // 2. Dispositivos (CRUD com escopo Multi-Tenant)
   if (pathname === '/api/devices' && method === 'GET') {
     const devices = readJSON('devices.json', [])
-    return sendJSON(res, 200, devices)
+    const tenants = readJSON('tenants.json', [])
+    let filtered = devices
+    if (tenantScope) {
+      filtered = devices.filter((d) => d.tenant_id === tenantScope)
+    }
+    const safeDevices = filtered.map(({ password, ...d }) => {
+      const t = tenants.find((item) => item.id === d.tenant_id)
+      return {
+        ...d,
+        tenant_name: t ? t.name : d.tenant_id,
+        has_password: Boolean(password),
+      }
+    })
+    return sendJSON(res, 200, safeDevices)
   }
 
   if (pathname === '/api/devices' && method === 'POST') {
@@ -534,6 +800,7 @@ const server = http.createServer(async (req, res) => {
     const devices = readJSON('devices.json', [])
     const newDevice = {
       id: Math.random().toString(16).substring(2, 18),
+      tenant_id: body.tenant_id || tenantScope || 'default-tenant',
       name: body.name || 'Novo-Dispositivo',
       host: body.host || '127.0.0.1',
       port: body.port || 22,
@@ -549,7 +816,8 @@ const server = http.createServer(async (req, res) => {
     }
     devices.push(newDevice)
     writeJSON('devices.json', devices)
-    return sendJSON(res, 201, newDevice)
+    const { password, ...safeDev } = newDevice
+    return sendJSON(res, 201, safeDev)
   }
 
   // PUT /api/devices/:id
@@ -594,6 +862,11 @@ const server = http.createServer(async (req, res) => {
 
   // 3. Sessões BGP
   if (pathname === '/api/bgp/all') {
+    if (tenantScope) {
+      const devices = readJSON('devices.json', [])
+      const tenantDevIds = devices.filter((d) => d.tenant_id === tenantScope).map((d) => d.id)
+      return sendJSON(res, 200, MOCK_BGP_SESSIONS.filter((s) => tenantDevIds.includes(s.device_id)))
+    }
     return sendJSON(res, 200, MOCK_BGP_SESSIONS)
   }
 
@@ -606,6 +879,11 @@ const server = http.createServer(async (req, res) => {
 
   // 4. Vizinhos OSPF
   if (pathname === '/api/ospf/all') {
+    if (tenantScope) {
+      const devices = readJSON('devices.json', [])
+      const tenantDevIds = devices.filter((d) => d.tenant_id === tenantScope).map((d) => d.id)
+      return sendJSON(res, 200, MOCK_OSPF_NEIGHBORS.filter((s) => tenantDevIds.includes(s.device_id)))
+    }
     return sendJSON(res, 200, MOCK_OSPF_NEIGHBORS)
   }
 
@@ -618,7 +896,7 @@ const server = http.createServer(async (req, res) => {
 
   // 5. Download Prepends
   if (pathname === '/api/bgp/prepends/all') {
-    return sendJSON(res, 200, [
+    const allPrepends = [
       {
         device_id: '7a5d2d4230302c56',
         device_name: 'BGP',
@@ -637,7 +915,13 @@ const server = http.createServer(async (req, res) => {
         as_groups: MOCK_PREPEND_GROUPS_BGP2,
         last_sync_time: new Date().toISOString(),
       },
-    ])
+    ]
+    if (tenantScope) {
+      const devices = readJSON('devices.json', [])
+      const tenantDevIds = devices.filter((d) => d.tenant_id === tenantScope).map((d) => d.id)
+      return sendJSON(res, 200, allPrepends.filter((p) => tenantDevIds.includes(p.device_id)))
+    }
+    return sendJSON(res, 200, allPrepends)
   }
 
   const prepDevMatch = pathname.match(/^\/api\/devices\/([^/]+)\/bgp\/prepends$/)
@@ -666,86 +950,95 @@ const server = http.createServer(async (req, res) => {
     const asMeta = readJSON('as_metadata.json', [])
     const getMeta = (asn) => asMeta.find((m) => m.asn === asn) || { asn, alias: `AS${asn}`, role: 'transit_primary' }
 
+    const allSections = [
+      {
+        id: 'sec-sea',
+        device_id: '7a5d2d4230302c56',
+        device_name: 'BGP',
+        device_host: '45.166.28.254',
+        device_vendor: 'huawei',
+        remote_as: '266445',
+        local_as: '267943',
+        peer_ip: '170.82.183.217',
+        peer_name: 'BGP-SEA',
+        bgp_state: 'Established',
+        uptime: '1475h',
+        prefixes_received: 1089542,
+        local_pref: 200,
+        import_policy: 'SEA-IN',
+        import_policy_node: 11,
+        metadata: getMeta('266445'),
+        static_routes: [],
+      },
+      {
+        id: 'sec-wiki',
+        device_id: '738398e45a892540',
+        device_name: 'BGP2',
+        device_host: '45.166.28.249',
+        device_vendor: 'huawei',
+        remote_as: '262503',
+        local_as: '267943',
+        peer_ip: '45.166.28.250',
+        peer_name: 'BGP-WIKI',
+        bgp_state: 'Established',
+        uptime: '920h',
+        prefixes_received: 980400,
+        local_pref: 150,
+        import_policy: 'WIKI-IN',
+        import_policy_node: 10,
+        metadata: getMeta('262503'),
+        static_routes: [],
+      },
+      {
+        id: 'sec-ptt-sp',
+        device_id: '738398e45a892540',
+        device_name: 'BGP2',
+        device_host: '45.166.28.249',
+        device_vendor: 'huawei',
+        remote_as: '26162',
+        local_as: '267943',
+        peer_ip: '187.16.218.69',
+        peer_name: 'BGP-PTT-SP',
+        bgp_state: 'Established',
+        uptime: '610h',
+        prefixes_received: 95400,
+        local_pref: 1000,
+        import_policy: 'PTT-SP-IN',
+        import_policy_node: 10,
+        metadata: getMeta('26162'),
+        static_routes: [],
+      },
+      {
+        id: 'sec-ptt-bsb',
+        device_id: '7a5d2d4230302c56',
+        device_name: 'BGP',
+        device_host: '45.166.28.254',
+        device_vendor: 'huawei',
+        remote_as: '26162',
+        local_as: '267943',
+        peer_ip: '45.184.145.253',
+        peer_name: 'BGP-PTT-BRASILIA',
+        bgp_state: 'Established',
+        uptime: '840h',
+        prefixes_received: 14210,
+        local_pref: 1000,
+        import_policy: 'PTT-BRASILIA-IPV4-IN',
+        import_policy_node: 11,
+        metadata: getMeta('26162'),
+        static_routes: [],
+      },
+    ]
+
+    let filteredSections = allSections
+    if (tenantScope) {
+      const devices = readJSON('devices.json', [])
+      const tenantDevIds = devices.filter((d) => d.tenant_id === tenantScope).map((d) => d.id)
+      filteredSections = allSections.filter((s) => tenantDevIds.includes(s.device_id))
+    }
+
     return sendJSON(res, 200, {
-      sections: [
-        {
-          id: 'sec-sea',
-          device_id: '7a5d2d4230302c56',
-          device_name: 'BGP',
-          device_host: '45.166.28.254',
-          device_vendor: 'huawei',
-          remote_as: '266445',
-          local_as: '267943',
-          peer_ip: '170.82.183.217',
-          peer_name: 'BGP-SEA',
-          bgp_state: 'Established',
-          uptime: '1475h',
-          prefixes_received: 1089542,
-          local_pref: 200,
-          import_policy: 'SEA-IN',
-          import_policy_node: 11,
-          metadata: getMeta('266445'),
-          static_routes: [],
-        },
-        {
-          id: 'sec-wiki',
-          device_id: '738398e45a892540',
-          device_name: 'BGP2',
-          device_host: '45.166.28.249',
-          device_vendor: 'huawei',
-          remote_as: '262503',
-          local_as: '267943',
-          peer_ip: '45.166.28.250',
-          peer_name: 'BGP-WIKI',
-          bgp_state: 'Established',
-          uptime: '920h',
-          prefixes_received: 980400,
-          local_pref: 150,
-          import_policy: 'WIKI-IN',
-          import_policy_node: 10,
-          metadata: getMeta('262503'),
-          static_routes: [],
-        },
-        {
-          id: 'sec-ptt-sp',
-          device_id: '738398e45a892540',
-          device_name: 'BGP2',
-          device_host: '45.166.28.249',
-          device_vendor: 'huawei',
-          remote_as: '26162',
-          local_as: '267943',
-          peer_ip: '187.16.218.69',
-          peer_name: 'BGP-PTT-SP',
-          bgp_state: 'Established',
-          uptime: '610h',
-          prefixes_received: 95400,
-          local_pref: 1000,
-          import_policy: 'PTT-SP-IN',
-          import_policy_node: 10,
-          metadata: getMeta('26162'),
-          static_routes: [],
-        },
-        {
-          id: 'sec-ptt-bsb',
-          device_id: '7a5d2d4230302c56',
-          device_name: 'BGP',
-          device_host: '45.166.28.254',
-          device_vendor: 'huawei',
-          remote_as: '26162',
-          local_as: '267943',
-          peer_ip: '45.184.145.253',
-          peer_name: 'BGP-PTT-BRASILIA',
-          bgp_state: 'Established',
-          uptime: '840h',
-          prefixes_received: 14210,
-          local_pref: 1000,
-          import_policy: 'PTT-BRASILIA-IPV4-IN',
-          import_policy_node: 11,
-          metadata: getMeta('26162'),
-          static_routes: [],
-        },
-      ],
-      other_routes: [
+      sections: filteredSections,
+      other_routes: tenantScope && tenantScope !== 'default-tenant' ? [] : [
         {
           id: 'rt-discard-1',
           device_id: '7a5d2d4230302c56',

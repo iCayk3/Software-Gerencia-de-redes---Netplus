@@ -1,0 +1,41 @@
+[
+  {
+    "id": "default-tenant",
+    "name": "Netplus Telecom (NOC Central)",
+    "slug": "netplus",
+    "asn": "267943",
+    "document": "00.000.000/0001-00",
+    "contact_email": "noc@netpulse.com",
+    "contact_phone": "+55 11 3000-0000",
+    "logo_url": "",
+    "plan": "enterprise",
+    "status": "active",
+    "created_at": "2026-08-25T10:00:00Z"
+  },
+  {
+    "id": "tenant-alpha",
+    "name": "Alpha Fibra Provedor (Cliente)",
+    "slug": "alpha-fibra",
+    "asn": "26162",
+    "document": "12.345.678/0001-90",
+    "contact_email": "noc@alphafibra.com.br",
+    "contact_phone": "+55 11 4000-1122",
+    "logo_url": "",
+    "plan": "pro",
+    "status": "active",
+    "created_at": "2026-09-15T10:00:00Z"
+  },
+  {
+    "id": "tenant-beta",
+    "name": "Beta Telecom Conectividade (Cliente)",
+    "slug": "beta-telecom",
+    "asn": "266445",
+    "document": "98.765.432/0001-10",
+    "contact_email": "noc@betatelecom.com.br",
+    "contact_phone": "+55 61 3200-9988",
+    "logo_url": "",
+    "plan": "enterprise",
+    "status": "active",
+    "created_at": "2026-09-20T10:00:00Z"
+  }
+]
