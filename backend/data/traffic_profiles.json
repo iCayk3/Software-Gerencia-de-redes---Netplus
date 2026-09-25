@@ -1,0 +1,439 @@
+[
+  {
+    "id": "prof-padrao",
+    "name": "Operação Padrão (Nominal)",
+    "description": "Trânsito principal via SEA Telecom (LocalPref 200, 0P), PTTs prioritários (LocalPref 700) e Wiki Telecom como contingência (LocalPref 150, 3P no /23).",
+    "tag": "normal",
+    "color": "emerald",
+    "is_active": false,
+    "is_default": true,
+    "created_at": "2026-09-24T10:51:21.8115067-03:00",
+    "updated_at": "2026-09-24T10:51:21.8115067-03:00",
+    "prepends": [
+      {
+        "device_id": "all",
+        "remote_as": "266445",
+        "group_name": "SEA Telecom",
+        "prepend_count": 0,
+        "block": false
+      },
+      {
+        "device_id": "all",
+        "remote_as": "20121",
+        "group_name": "PTT São Paulo",
+        "prefix": "45.166.28.0/22",
+        "prepend_count": 3,
+        "block": false
+      },
+      {
+        "device_id": "all",
+        "remote_as": "20121",
+        "group_name": "PTT São Paulo",
+        "prefix": "45.166.28.0/24",
+        "prepend_count": 1,
+        "block": false
+      },
+      {
+        "device_id": "all",
+        "remote_as": "20121",
+        "group_name": "PTT São Paulo",
+        "prefix": "45.166.29.0/24",
+        "prepend_count": 1,
+        "block": false
+      },
+      {
+        "device_id": "all",
+        "remote_as": "20121",
+        "group_name": "PTT São Paulo",
+        "prefix": "45.166.30.0/24",
+        "prepend_count": 1,
+        "block": false
+      },
+      {
+        "device_id": "all",
+        "remote_as": "20121",
+        "group_name": "PTT São Paulo",
+        "prefix": "45.166.31.0/24",
+        "prepend_count": 1,
+        "block": false
+      },
+      {
+        "device_id": "all",
+        "remote_as": "26162",
+        "group_name": "PTT Belém",
+        "prepend_count": 0,
+        "block": false
+      },
+      {
+        "device_id": "all",
+        "remote_as": "26162",
+        "group_name": "PTT Fortaleza",
+        "prepend_count": 0,
+        "block": false
+      },
+      {
+        "device_id": "all",
+        "remote_as": "26162",
+        "group_name": "PTT Brasília",
+        "prepend_count": 0,
+        "block": false
+      },
+      {
+        "device_id": "all",
+        "remote_as": "262503",
+        "group_name": "Wiki Telecom",
+        "prefix": "45.166.28.0/23",
+        "prepend_count": 3,
+        "block": false
+      },
+      {
+        "device_id": "all",
+        "remote_as": "262503",
+        "group_name": "Wiki Telecom",
+        "prefix": "45.166.30.0/23",
+        "prepend_count": 3,
+        "block": false
+      },
+      {
+        "device_id": "all",
+        "remote_as": "262503",
+        "group_name": "Wiki Telecom",
+        "prepend_count": 0,
+        "block": false
+      }
+    ],
+    "local_prefs": [
+      {
+        "device_id": "",
+        "remote_as": "266445",
+        "peer_ip": "170.82.183.217",
+        "peer_name": "SEA Telecom",
+        "local_pref": 200
+      },
+      {
+        "device_id": "",
+        "remote_as": "262503",
+        "peer_ip": "45.181.228.24",
+        "peer_name": "Wiki Telecom",
+        "local_pref": 150
+      },
+      {
+        "device_id": "",
+        "remote_as": "262503",
+        "peer_ip": "10.200.1.162",
+        "peer_name": "Wiki Telecom",
+        "local_pref": 150
+      },
+      {
+        "device_id": "",
+        "remote_as": "26162",
+        "peer_ip": "45.184.145.253",
+        "peer_name": "PTT BSB",
+        "local_pref": 700
+      },
+      {
+        "device_id": "",
+        "remote_as": "26162",
+        "peer_ip": "45.68.79.253",
+        "peer_name": "PTT Belém",
+        "local_pref": 700
+      },
+      {
+        "device_id": "",
+        "remote_as": "20121",
+        "peer_ip": "187.16.216.252",
+        "peer_name": "PTT SP",
+        "local_pref": 700
+      },
+      {
+        "device_id": "",
+        "remote_as": "26162",
+        "peer_ip": "187.16.195.253",
+        "peer_name": "PTT Fortaleza",
+        "local_pref": 700
+      }
+    ],
+    "routes": [
+      {
+        "device_id": "",
+        "destination": "0.0.0.0/0",
+        "next_hop": "45.181.228.24",
+        "preference": 60,
+        "description": "TE-UPLOAD-AS262503-WIKI"
+      }
+    ]
+  },
+  {
+    "id": "prof-contingencia-sea",
+    "name": "Contingência: SEA Telecom Indisponível",
+    "description": "Drena o tráfego da SEA Telecom (Prepend 3P, LocalPref 50) e eleva a Wiki Telecom como trânsito principal (LocalPref 350, 0P no download).",
+    "tag": "contingency",
+    "color": "amber",
+    "is_active": false,
+    "is_default": true,
+    "created_at": "2026-09-24T10:51:21.8115067-03:00",
+    "updated_at": "2026-09-24T10:51:21.8115067-03:00",
+    "prepends": [
+      {
+        "device_id": "all",
+        "remote_as": "266445",
+        "group_name": "SEA Telecom",
+        "prepend_count": 3,
+        "block": false
+      },
+      {
+        "device_id": "all",
+        "remote_as": "262503",
+        "group_name": "Wiki Telecom",
+        "prepend_count": 0,
+        "block": false
+      },
+      {
+        "device_id": "all",
+        "remote_as": "20121",
+        "group_name": "PTT São Paulo",
+        "prepend_count": 1,
+        "block": false
+      },
+      {
+        "device_id": "all",
+        "remote_as": "26162",
+        "group_name": "PTT Belém",
+        "prepend_count": 0,
+        "block": false
+      },
+      {
+        "device_id": "all",
+        "remote_as": "26162",
+        "group_name": "PTT Fortaleza",
+        "prepend_count": 0,
+        "block": false
+      }
+    ],
+    "local_prefs": [
+      {
+        "device_id": "",
+        "remote_as": "266445",
+        "peer_ip": "170.82.183.217",
+        "peer_name": "SEA Telecom",
+        "local_pref": 50
+      },
+      {
+        "device_id": "",
+        "remote_as": "262503",
+        "peer_ip": "45.181.228.24",
+        "peer_name": "Wiki Telecom",
+        "local_pref": 350
+      },
+      {
+        "device_id": "",
+        "remote_as": "262503",
+        "peer_ip": "10.200.1.162",
+        "peer_name": "Wiki Telecom",
+        "local_pref": 350
+      },
+      {
+        "device_id": "",
+        "remote_as": "26162",
+        "peer_ip": "45.68.79.253",
+        "peer_name": "PTT Belém",
+        "local_pref": 700
+      },
+      {
+        "device_id": "",
+        "remote_as": "20121",
+        "peer_ip": "187.16.216.252",
+        "peer_name": "PTT SP",
+        "local_pref": 700
+      },
+      {
+        "device_id": "",
+        "remote_as": "26162",
+        "peer_ip": "187.16.195.253",
+        "peer_name": "PTT Fortaleza",
+        "local_pref": 700
+      }
+    ],
+    "routes": [
+      {
+        "device_id": "",
+        "destination": "0.0.0.0/0",
+        "next_hop": "45.181.228.24",
+        "preference": 50,
+        "description": "TE-UPLOAD-CONTINGENCIA-WIKI"
+      }
+    ]
+  },
+  {
+    "id": "prof-manutencao-ptt-sp",
+    "name": "Manutenção: Drenar PTT São Paulo",
+    "description": "Drena o tráfego do PTT SP aplicando 3P em todos os blocos e reduzindo LocalPref para 100. Prioriza PTT Belém e Fortaleza (LocalPref 800) e trânsito SEA.",
+    "tag": "maintenance",
+    "color": "rose",
+    "is_active": false,
+    "is_default": true,
+    "created_at": "2026-09-24T10:51:21.8115067-03:00",
+    "updated_at": "2026-09-24T10:51:21.8115067-03:00",
+    "prepends": [
+      {
+        "device_id": "all",
+        "remote_as": "20121",
+        "group_name": "PTT São Paulo",
+        "prepend_count": 3,
+        "block": false
+      },
+      {
+        "device_id": "all",
+        "remote_as": "26162",
+        "group_name": "PTT Belém",
+        "prepend_count": 0,
+        "block": false
+      },
+      {
+        "device_id": "all",
+        "remote_as": "26162",
+        "group_name": "PTT Fortaleza",
+        "prepend_count": 0,
+        "block": false
+      },
+      {
+        "device_id": "all",
+        "remote_as": "266445",
+        "group_name": "SEA Telecom",
+        "prepend_count": 0,
+        "block": false
+      },
+      {
+        "device_id": "all",
+        "remote_as": "262503",
+        "group_name": "Wiki Telecom",
+        "prepend_count": 2,
+        "block": false
+      }
+    ],
+    "local_prefs": [
+      {
+        "device_id": "",
+        "remote_as": "20121",
+        "peer_ip": "187.16.216.252",
+        "peer_name": "PTT SP",
+        "local_pref": 100
+      },
+      {
+        "device_id": "",
+        "remote_as": "26162",
+        "peer_ip": "45.68.79.253",
+        "peer_name": "PTT Belém",
+        "local_pref": 800
+      },
+      {
+        "device_id": "",
+        "remote_as": "26162",
+        "peer_ip": "187.16.195.253",
+        "peer_name": "PTT Fortaleza",
+        "local_pref": 800
+      },
+      {
+        "device_id": "",
+        "remote_as": "266445",
+        "peer_ip": "170.82.183.217",
+        "peer_name": "SEA Telecom",
+        "local_pref": 200
+      },
+      {
+        "device_id": "",
+        "remote_as": "262503",
+        "peer_ip": "45.181.228.24",
+        "peer_name": "Wiki Telecom",
+        "local_pref": 150
+      }
+    ],
+    "routes": []
+  },
+  {
+    "id": "prof-equalizado-ecmp",
+    "name": "Balanceamento 50/50: SEA + Wiki",
+    "description": "Equaliza Local-Preference em 200 para SEA Telecom e Wiki Telecom, e remove prepends (0P) em ambos para dividir o volume de entrada e saída por igual.",
+    "tag": "peak",
+    "color": "cyan",
+    "is_active": false,
+    "is_default": true,
+    "created_at": "2026-09-24T10:51:21.8115067-03:00",
+    "updated_at": "2026-09-24T10:51:21.8115067-03:00",
+    "prepends": [
+      {
+        "device_id": "all",
+        "remote_as": "266445",
+        "group_name": "SEA Telecom",
+        "prepend_count": 0,
+        "block": false
+      },
+      {
+        "device_id": "all",
+        "remote_as": "262503",
+        "group_name": "Wiki Telecom",
+        "prepend_count": 0,
+        "block": false
+      },
+      {
+        "device_id": "all",
+        "remote_as": "20121",
+        "group_name": "PTT São Paulo",
+        "prepend_count": 0,
+        "block": false
+      },
+      {
+        "device_id": "all",
+        "remote_as": "26162",
+        "group_name": "PTT Belém",
+        "prepend_count": 0,
+        "block": false
+      },
+      {
+        "device_id": "all",
+        "remote_as": "26162",
+        "group_name": "PTT Fortaleza",
+        "prepend_count": 0,
+        "block": false
+      }
+    ],
+    "local_prefs": [
+      {
+        "device_id": "",
+        "remote_as": "266445",
+        "peer_ip": "170.82.183.217",
+        "peer_name": "SEA Telecom",
+        "local_pref": 200
+      },
+      {
+        "device_id": "",
+        "remote_as": "262503",
+        "peer_ip": "45.181.228.24",
+        "peer_name": "Wiki Telecom",
+        "local_pref": 200
+      },
+      {
+        "device_id": "",
+        "remote_as": "26162",
+        "peer_ip": "45.68.79.253",
+        "peer_name": "PTT Belém",
+        "local_pref": 700
+      },
+      {
+        "device_id": "",
+        "remote_as": "20121",
+        "peer_ip": "187.16.216.252",
+        "peer_name": "PTT SP",
+        "local_pref": 700
+      },
+      {
+        "device_id": "",
+        "remote_as": "26162",
+        "peer_ip": "187.16.195.253",
+        "peer_name": "PTT Fortaleza",
+        "local_pref": 700
+      }
+    ],
+    "routes": []
+  }
+]

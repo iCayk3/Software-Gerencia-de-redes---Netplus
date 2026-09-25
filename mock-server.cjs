@@ -44,7 +44,7 @@ function writeJSON(filename, data) {
 // Resposta JSON padrão
 function sendJSON(res, statusCode, data) {
   res.writeHead(statusCode, {
-    'Content-Type': 'application/json',
+    'Content-Type': 'application/json; charset=utf-8',
     'Access-Control-Allow-Origin': '*',
     'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
     'Access-Control-Allow-Headers': 'Content-Type, Authorization',
@@ -832,7 +832,436 @@ const server = http.createServer(async (req, res) => {
     })
   }
 
-  // 10. Utilitários de Diagnóstico Mock
+  // 10. Telemetria e Alertas
+  if (pathname === '/api/telemetry/overview') {
+    const devices = readJSON('devices.json', [])
+    const alerts = readJSON('alerts.json', [])
+    return sendJSON(res, 200, {
+      total_devices: devices.length,
+      online_devices: devices.filter(d => d.status === 'online').length,
+      offline_devices: devices.filter(d => d.status === 'offline').length,
+      total_bgp_peers: 7,
+      established_bgp: 7,
+      down_bgp: 0,
+      total_prefixes: 2200000,
+      total_ospf_neighbors: 3,
+      full_ospf: 3,
+      down_ospf: 0,
+      active_alerts_count: alerts.filter(a => a.status === 'active').length,
+      last_updated: new Date().toISOString(),
+      recent_snapshots: [],
+    })
+  }
+
+  if (pathname === '/api/telemetry/status') {
+    return sendJSON(res, 200, {
+      running: true,
+      poll_interval_seconds: 45,
+      last_poll_time: new Date().toISOString(),
+      next_poll_time: new Date(Date.now() + 45000).toISOString(),
+      total_cycles: 42,
+      active_alerts_count: 0,
+      syslog_port: 1514,
+      syslog_active: true,
+      bmp_port: 11019,
+      bmp_active: true,
+      bmp_connected_routers: 2,
+      bmp_total_peers: 6,
+    })
+  }
+
+  if (pathname === '/api/telemetry/collect' && method === 'POST') {
+    return sendJSON(res, 200, { message: 'Ciclo de leitura disparado' })
+  }
+
+  if (pathname === '/api/telemetry/history') {
+    return sendJSON(res, 200, [])
+  }
+
+  // 11. BMP Universal Telemetry (RFC 7854) Mock
+  if (pathname === '/api/bmp/status') {
+    return sendJSON(res, 200, {
+      running: true,
+      port: 11019,
+      connected_routers: 2,
+      total_peers_monitored: 6,
+      established_peers: 6,
+      down_peers: 0,
+      total_messages_parsed: 18450,
+      total_routes_received: 2201940,
+      clients: [
+        {
+          remote_addr: '45.166.28.254:49152',
+          router_ip: '45.166.28.254',
+          sys_name: 'BGP',
+          sys_descr: 'Huawei Versatile Routing Platform V800R019 (NE8000 F1A)',
+          device_id: '7a5d2d4230302c56',
+          device_name: 'BGP',
+          vendor: 'huawei',
+          connected_at: new Date(Date.now() - 3600000).toISOString(),
+          messages_received: 9400,
+          peers_count: 3,
+          last_activity: new Date().toISOString(),
+        },
+        {
+          remote_addr: '45.166.28.249:50123',
+          router_ip: '45.166.28.249',
+          sys_name: 'BGP2',
+          sys_descr: 'Huawei Versatile Routing Platform V800R019 (NE40)',
+          device_id: '738398e45a892540',
+          device_name: 'BGP2',
+          vendor: 'huawei',
+          connected_at: new Date(Date.now() - 7200000).toISOString(),
+          messages_received: 9050,
+          peers_count: 3,
+          last_activity: new Date().toISOString(),
+        }
+      ]
+    })
+  }
+
+  if (pathname === '/api/bmp/peers') {
+    return sendJSON(res, 200, [
+      {
+        peer_ip: '170.82.183.217',
+        remote_as: 266445,
+        local_as: 267943,
+        router_ip: '45.166.28.254',
+        router_name: 'BGP',
+        device_id: '7a5d2d4230302c56',
+        state: 'Established',
+        uptime: '28d 14h',
+        pre_policy_prefixes: 1089542,
+        post_policy_prefixes: 1089542,
+        rejected_prefixes: 0,
+        total_announced: 1100200,
+        total_withdrawn: 10658,
+        last_update: new Date().toISOString(),
+      },
+      {
+        peer_ip: '45.166.28.250',
+        remote_as: 262503,
+        local_as: 267943,
+        router_ip: '45.166.28.249',
+        router_name: 'BGP2',
+        device_id: '738398e45a892540',
+        state: 'Established',
+        uptime: '15d 08h',
+        pre_policy_prefixes: 980400,
+        post_policy_prefixes: 980400,
+        rejected_prefixes: 12,
+        total_announced: 990100,
+        total_withdrawn: 9700,
+        last_update: new Date().toISOString(),
+      },
+      {
+        peer_ip: '187.16.218.69',
+        remote_as: 26162,
+        local_as: 267943,
+        router_ip: '45.166.28.249',
+        router_name: 'BGP2',
+        device_id: '738398e45a892540',
+        state: 'Established',
+        uptime: '25d 10h',
+        pre_policy_prefixes: 95400,
+        post_policy_prefixes: 95400,
+        rejected_prefixes: 4,
+        total_announced: 96000,
+        total_withdrawn: 600,
+        last_update: new Date().toISOString(),
+      },
+      {
+        peer_ip: '45.184.145.253',
+        remote_as: 26162,
+        local_as: 267943,
+        router_ip: '45.166.28.254',
+        router_name: 'BGP',
+        device_id: '7a5d2d4230302c56',
+        state: 'Established',
+        uptime: '35d 02h',
+        pre_policy_prefixes: 14210,
+        post_policy_prefixes: 14210,
+        rejected_prefixes: 0,
+        total_announced: 14300,
+        total_withdrawn: 90,
+        last_update: new Date().toISOString(),
+      }
+    ])
+  }
+
+  if (pathname === '/api/bmp/events') {
+    return sendJSON(res, 200, [
+      {
+        id: 'bmp-ev-1',
+        timestamp: new Date().toISOString(),
+        router_ip: '45.166.28.254',
+        router_name: 'BGP',
+        peer_ip: '170.82.183.217',
+        remote_as: 266445,
+        event_type: 'route_update',
+        details: '+12 anúncios, -2 retiradas (AS-Path: [266445 1299], NextHop: 170.82.183.217)'
+      },
+      {
+        id: 'bmp-ev-2',
+        timestamp: new Date(Date.now() - 120000).toISOString(),
+        router_ip: '45.166.28.249',
+        router_name: 'BGP2',
+        peer_ip: '187.16.218.69',
+        remote_as: 26162,
+        event_type: 'route_update',
+        details: '+45 anúncios, -5 retiradas (AS-Path: [26162], NextHop: 187.16.218.69)'
+      },
+      {
+        id: 'bmp-ev-3',
+        timestamp: new Date(Date.now() - 3600000).toISOString(),
+        router_ip: '45.166.28.254',
+        router_name: 'BGP',
+        peer_ip: '45.184.145.253',
+        remote_as: 26162,
+        event_type: 'peer_up',
+        details: 'Sessão BGP estabelecida com peer 45.184.145.253 (AS 26162) via BMP'
+      }
+    ])
+  }
+
+  if (pathname === '/api/bmp/config-guide') {
+    return sendJSON(res, 200, {
+      bmp_port: 11019,
+      rfc: 'RFC 7854 (BGP Monitoring Protocol)',
+      vendors: {
+        huawei: {
+          title: 'Huawei (NetEngine 8000 / NE40E / VRP8)',
+          description: 'Configuração nativa NetEngine 8000 F1A / NE40E (VRP8). Por padrão monitora todos os peers BGP automaticamente.',
+          commands: [
+            'system-view',
+            'bmp',
+            ' bmp-session <IP_DO_NETPULSE> alias netpulse',
+            '  tcp connect port 11019',
+            '  # Opcional se usar loopback como IP de origem:',
+            '  # connect-interface LoopBack0',
+            '  quit',
+            'quit',
+            'commit',
+            'return'
+          ],
+          verify_commands: [
+            'display bmp session',
+            'display bmp session verbose',
+            'display tcp status | include 11019'
+          ]
+        },
+        mikrotik_v7: {
+          title: 'MikroTik (RouterOS v7)',
+          description: 'Suporte nativo a BMP no RouterOS v7 para exportação de sessões e rotas BGP.',
+          commands: [
+            '/routing/bmp/add name=netpulse address=<IP_DO_NETPULSE> port=11019 enabled=yes',
+            '/routing/bmp/monitor/add bmp=netpulse connection=all'
+          ],
+          verify_commands: [
+            '/routing/bmp/print detail'
+          ]
+        }
+      }
+    })
+  }
+
+  // 11.5 BMP Churn Ranking & Stability Mock
+  if (pathname === '/api/bmp/churn/ranking') {
+    const now = new Date()
+    const timeline = []
+    for (let i = 11; i >= 0; i--) {
+      timeline.push({
+        timestamp: new Date(now.getTime() - i * 5 * 60000).toISOString(),
+        withdrawn: Math.floor(Math.random() * 8) + 1,
+        announced: Math.floor(Math.random() * 40) + 10,
+      })
+    }
+
+    return sendJSON(res, 200, {
+      last_calculated: now.toISOString(),
+      total_withdrawn_1h: 74,
+      total_announced_1h: 1680,
+      average_stability: 94.1,
+      top_churners: [
+        {
+          peer_ip: '187.16.195.253',
+          router_ip: '45.166.28.249',
+          router_name: 'BGP2',
+          peer_name: 'PTT Belém (IX.br BEL)',
+          remote_as: 26162,
+          withdrawn_1h: 42,
+          announced_1h: 180,
+          withdrawn_24h: 310,
+          announced_24h: 1420,
+          total_flaps: 42,
+          stability_score: 83.2,
+          status: 'moderate_churn',
+          history_1h: timeline,
+          last_update: now.toISOString(),
+        },
+        {
+          peer_ip: '45.68.79.253',
+          router_ip: '45.166.28.249',
+          router_name: 'BGP2',
+          peer_name: 'PTT São Paulo (IX.br SP)',
+          remote_as: 26162,
+          withdrawn_1h: 28,
+          announced_1h: 320,
+          withdrawn_24h: 195,
+          announced_24h: 2300,
+          total_flaps: 28,
+          stability_score: 88.8,
+          status: 'moderate_churn',
+          history_1h: timeline,
+          last_update: now.toISOString(),
+        },
+        {
+          peer_ip: '170.82.183.217',
+          router_ip: '45.166.28.254',
+          router_name: 'BGP',
+          peer_name: 'SEA Telecom',
+          remote_as: 266445,
+          withdrawn_1h: 3,
+          announced_1h: 450,
+          withdrawn_24h: 22,
+          announced_24h: 3800,
+          total_flaps: 3,
+          stability_score: 98.8,
+          status: 'stable',
+          history_1h: timeline,
+          last_update: now.toISOString(),
+        },
+        {
+          peer_ip: '45.181.228.24',
+          router_ip: '45.166.28.249',
+          router_name: 'BGP2',
+          peer_name: 'Wiki Telecom',
+          remote_as: 262503,
+          withdrawn_1h: 1,
+          announced_1h: 510,
+          withdrawn_24h: 14,
+          announced_24h: 4100,
+          total_flaps: 1,
+          stability_score: 99.6,
+          status: 'stable',
+          history_1h: timeline,
+          last_update: now.toISOString(),
+        },
+        {
+          peer_ip: '45.184.145.253',
+          router_ip: '45.166.28.254',
+          router_name: 'BGP',
+          peer_name: 'PTT Brasília (IX.br BSB)',
+          remote_as: 26162,
+          withdrawn_1h: 0,
+          announced_1h: 220,
+          withdrawn_24h: 8,
+          announced_24h: 1900,
+          total_flaps: 0,
+          stability_score: 100.0,
+          status: 'stable',
+          history_1h: timeline,
+          last_update: now.toISOString(),
+        }
+      ],
+      timeline_aggregate: timeline
+    })
+  }
+
+  // 11.6 RPKI Validation Endpoints Mock
+  if (pathname === '/api/rpki/summary') {
+    return sendJSON(res, 200, {
+      total_evaluated: 1840,
+      valid_count: 1782,
+      invalid_count: 3,
+      not_found_count: 55,
+      valid_percentage: 96.8,
+      own_as_protected: true,
+      own_prefixes_count: 8,
+      last_updated: new Date().toISOString(),
+      recent_invalids: [
+        {
+          prefix: '203.0.113.0/24',
+          origin_asn: 64512,
+          status: 'invalid',
+          reason: 'ROA Inválido: ASN originador 64512 difere do detentor autorizado AS 65530',
+          peer_ip: '170.82.183.217',
+          router_name: 'BGP',
+          as_path: '266445 64512',
+          validated_at: new Date().toISOString()
+        },
+        {
+          prefix: '198.51.100.0/24',
+          origin_asn: 64520,
+          status: 'invalid',
+          reason: 'ROA Inválido: máscara /24 excede o max-length autorizado /22',
+          peer_ip: '45.181.228.24',
+          router_name: 'BGP2',
+          as_path: '262503 64520',
+          validated_at: new Date().toISOString()
+        }
+      ]
+    })
+  }
+
+  if (pathname === '/api/rpki/validate') {
+    const prefix = query.prefix || ''
+    const asn = parseInt(query.asn || '0', 10)
+    let status = 'valid'
+    let reason = 'ROA Assinado e Válido no Registro.br / RIR'
+
+    if (prefix.startsWith('45.166.') && asn !== 267943) {
+      status = 'invalid'
+      reason = 'ROA Inválido (Alerta de Hijack): ASN difere do detentor AS 267943'
+    } else if (asn === 64512 || asn === 65001) {
+      status = 'invalid'
+      reason = 'ROA Inválido: ASN originador não autorizado'
+    } else if (asn === 0) {
+      status = 'not_found'
+      reason = 'Sem ROA registrado no RIR (Not Found)'
+    }
+
+    return sendJSON(res, 200, {
+      prefix,
+      origin_asn: asn,
+      status,
+      reason,
+      matching_roa: status === 'valid' ? {
+        prefix,
+        max_length: 24,
+        asn: asn || 267943,
+        trust_anchor: 'Registro.br'
+      } : null,
+      validated_at: new Date().toISOString()
+    })
+  }
+
+  if (pathname === '/api/rpki/invalids') {
+    return sendJSON(res, 200, [
+      {
+        prefix: '203.0.113.0/24',
+        origin_asn: 64512,
+        status: 'invalid',
+        reason: 'ROA Inválido: ASN originador 64512 difere do detentor autorizado AS 65530',
+        peer_ip: '170.82.183.217',
+        router_name: 'BGP',
+        as_path: '266445 64512',
+        validated_at: new Date().toISOString()
+      },
+      {
+        prefix: '198.51.100.0/24',
+        origin_asn: 64520,
+        status: 'invalid',
+        reason: 'ROA Inválido: máscara /24 excede o max-length autorizado /22',
+        peer_ip: '45.181.228.24',
+        router_name: 'BGP2',
+        as_path: '262503 64520',
+        validated_at: new Date().toISOString()
+      }
+    ])
+  }
+
+  // 12. Utilitários de Diagnóstico Mock
   if (pathname === '/api/network/interfaces') {
     return sendJSON(res, 200, [
       {

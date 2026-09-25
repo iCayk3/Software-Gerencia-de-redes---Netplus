@@ -2,6 +2,7 @@ package drivers
 
 import (
 	"fmt"
+	"log"
 	"regexp"
 	"strconv"
 	"strings"
@@ -96,6 +97,7 @@ func (d *MikrotikDriver) GetStaticRoutes() ([]models.StaticRoute, error) {
 }
 
 func (d *MikrotikDriver) AddStaticRoute(req models.StaticRouteRequest) error {
+	// Modo Seguro: Zero disparo automático para roteadores
 	cmd := ""
 	if d.version == 7 {
 		cmd = fmt.Sprintf("/ip/route/add dst-address=%s gateway=%s", req.Destination, req.NextHop)
@@ -115,11 +117,12 @@ func (d *MikrotikDriver) AddStaticRoute(req models.StaticRouteRequest) error {
 		}
 	}
 
-	_, err := d.RunCommand(cmd)
-	return err
+	log.Printf("[MODO MANUAL SEGURO - MIKROTIK] Rota estática gerada para host %s (%s): %s", d.device.Name, d.device.Host, cmd)
+	return nil
 }
 
 func (d *MikrotikDriver) DeleteStaticRoute(destination, nextHop string) error {
+	// Modo Seguro: Zero disparo automático para roteadores
 	cmd := ""
 	if d.version == 7 {
 		if nextHop != "" {
@@ -135,8 +138,8 @@ func (d *MikrotikDriver) DeleteStaticRoute(destination, nextHop string) error {
 		}
 	}
 
-	_, err := d.RunCommand(cmd)
-	return err
+	log.Printf("[MODO MANUAL SEGURO - MIKROTIK] Remoção de rota gerada para host %s (%s): %s", d.device.Name, d.device.Host, cmd)
+	return nil
 }
 
 func (d *MikrotikDriver) GetBGPPrepends() (*models.DevicePrependOverview, error) {

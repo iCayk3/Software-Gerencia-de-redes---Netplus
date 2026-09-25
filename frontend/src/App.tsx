@@ -225,7 +225,8 @@ function AppContent() {
           {activeSection === 'telemetry' && (
             <TelemetryView
               onAlertsUpdated={(cnt) => setActiveAlertsCount(cnt)}
-              activeSubTab={activeSubTab as 'overview' | 'alerts'}
+              activeSubTab={activeSubTab as 'overview' | 'alerts' | 'churn' | 'rpki'}
+              onSelectSubTab={(tab) => setActiveSubTab(tab)}
             />
           )}
 

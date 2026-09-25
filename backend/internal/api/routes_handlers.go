@@ -3,7 +3,9 @@ package api
 import (
 	"encoding/json"
 	"fmt"
+	"net"
 	"net/http"
+	"strings"
 
 	"network-software/internal/drivers"
 	"network-software/internal/models"
@@ -106,20 +108,7 @@ func (c *RoutesController) AddDeviceStaticRoute(w http.ResponseWriter, r *http.R
 		return
 	}
 
-	driver, err := drivers.NewDriver(device)
-	if err != nil {
-		WriteError(w, http.StatusBadRequest, err.Error())
-		return
-	}
-
-	if err := driver.AddStaticRoute(req); err != nil {
-		WriteError(w, http.StatusInternalServerError, "Erro ao aplicar rota estática: "+err.Error())
-		return
-	}
-
-	if c.trafficSvc != nil {
-		c.trafficSvc.InvalidateDevice(id)
-	}
+	cmds, cliScript := buildStaticRouteCLI(device, req)
 
 	if c.auditStore != nil {
 		user := GetAuthUser(r)
@@ -136,13 +125,20 @@ func (c *RoutesController) AddDeviceStaticRoute(w http.ResponseWriter, r *http.R
 			Action:           models.ActionAddStaticRoute,
 			TargetDeviceID:   device.ID,
 			TargetDeviceName: device.Name,
-			CommandExecuted:  fmt.Sprintf("ip route-static %s %s description %s", req.Destination, req.NextHop, req.Description),
-			Status:           "SUCCESS",
+			CommandExecuted:  cliScript,
+			Status:           "MANUAL_DISPATCH",
 		})
 	}
 
-	WriteJSON(w, http.StatusCreated, map[string]string{
-		"message": "Rota estática configurada com sucesso no roteador",
+	WriteJSON(w, http.StatusOK, map[string]any{
+		"status":      "MANUAL_DISPATCH",
+		"message":     fmt.Sprintf("[Modo Manual Ativo] Comandos CLI gerados para %s (%s). Nenhuma alteração foi executada no roteador.", device.Name, device.Host),
+		"commands":    cmds,
+		"cli_script":  cliScript,
+		"device_id":   device.ID,
+		"device_name": device.Name,
+		"device_host": device.Host,
+		"vendor":      device.Vendor,
 	})
 }
 
@@ -163,20 +159,7 @@ func (c *RoutesController) DeleteDeviceStaticRoute(w http.ResponseWriter, r *htt
 		return
 	}
 
-	driver, err := drivers.NewDriver(device)
-	if err != nil {
-		WriteError(w, http.StatusBadRequest, err.Error())
-		return
-	}
-
-	if err := driver.DeleteStaticRoute(dest, nextHop); err != nil {
-		WriteError(w, http.StatusInternalServerError, "Erro ao remover rota estática: "+err.Error())
-		return
-	}
-
-	if c.trafficSvc != nil {
-		c.trafficSvc.InvalidateDevice(id)
-	}
+	cmds, cliScript := buildDeleteStaticRouteCLI(device, dest, nextHop)
 
 	if c.auditStore != nil {
 		user := GetAuthUser(r)
@@ -193,12 +176,136 @@ func (c *RoutesController) DeleteDeviceStaticRoute(w http.ResponseWriter, r *htt
 			Action:           models.ActionDeleteStaticRoute,
 			TargetDeviceID:   device.ID,
 			TargetDeviceName: device.Name,
-			CommandExecuted:  fmt.Sprintf("undo ip route-static %s %s", dest, nextHop),
-			Status:           "SUCCESS",
+			CommandExecuted:  cliScript,
+			Status:           "MANUAL_DISPATCH",
 		})
 	}
 
-	WriteJSON(w, http.StatusOK, map[string]string{
-		"message": "Rota estática removida com sucesso do roteador",
+	WriteJSON(w, http.StatusOK, map[string]any{
+		"status":      "MANUAL_DISPATCH",
+		"message":     fmt.Sprintf("[Modo Manual Ativo] Comandos CLI de remoção gerados para %s (%s). Nenhuma alteração foi executada no roteador.", device.Name, device.Host),
+		"commands":    cmds,
+		"cli_script":  cliScript,
+		"device_id":   device.ID,
+		"device_name": device.Name,
+		"device_host": device.Host,
+		"vendor":      device.Vendor,
 	})
+}
+
+func buildStaticRouteCLI(device *models.Device, req models.StaticRouteRequest) ([]string, string) {
+	switch device.Vendor {
+	case models.VendorHuawei:
+		dest := req.Destination
+		ip := dest
+		mask := "255.255.255.255"
+		if strings.Contains(dest, "/") {
+			parts := strings.Split(dest, "/")
+			ip = parts[0]
+			if parts[1] == "0" {
+				ip = "0.0.0.0"
+				mask = "0.0.0.0"
+			} else {
+				mask = cidrToMask(parts[1])
+			}
+		}
+		cmd := fmt.Sprintf("ip route-static %s %s %s", ip, mask, req.NextHop)
+		if req.Preference > 0 {
+			cmd += fmt.Sprintf(" preference %d", req.Preference)
+		}
+		if req.Description != "" {
+			cmd += fmt.Sprintf(" description %s", req.Description)
+		}
+		cmds := []string{"system-view", cmd, "commit", "return"}
+		script := fmt.Sprintf("# [%s] %s (Huawei VRP)\nsystem-view\n%s\ncommit\nreturn", device.Name, device.Host, cmd)
+		return cmds, script
+
+	case models.VendorMikrotikV7:
+		cmd := fmt.Sprintf("/ip/route/add dst-address=%s gateway=%s", req.Destination, req.NextHop)
+		if req.Preference > 0 {
+			cmd += fmt.Sprintf(" distance=%d", req.Preference)
+		}
+		if req.Description != "" {
+			cmd += fmt.Sprintf(" comment=%q", req.Description)
+		}
+		script := fmt.Sprintf("# [%s] %s (MikroTik RouterOS v7)\n%s", device.Name, device.Host, cmd)
+		return []string{cmd}, script
+
+	case models.VendorMikrotikV6:
+		cmd := fmt.Sprintf("/ip route add dst-address=%s gateway=%s", req.Destination, req.NextHop)
+		if req.Preference > 0 {
+			cmd += fmt.Sprintf(" distance=%d", req.Preference)
+		}
+		if req.Description != "" {
+			cmd += fmt.Sprintf(" comment=%q", req.Description)
+		}
+		script := fmt.Sprintf("# [%s] %s (MikroTik RouterOS v6)\n%s", device.Name, device.Host, cmd)
+		return []string{cmd}, script
+
+	case models.VendorDatacom:
+		cmd := fmt.Sprintf("ip route %s %s", req.Destination, req.NextHop)
+		if req.Preference > 0 {
+			cmd += fmt.Sprintf(" %d", req.Preference)
+		}
+		cmds := []string{"configure terminal", cmd, "exit"}
+		script := fmt.Sprintf("# [%s] %s (Datacom DmOS)\nconfigure terminal\n%s\nexit", device.Name, device.Host, cmd)
+		return cmds, script
+
+	default:
+		cmd := fmt.Sprintf("ip route %s %s", req.Destination, req.NextHop)
+		return []string{cmd}, fmt.Sprintf("# [%s] %s\n%s", device.Name, device.Host, cmd)
+	}
+}
+
+func buildDeleteStaticRouteCLI(device *models.Device, destination, nextHop string) ([]string, string) {
+	switch device.Vendor {
+	case models.VendorHuawei:
+		dest := destination
+		ip := dest
+		mask := "255.255.255.255"
+		if strings.Contains(dest, "/") {
+			parts := strings.Split(dest, "/")
+			ip = parts[0]
+			if parts[1] == "0" {
+				ip = "0.0.0.0"
+				mask = "0.0.0.0"
+			} else {
+				mask = cidrToMask(parts[1])
+			}
+		}
+		cmd := fmt.Sprintf("undo ip route-static %s %s %s", ip, mask, nextHop)
+		cmds := []string{"system-view", cmd, "commit", "return"}
+		script := fmt.Sprintf("# [%s] %s (Huawei VRP)\nsystem-view\n%s\ncommit\nreturn", device.Name, device.Host, cmd)
+		return cmds, script
+
+	case models.VendorMikrotikV7:
+		cmd := fmt.Sprintf("/ip/route/remove [find dst-address=%q and gateway=%q]", destination, nextHop)
+		script := fmt.Sprintf("# [%s] %s (MikroTik RouterOS v7)\n%s", device.Name, device.Host, cmd)
+		return []string{cmd}, script
+
+	case models.VendorMikrotikV6:
+		cmd := fmt.Sprintf("/ip route remove [find dst-address=%q and gateway=%q]", destination, nextHop)
+		script := fmt.Sprintf("# [%s] %s (MikroTik RouterOS v6)\n%s", device.Name, device.Host, cmd)
+		return []string{cmd}, script
+
+	case models.VendorDatacom:
+		cmd := fmt.Sprintf("no ip route %s %s", destination, nextHop)
+		cmds := []string{"configure terminal", cmd, "exit"}
+		script := fmt.Sprintf("# [%s] %s (Datacom DmOS)\nconfigure terminal\n%s\nexit", device.Name, device.Host, cmd)
+		return cmds, script
+
+	default:
+		cmd := fmt.Sprintf("no ip route %s %s", destination, nextHop)
+		return []string{cmd}, fmt.Sprintf("# [%s] %s\n%s", device.Name, device.Host, cmd)
+	}
+}
+
+func cidrToMask(prefixLen string) string {
+	var bits int
+	fmt.Sscanf(prefixLen, "%d", &bits)
+	if bits <= 0 || bits > 32 {
+		return "255.255.255.255"
+	}
+	mask := net.CIDRMask(bits, 32)
+	return fmt.Sprintf("%d.%d.%d.%d", mask[0], mask[1], mask[2], mask[3])
 }

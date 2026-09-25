@@ -76,9 +76,11 @@ export const TopNav: React.FC<TopNavProps> = ({
     },
     telemetry: {
       title: 'NOC & Telemetria em Tempo Real',
-      subtitle: 'Monitoramento contínuo, ciclos de leitura, eventos Syslog UDP e central de incidentes',
+      subtitle: 'Monitoramento BMP, ranking de churn BGP, validação RPKI e detecção de anomalias',
       tabs: [
         { id: 'overview', label: 'Visão Geral NOC', icon: Radio },
+        { id: 'churn', label: 'Ranking BGP Churn', icon: Activity },
+        { id: 'rpki', label: 'Segurança RPKI (ROA)', icon: ShieldCheck },
         { id: 'alerts', label: 'Central de Alertas & Syslog', icon: Bell, badge: activeAlertsCount },
       ],
     },

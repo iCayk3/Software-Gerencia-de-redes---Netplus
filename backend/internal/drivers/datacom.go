@@ -2,6 +2,7 @@ package drivers
 
 import (
 	"fmt"
+	"log"
 	"regexp"
 	"strconv"
 	"strings"
@@ -70,21 +71,23 @@ func (d *DatacomDriver) GetStaticRoutes() ([]models.StaticRoute, error) {
 }
 
 func (d *DatacomDriver) AddStaticRoute(req models.StaticRouteRequest) error {
+	// Modo Seguro: Zero disparo automático para roteadores
 	cmd := fmt.Sprintf("ip route %s %s", req.Destination, req.NextHop)
 	if req.Preference > 0 {
 		cmd += fmt.Sprintf(" %d", req.Preference)
 	}
 
 	cmds := []string{"configure terminal", cmd, "exit"}
-	_, err := d.client.RunInteractiveSession(cmds, 1000*time.Millisecond)
-	return err
+	log.Printf("[MODO MANUAL SEGURO - DATACOM] Rota estática gerada para host %s (%s): %s", d.device.Name, d.device.Host, strings.Join(cmds, " ; "))
+	return nil
 }
 
 func (d *DatacomDriver) DeleteStaticRoute(destination, nextHop string) error {
+	// Modo Seguro: Zero disparo automático para roteadores
 	cmd := fmt.Sprintf("no ip route %s %s", destination, nextHop)
 	cmds := []string{"configure terminal", cmd, "exit"}
-	_, err := d.client.RunInteractiveSession(cmds, 1000*time.Millisecond)
-	return err
+	log.Printf("[MODO MANUAL SEGURO - DATACOM] Remoção de rota gerada para host %s (%s): %s", d.device.Name, d.device.Host, strings.Join(cmds, " ; "))
+	return nil
 }
 
 func (d *DatacomDriver) GetBGPPrepends() (*models.DevicePrependOverview, error) {

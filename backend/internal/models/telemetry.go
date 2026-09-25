@@ -20,6 +20,7 @@ const (
 	AlertBGPPrefixDrop AlertType = "bgp_prefix_drop"
 	AlertOSPFDown      AlertType = "ospf_down"
 	AlertSyslogEvent   AlertType = "syslog_event"
+	AlertBMPEvent      AlertType = "bmp_event"
 )
 
 // Alert represents an anomaly detected in the network.
@@ -63,6 +64,10 @@ type TelemetryEngineStatus struct {
 	ActiveAlertsCount   int        `json:"active_alerts_count"`
 	SyslogPort          int        `json:"syslog_port"`
 	SyslogActive        bool       `json:"syslog_active"`
+	BMPPort             int        `json:"bmp_port"`
+	BMPActive           bool       `json:"bmp_active"`
+	BMPConnectedRouters int        `json:"bmp_connected_routers"`
+	BMPTotalPeers       int        `json:"bmp_total_peers"`
 }
 
 // TelemetryOverview aggregates network-wide high-level metrics for fast dashboard rendering.

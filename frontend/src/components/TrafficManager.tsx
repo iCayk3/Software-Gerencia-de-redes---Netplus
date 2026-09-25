@@ -28,7 +28,13 @@ import {
   Copy,
   AlertTriangle,
   Clock,
-  ShieldAlert
+  ShieldAlert,
+  Camera,
+  Sliders,
+  Layers,
+  Lock,
+  CheckCircle,
+  HelpCircle
 } from 'lucide-react'
 import {
   fetchDevices,
@@ -40,6 +46,12 @@ import {
   deleteStaticRoute,
   updateASMetadata,
   uploadASImage,
+  fetchTrafficProfiles,
+  deleteTrafficProfile,
+  captureCurrentProfile,
+  diffTrafficProfile,
+  applyTrafficProfile,
+  sanitizeText,
   type Device,
   type StaticRoute,
   type StaticRouteRequest,
@@ -50,7 +62,11 @@ import {
   type TrafficSyncStatus,
   type BGPASSection,
   type UploadOverviewResponse,
-  type ASMetadata
+  type ASMetadata,
+  type TrafficProfile,
+  type ProfileTag,
+  type ProfileDiffResponse,
+  type ApplyProfileResult
 } from '../services/api'
 import { CardSkeleton } from './common/Skeleton'
 import { useAuth } from '../context/AuthContext'
@@ -84,7 +100,6 @@ export const TrafficManager: React.FC<TrafficManagerProps> = ({
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [search, setSearch] = useState('')
-  const [isOtherRoutesOpen, setIsOtherRoutesOpen] = useState(true)
 
   // Add Route Modal State
   const [isAddModalOpen, setIsAddModalOpen] = useState(false)
@@ -97,6 +112,12 @@ export const TrafficManager: React.FC<TrafficManagerProps> = ({
   const [formPref, setFormPref] = useState<string>('60')
   const [formDesc, setFormDesc] = useState<string>('')
   const [deletingId, setDeletingId] = useState<string | null>(null)
+
+  // Delete Route Modal State (Manual Safe Mode)
+  const [isDeleteRouteModalOpen, setIsDeleteRouteModalOpen] = useState(false)
+  const [routeToDelete, setRouteToDelete] = useState<StaticRoute | null>(null)
+  const [deleteRouteSuccessMsg, setDeleteRouteSuccessMsg] = useState<string | null>(null)
+  const [addRouteSuccessMsg, setAddRouteSuccessMsg] = useState<string | null>(null)
 
   // AS Customizer Modal State (Alias & Logo Upload)
   const [isASModalOpen, setIsASModalOpen] = useState(false)
@@ -124,6 +145,25 @@ export const TrafficManager: React.FC<TrafficManagerProps> = ({
   const [prependSearch, setPrependSearch] = useState('')
   const [downloadViewMode, setDownloadViewMode] = useState<'cards' | 'table'>('cards')
   const [expandedPeerGroup, setExpandedPeerGroup] = useState<string | null>(null)
+  const [expandedPrefixGroups, setExpandedPrefixGroups] = useState<Record<string, boolean>>({})
+
+  const togglePrefixGroup = (groupId: string) => {
+    setExpandedPrefixGroups((prev) => ({
+      ...prev,
+      [groupId]: !prev[groupId],
+    }))
+  }
+
+  const [expandedUploadGroups, setExpandedUploadGroups] = useState<Record<string, boolean>>({})
+
+  const toggleUploadGroup = (groupId: string) => {
+    setExpandedUploadGroups((prev) => ({
+      ...prev,
+      [groupId]: !prev[groupId],
+    }))
+  }
+
+  const [showDownloadHelp, setShowDownloadHelp] = useState(false)
 
   // --- Download Prepend Modal State ---
   const [isPrependModalOpen, setIsPrependModalOpen] = useState(false)
@@ -138,9 +178,57 @@ export const TrafficManager: React.FC<TrafficManagerProps> = ({
   // --- Scheduler / Cache State ---
   const [syncStatus, setSyncStatus] = useState<TrafficSyncStatus | null>(null)
 
+  // --- Traffic Engineering Profiles & Contingency Scenarios State ---
+  const [profiles, setProfiles] = useState<TrafficProfile[]>([])
+  const [profilesLoading, setProfilesLoading] = useState(false)
+  const [selectedProfileId, setSelectedProfileId] = useState<string>('')
+  const [activeProfile, setActiveProfile] = useState<TrafficProfile | null>(null)
+
+  // Capture Modal State
+  const [isCaptureModalOpen, setIsCaptureModalOpen] = useState(false)
+  const [captureName, setCaptureName] = useState('')
+  const [captureDesc, setCaptureDesc] = useState('')
+  const [captureTag, setCaptureTag] = useState<ProfileTag>('custom')
+  const [captureColor, setCaptureColor] = useState('cyan')
+  const [capturing, setCapturing] = useState(false)
+  const [captureError, setCaptureError] = useState<string | null>(null)
+
+  // Diff & Staging Modal State
+  const [isDiffModalOpen, setIsDiffModalOpen] = useState(false)
+  const [diffProfile, setDiffProfile] = useState<TrafficProfile | null>(null)
+  const [diffLoading, setDiffLoading] = useState(false)
+  const [diffData, setDiffData] = useState<ProfileDiffResponse | null>(null)
+  const [diffError, setDiffError] = useState<string | null>(null)
+  const [selectedDiffDevice, setSelectedDiffDevice] = useState<string>('all')
+  const [diffModalTab, setDiffModalTab] = useState<'diff' | 'scripts'>('diff')
+  const [applyingProfile, setApplyingProfile] = useState(false)
+  const [applyResult, setApplyResult] = useState<ApplyProfileResult | null>(null)
+
+  // Manage Profiles Modal State
+  const [isManageModalOpen, setIsManageModalOpen] = useState(false)
+  const [profileActionMsg, setProfileActionMsg] = useState<string | null>(null)
+  const [deletingProfileId, setDeletingProfileId] = useState<string | null>(null)
+
   useEffect(() => {
     loadInitialData()
   }, [])
+
+  const loadProfiles = async () => {
+    setProfilesLoading(true)
+    try {
+      const data = await fetchTrafficProfiles()
+      setProfiles(data)
+      const currentActive = data.find(p => p.is_active) || null
+      setActiveProfile(currentActive)
+      if (data.length > 0) {
+        setSelectedProfileId(prev => (prev ? prev : (currentActive?.id || data[0].id)))
+      }
+    } catch (err: any) {
+      console.error('Erro ao carregar perfis de tráfego:', err)
+    } finally {
+      setProfilesLoading(false)
+    }
+  }
 
   const loadInitialData = async () => {
     try {
@@ -158,7 +246,158 @@ export const TrafficManager: React.FC<TrafficManagerProps> = ({
     }
     loadPrepends('all')
     loadOverview('all')
+    loadProfiles()
   }
+
+  // --- Profile Operations Handlers ---
+  const handleOpenCapture = () => {
+    if (!canOperate) {
+      alert('Operação restrita: Apenas Administrador e Operador NOC podem salvar perfis.')
+      return
+    }
+    const today = new Date().toLocaleDateString('pt-BR')
+    setCaptureName(`Cenário Customizado (${today})`)
+    setCaptureDesc('Snapshot do estado atual de prepends, local-preferences e rotas estáticas')
+    setCaptureTag('custom')
+    setCaptureColor('cyan')
+    setCaptureError(null)
+    setIsCaptureModalOpen(true)
+  }
+
+  const handleSaveCapture = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!captureName.trim()) {
+      setCaptureError('O nome do perfil é obrigatório')
+      return
+    }
+    setCapturing(true)
+    setCaptureError(null)
+    try {
+      const created = await captureCurrentProfile({
+        name: captureName.trim(),
+        description: captureDesc.trim(),
+        tag: captureTag,
+        color: captureColor,
+      })
+      await loadProfiles()
+      setSelectedProfileId(created.id)
+      setIsCaptureModalOpen(false)
+      setProfileActionMsg(`Perfil "${created.name}" capturado e salvo com sucesso!`)
+      setTimeout(() => setProfileActionMsg(null), 5000)
+    } catch (err: any) {
+      setCaptureError(err.message || 'Erro ao salvar perfil atual')
+    } finally {
+      setCapturing(false)
+    }
+  }
+
+  const handleOpenDiff = async (profile: TrafficProfile) => {
+    setDiffProfile(profile)
+    setDiffData(null)
+    setDiffError(null)
+    setApplyResult(null)
+    setDiffModalTab('diff')
+    setSelectedDiffDevice('all')
+    setIsDiffModalOpen(true)
+    setDiffLoading(true)
+
+    try {
+      const result = await diffTrafficProfile(profile.id)
+      setDiffData(result)
+    } catch (err: any) {
+      setDiffError(err.message || 'Erro ao calcular diferenças do perfil')
+    } finally {
+      setDiffLoading(false)
+    }
+  }
+
+  const handleApplyProfile = async (profileId: string) => {
+    if (!canOperate) {
+      alert('Operação restrita: Apenas Administrador e Operador NOC podem ativar perfis.')
+      return
+    }
+    setApplyingProfile(true)
+    setDiffError(null)
+    try {
+      const res = await applyTrafficProfile(profileId)
+      setApplyResult(res)
+      await loadProfiles()
+      setDiffModalTab('scripts')
+      setProfileActionMsg(`Cenário "${res.profile_name}" ativado com sucesso no sistema!`)
+      setTimeout(() => setProfileActionMsg(null), 6000)
+    } catch (err: any) {
+      setDiffError(err.message || 'Erro ao ativar perfil')
+    } finally {
+      setApplyingProfile(false)
+    }
+  }
+
+  const handleDeleteProfile = async (id: string, name: string) => {
+    if (!canOperate) {
+      alert('Operação restrita: Apenas Administrador e Operador NOC podem excluir perfis.')
+      return
+    }
+    if (!confirm(`Deseja realmente excluir o perfil "${name}"? Esta ação não pode ser desfeita.`)) {
+      return
+    }
+    setDeletingProfileId(id)
+    try {
+      await deleteTrafficProfile(id)
+      await loadProfiles()
+      setProfileActionMsg(`Perfil "${name}" excluído com sucesso.`)
+      setTimeout(() => setProfileActionMsg(null), 4000)
+    } catch (err: any) {
+      alert(err.message || 'Erro ao excluir perfil')
+    } finally {
+      setDeletingProfileId(null)
+    }
+  }
+
+  const getProfileTagBadge = (tag: ProfileTag) => {
+    switch (tag) {
+      case 'normal':
+        return (
+          <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-950/80 text-emerald-300 border border-emerald-800">
+            Nominal
+          </span>
+        )
+      case 'contingency':
+        return (
+          <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-rose-950/80 text-rose-300 border border-rose-800">
+            Contingência
+          </span>
+        )
+      case 'maintenance':
+        return (
+          <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-950/80 text-amber-300 border border-amber-800">
+            Manutenção
+          </span>
+        )
+      case 'peak':
+        return (
+          <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-purple-950/80 text-purple-300 border border-purple-800">
+            Pico / ECMP
+          </span>
+        )
+      default:
+        return (
+          <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-cyan-950/80 text-cyan-300 border border-cyan-800">
+            Custom
+          </span>
+        )
+    }
+  }
+
+  const formatProfileTag = (tag: ProfileTag) => {
+    switch (tag) {
+      case 'normal': return 'Operação Nominal'
+      case 'contingency': return 'Contingência'
+      case 'maintenance': return 'Manutenção'
+      case 'peak': return 'Pico / ECMP'
+      default: return 'Personalizado'
+    }
+  }
+
 
   // --- Upload Overview Handlers ---
   const loadOverview = async (devId: string, fresh = false) => {
@@ -235,32 +474,52 @@ export const TrafficManager: React.FC<TrafficManagerProps> = ({
         description: formDesc.trim(),
       }
 
-      await createStaticRoute(formDevice, payload)
-      setIsAddModalOpen(false)
-      loadOverview(selectedDeviceId, true)
+      // Copy commands to clipboard immediately
+      const cliCode = getStaticRouteCliPreview()
+      handleCopyToClipboard(cliCode, 'add_route')
+
+      // Record in audit log (Manual Dispatch mode)
+      const res = await createStaticRoute(formDevice, payload)
+      setAddRouteSuccessMsg(res.message || 'Comandos copiados com sucesso! Operação registrada na auditoria.')
+      setTimeout(() => {
+        setIsAddModalOpen(false)
+        setAddRouteSuccessMsg(null)
+        loadOverview(selectedDeviceId, true)
+      }, 1800)
     } catch (err: any) {
-      setModalError(err.message || 'Erro ao aplicar rota estática no roteador')
+      setModalError(err.message || 'Erro ao registrar rota estática no sistema')
     } finally {
       setSubmitting(false)
     }
   }
 
-  const handleDeleteRoute = async (route: StaticRoute) => {
+  const openDeleteRouteModal = (route: StaticRoute) => {
     if (!canOperate) {
       alert('Operação restrita: Apenas Administrador e Operador NOC podem excluir rotas estáticas.')
       return
     }
-    const confirmMsg = `Tem certeza que deseja remover a rota estática para ${route.destination} via ${route.next_hop} no equipamento ${route.device_name}?`
-    if (!window.confirm(confirmMsg)) {
-      return
-    }
+    setRouteToDelete(route)
+    setDeleteRouteSuccessMsg(null)
+    setIsDeleteRouteModalOpen(true)
+  }
 
-    setDeletingId(route.id)
+  const handleConfirmDeleteRoute = async () => {
+    if (!routeToDelete) return
+    setDeletingId(routeToDelete.id)
     try {
-      await deleteStaticRoute(route.device_id, route.destination, route.next_hop)
-      loadOverview(selectedDeviceId, true)
+      const cliCode = getDeleteStaticRouteCliPreview(routeToDelete)
+      handleCopyToClipboard(cliCode, 'delete_route')
+
+      const res = await deleteStaticRoute(routeToDelete.device_id, routeToDelete.destination, routeToDelete.next_hop)
+      setDeleteRouteSuccessMsg(res.message || 'Comando de remoção copiado! Cole no terminal SSH do host.')
+      setTimeout(() => {
+        setIsDeleteRouteModalOpen(false)
+        setRouteToDelete(null)
+        setDeleteRouteSuccessMsg(null)
+        loadOverview(selectedDeviceId, true)
+      }, 1800)
     } catch (err: any) {
-      alert(err.message || 'Erro ao remover rota estática')
+      alert(err.message || 'Erro ao registrar remoção da rota')
     } finally {
       setDeletingId(null)
     }
@@ -460,15 +719,188 @@ export const TrafficManager: React.FC<TrafficManagerProps> = ({
     setTimeout(() => setCopiedKey(null), 3000)
   }
 
+  const cidrToNetmask = (prefix: number): string => {
+    if (prefix <= 0) return '0.0.0.0'
+    if (prefix >= 32) return '255.255.255.255'
+    const mask = (0xffffffff << (32 - prefix)) >>> 0
+    return [
+      (mask >>> 24) & 255,
+      (mask >>> 16) & 255,
+      (mask >>> 8) & 255,
+      mask & 255,
+    ].join('.')
+  }
+
+  const getStaticRouteCliPreview = () => {
+    const dev = devices.find(d => d.id === formDevice)
+    const vendor = (dev?.vendor || 'huawei').toLowerCase()
+    const devName = dev?.name || 'Roteador'
+    const devHost = dev?.host || ''
+    const dest = formDest.trim() || '0.0.0.0/0'
+    const gateway = formNextHop.trim() || '<gateway>'
+    const pref = parseInt(formPref, 10) || 60
+    const desc = formDesc.trim()
+
+    if (vendor === 'huawei') {
+      let ip = dest
+      let mask = '255.255.255.255'
+      if (dest.includes('/')) {
+        const parts = dest.split('/')
+        ip = parts[0]
+        if (parts[1] === '0') {
+          ip = '0.0.0.0'
+          mask = '0.0.0.0'
+        } else {
+          const cidr = parseInt(parts[1], 10)
+          if (!isNaN(cidr) && cidr >= 0 && cidr <= 32) {
+            mask = cidrToNetmask(cidr)
+          }
+        }
+      }
+      let cmd = `ip route-static ${ip} ${mask} ${gateway}`
+      if (pref > 0) cmd += ` preference ${pref}`
+      if (desc) cmd += ` description ${desc}`
+
+      return [
+        `# [${devName}] ${devHost} (Huawei VRP)`,
+        'system-view',
+        cmd,
+        'commit',
+        'return',
+      ].join('\n')
+    } else if (vendor === 'mikrotik_v7') {
+      let cmd = `/ip/route/add dst-address=${dest} gateway=${gateway}`
+      if (pref > 0) cmd += ` distance=${pref}`
+      if (desc) cmd += ` comment="${desc}"`
+      return [
+        `# [${devName}] ${devHost} (MikroTik RouterOS v7)`,
+        cmd,
+      ].join('\n')
+    } else if (vendor === 'mikrotik_v6' || vendor.startsWith('mikrotik')) {
+      let cmd = `/ip route add dst-address=${dest} gateway=${gateway}`
+      if (pref > 0) cmd += ` distance=${pref}`
+      if (desc) cmd += ` comment="${desc}"`
+      return [
+        `# [${devName}] ${devHost} (MikroTik RouterOS v6)`,
+        cmd,
+      ].join('\n')
+    } else if (vendor === 'datacom') {
+      let cmd = `ip route ${dest} ${gateway}`
+      if (pref > 0) cmd += ` ${pref}`
+      return [
+        `# [${devName}] ${devHost} (Datacom DmOS)`,
+        'configure terminal',
+        cmd,
+        'exit',
+      ].join('\n')
+    }
+
+    return `ip route-static ${dest} ${gateway} preference ${pref}`
+  }
+
+  const getDeleteStaticRouteCliPreview = (route: StaticRoute | null) => {
+    if (!route) return ''
+    const dev = devices.find(d => d.id === route.device_id)
+    const vendor = (dev?.vendor || 'huawei').toLowerCase()
+    const devName = dev?.name || route.device_name || 'Roteador'
+    const devHost = dev?.host || ''
+    const dest = route.destination
+    const gateway = route.next_hop
+
+    if (vendor === 'huawei') {
+      let ip = dest
+      let mask = '255.255.255.255'
+      if (dest.includes('/')) {
+        const parts = dest.split('/')
+        ip = parts[0]
+        if (parts[1] === '0') {
+          ip = '0.0.0.0'
+          mask = '0.0.0.0'
+        } else {
+          const cidr = parseInt(parts[1], 10)
+          if (!isNaN(cidr) && cidr >= 0 && cidr <= 32) {
+            mask = cidrToNetmask(cidr)
+          }
+        }
+      }
+      return [
+        `# [${devName}] ${devHost} (Huawei VRP)`,
+        'system-view',
+        `undo ip route-static ${ip} ${mask} ${gateway}`,
+        'commit',
+        'return',
+      ].join('\n')
+    } else if (vendor === 'mikrotik_v7') {
+      return [
+        `# [${devName}] ${devHost} (MikroTik RouterOS v7)`,
+        `/ip/route/remove [find dst-address="${dest}" and gateway="${gateway}"]`,
+      ].join('\n')
+    } else if (vendor === 'mikrotik_v6' || vendor.startsWith('mikrotik')) {
+      return [
+        `# [${devName}] ${devHost} (MikroTik RouterOS v6)`,
+        `/ip route remove [find dst-address="${dest}" and gateway="${gateway}"]`,
+      ].join('\n')
+    } else if (vendor === 'datacom') {
+      return [
+        `# [${devName}] ${devHost} (Datacom DmOS)`,
+        'configure terminal',
+        `no ip route ${dest} ${gateway}`,
+        'exit',
+      ].join('\n')
+    }
+
+    return `undo ip route-static ${dest} ${gateway}`
+  }
+
   const getLocalPrefCliPreview = () => {
     if (!localPrefSection) return ''
+    const vendor = (localPrefSection.device_vendor || '').toLowerCase()
+    const devName = localPrefSection.device_name || 'Roteador'
+    const devHost = localPrefSection.device_host || ''
+    const peerIp = localPrefSection.peer_ip
+    const policyName = localPrefSection.import_policy || `RP-IN-${peerIp}`
+    const node = localPrefSection.import_policy_node || 11
+
+    if (vendor === 'huawei') {
+      return [
+        `# [${devName}] ${devHost} (Huawei VRP)`,
+        'system-view',
+        `route-policy ${policyName} permit node ${node}`,
+        ` apply local-preference ${targetLocalPref}`,
+        'commit',
+        'return',
+        `refresh bgp ${peerIp} import`,
+      ].join('\n')
+    } else if (vendor === 'mikrotik_v7') {
+      return [
+        `# [${devName}] ${devHost} (MikroTik RouterOS v7)`,
+        `/routing/filter/rule/add chain=bgp-in rule="if (bgp-peer == ${peerIp}) { set bgp-local-pref ${targetLocalPref}; }"`,
+        '/routing/bgp/connection/refresh',
+      ].join('\n')
+    } else if (vendor === 'mikrotik_v6' || vendor.startsWith('mikrotik')) {
+      return [
+        `# [${devName}] ${devHost} (MikroTik RouterOS v6)`,
+        `/routing filter add chain=bgp-in peer="${peerIp}" set-bgp-local-pref=${targetLocalPref}`,
+        '/routing bgp peer refresh-all',
+      ].join('\n')
+    } else if (vendor === 'datacom') {
+      return [
+        `# [${devName}] ${devHost} (Datacom DmOS)`,
+        'configure terminal',
+        'route-map RM-BGP-IN permit 10',
+        ` set local-preference ${targetLocalPref}`,
+        'exit',
+      ].join('\n')
+    }
+
     return [
+      `# [${devName}] ${devHost}`,
       'system-view',
-      `route-policy ${localPrefSection.import_policy || '<policy>'} permit node ${localPrefSection.import_policy_node || 11}`,
-      `apply local-preference ${targetLocalPref}`,
+      `route-policy ${policyName} permit node ${node}`,
+      ` apply local-preference ${targetLocalPref}`,
       'commit',
       'return',
-      `refresh bgp ${localPrefSection.peer_ip} import`,
+      `refresh bgp ${peerIp} import`,
     ].join('\n')
   }
 
@@ -594,17 +1026,6 @@ export const TrafficManager: React.FC<TrafficManagerProps> = ({
       sec.peer_ip.toLowerCase().includes(q) ||
       sec.device_name.toLowerCase().includes(q) ||
       sec.static_routes.some(r => r.destination.toLowerCase().includes(q) || (r.description && r.description.toLowerCase().includes(q)))
-    )
-  })
-
-  // Filtered Other Routes
-  const filteredOtherRoutes = (uploadOverview?.other_routes || []).filter(r => {
-    const q = search.toLowerCase()
-    return (
-      r.destination.toLowerCase().includes(q) ||
-      r.next_hop.toLowerCase().includes(q) ||
-      (r.description && r.description.toLowerCase().includes(q)) ||
-      (r.device_name && r.device_name.toLowerCase().includes(q))
     )
   })
 
@@ -743,6 +1164,116 @@ export const TrafficManager: React.FC<TrafficManagerProps> = ({
           </div>
         </div>
       )}
+
+      {/* Profile Action Feedback Banner */}
+      {profileActionMsg && (
+        <div className="p-3.5 rounded-xl bg-emerald-950/60 border border-emerald-700/80 text-emerald-200 text-xs flex items-center justify-between shadow-lg animate-in fade-in duration-150">
+          <div className="flex items-center gap-2.5">
+            <CheckCircle className="h-4 w-4 text-emerald-400 shrink-0" />
+            <span className="font-semibold">{profileActionMsg}</span>
+          </div>
+          <button
+            onClick={() => setProfileActionMsg(null)}
+            className="text-emerald-400 hover:text-white p-1 rounded-lg transition"
+          >
+            <X className="h-3.5 w-3.5" />
+          </button>
+        </div>
+      )}
+
+      {/* ===================== BARRA DE PERFIS DE ENGENHARIA DE TRÁFEGO / CENÁRIOS ===================== */}
+      <div className="bg-slate-900/95 border border-slate-800 rounded-2xl p-4 shadow-xl backdrop-blur-md">
+        <div className="flex flex-col xl:flex-row xl:items-center justify-between gap-4">
+          
+          {/* Lado Esquerdo: Perfil Ativo e Seletor Rápido de Cenário */}
+          <div className="flex flex-wrap items-center gap-3">
+            {/* Indicador de Perfil Ativo */}
+            <div className="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-slate-950 border border-slate-800">
+              <span className="relative flex h-2.5 w-2.5">
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-emerald-500"></span>
+              </span>
+              <span className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider">Cenário Ativo:</span>
+              <span className="text-xs font-bold text-emerald-400">
+                {activeProfile ? activeProfile.name : 'Nenhum ativado'}
+              </span>
+              {activeProfile && getProfileTagBadge(activeProfile.tag)}
+            </div>
+
+            {/* Seletor de Cenários / Presets */}
+            <div className="flex items-center gap-2">
+              <span className="text-xs text-slate-400 font-medium">Trocar Cenário:</span>
+              <select
+                value={selectedProfileId}
+                onChange={(e) => setSelectedProfileId(e.target.value)}
+                className="bg-slate-950 border border-slate-700 hover:border-slate-600 rounded-xl px-3 py-1.5 text-xs text-white font-medium focus:outline-none focus:border-cyan-500 transition cursor-pointer max-w-xs"
+              >
+                {profiles.map(p => (
+                  <option key={p.id} value={p.id}>
+                    {p.is_active ? '● [ATIVO] ' : ''}{p.name} ({formatProfileTag(p.tag)})
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            {/* Descrição do Perfil Selecionado */}
+            {(() => {
+              const cur = profiles.find(p => p.id === selectedProfileId)
+              if (!cur) return null
+              return (
+                <div className="hidden lg:flex items-center gap-1.5 text-xs text-slate-400 bg-slate-950/60 px-3 py-1 rounded-lg border border-slate-800/80">
+                  <span className="text-slate-500 italic truncate max-w-sm" title={cur.description}>
+                    {cur.description}
+                  </span>
+                  {getProfileTagBadge(cur.tag)}
+                </div>
+              )
+            })()}
+          </div>
+
+          {/* Lado Direito: Ações (Subir/Aplicar Perfil, Salvar Atual, Gerenciar) */}
+          <div className="flex flex-wrap items-center gap-2 self-start xl:self-center">
+            {/* Botão Subir / Aplicar Cenário */}
+            <button
+              type="button"
+              onClick={() => {
+                const target = profiles.find(p => p.id === selectedProfileId)
+                if (target) handleOpenDiff(target)
+              }}
+              disabled={!selectedProfileId || profilesLoading}
+              className="flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-bold bg-gradient-to-r from-amber-600 to-orange-600 hover:from-amber-500 hover:to-orange-500 text-white shadow-lg shadow-amber-600/20 transition cursor-pointer disabled:opacity-50"
+              title="Comparar com estado atual da rede e gerar scripts para os roteadores"
+            >
+              <Zap className="h-3.5 w-3.5 fill-current" />
+              <span>Subir / Aplicar Cenário</span>
+            </button>
+
+            {/* Botão Salvar Estado Atual como Perfil */}
+            <button
+              type="button"
+              onClick={handleOpenCapture}
+              disabled={!canOperate}
+              className="flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-bold bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 transition cursor-pointer disabled:opacity-50"
+              title="Capturar todos os prepends, local-preferences e rotas estáticas atuais como um novo perfil"
+            >
+              <Camera className="h-3.5 w-3.5 text-cyan-400" />
+              <span>Salvar Estado Atual</span>
+            </button>
+
+            {/* Botão Gerenciar Perfis */}
+            <button
+              type="button"
+              onClick={() => setIsManageModalOpen(true)}
+              className="flex items-center gap-2 px-3 py-2 rounded-xl text-xs font-medium bg-slate-800/80 hover:bg-slate-700 text-slate-300 border border-slate-700/80 transition cursor-pointer"
+              title="Listar todos os perfis e cenários cadastrados"
+            >
+              <Sliders className="h-3.5 w-3.5 text-slate-400" />
+              <span>Gerenciar Perfis</span>
+            </button>
+          </div>
+
+        </div>
+      </div>
 
       {/* ===================== ABA 1: UPLOAD (QUADRADOS POR AS / ROTAS ESTÁTICAS) ===================== */}
       {activeSubTab === 'upload' && (
@@ -898,7 +1429,7 @@ export const TrafficManager: React.FC<TrafficManagerProps> = ({
                                   {getRoleBadge(sec.metadata.role)}
                                 </div>
                                 <h3 className="text-sm font-bold text-white tracking-tight leading-tight">
-                                  {sec.metadata.alias || sec.peer_name}
+                                  {sanitizeText(sec.metadata.alias) || sec.peer_name}
                                 </h3>
                                 <p className="text-[11px] text-slate-400 font-mono mt-0.5">
                                   {sec.peer_name} &bull; <span className="text-slate-300 font-sans font-medium">{sec.device_name}</span>
@@ -963,180 +1494,107 @@ export const TrafficManager: React.FC<TrafficManagerProps> = ({
                         </div>
 
                         {/* AS Card Body: Rotas / Blocos de Saída */}
-                        <div className="p-4 flex-1 flex flex-col justify-between space-y-3">
+                        <div className="p-4 flex-1 flex flex-col justify-between bg-slate-900/40">
                           <div>
-                            <div className="flex items-center justify-between mb-2.5">
-                              <span className="text-xs font-semibold text-slate-300 flex items-center gap-1.5">
+                            <div className="flex items-center justify-between">
+                              <div className="flex items-center gap-2">
                                 <RouteIcon className="h-3.5 w-3.5 text-cyan-400" />
-                                Blocos de Saída Direcionados ({sec.static_routes.length})
-                              </span>
-                              <span className="text-[10px] text-slate-500 font-mono">
-                                via {sec.peer_ip}
-                              </span>
+                                <span className="text-xs font-semibold text-slate-300">
+                                  Blocos de Saída Direcionados ({sec.static_routes.length})
+                                </span>
+                                <span className="text-[10px] text-slate-500 font-mono hidden sm:inline">
+                                  via {sec.peer_ip}
+                                </span>
+                              </div>
+                              <button
+                                type="button"
+                                onClick={() => toggleUploadGroup(sec.id)}
+                                className="text-[11px] text-cyan-400 hover:text-cyan-300 font-medium flex items-center gap-1 cursor-pointer transition py-0.5 px-1.5 rounded hover:bg-cyan-950/40"
+                              >
+                                <span>{expandedUploadGroups[sec.id] ? 'Ocultar Blocos' : 'Ver Blocos'}</span>
+                                {expandedUploadGroups[sec.id] ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
+                              </button>
                             </div>
 
-                            {sec.static_routes.length === 0 ? (
-                              <div className="p-4 rounded-xl border border-dashed border-slate-800 bg-slate-950/30 text-center text-slate-400 text-[11px] space-y-1">
-                                <p className="text-slate-300 font-medium">Nenhum bloco estático direcionado</p>
-                                <p className="text-slate-500 text-[10px]">
-                                  Clique no botão abaixo para injetar uma rota estática via este AS.
-                                </p>
-                              </div>
-                            ) : (
-                              <div className="space-y-2">
-                                {sec.static_routes.map((route) => {
-                                  const isDefault = route.destination === '0.0.0.0/0'
-                                  const isDeleting = deletingId === route.id
+                            {expandedUploadGroups[sec.id] && (
+                              <div className="mt-3 space-y-3 animate-in fade-in duration-150">
+                                {sec.static_routes.length === 0 ? (
+                                  <div className="p-4 rounded-xl border border-dashed border-slate-800 bg-slate-950/30 text-center text-slate-400 text-[11px] space-y-1">
+                                    <p className="text-slate-300 font-medium">Nenhum bloco estático direcionado</p>
+                                    <p className="text-slate-500 text-[10px]">
+                                      Clique no botão abaixo para injetar uma rota estática via este AS.
+                                    </p>
+                                  </div>
+                                ) : (
+                                  <div className="space-y-2">
+                                    {sec.static_routes.map((route) => {
+                                      const isDefault = route.destination === '0.0.0.0/0'
+                                      const isDeleting = deletingId === route.id
 
-                                  return (
-                                    <div
-                                      key={route.id}
-                                      className="flex items-center justify-between p-2.5 rounded-xl bg-slate-950/60 border border-slate-800/80 hover:border-slate-700 text-xs transition"
-                                    >
-                                      <div className="flex flex-col">
-                                        <div className="flex items-center gap-1.5 font-mono">
-                                          <span
-                                            className={`px-2 py-0.5 rounded font-bold text-[11px] ${
-                                              isDefault
-                                                ? 'bg-amber-950 text-amber-300 border border-amber-800'
-                                                : 'bg-cyan-950 text-cyan-300 border border-cyan-800'
-                                            }`}
+                                      return (
+                                        <div
+                                          key={route.id}
+                                          className="flex items-center justify-between p-2.5 rounded-xl bg-slate-950/60 border border-slate-800/80 hover:border-slate-700 text-xs transition"
+                                        >
+                                          <div className="flex flex-col">
+                                            <div className="flex items-center gap-1.5 font-mono">
+                                              <span
+                                                className={`px-2 py-0.5 rounded font-bold text-[11px] ${
+                                                  isDefault
+                                                    ? 'bg-amber-950 text-amber-300 border border-amber-800'
+                                                    : 'bg-cyan-950 text-cyan-300 border border-cyan-800'
+                                                }`}
+                                              >
+                                                {route.destination}
+                                              </span>
+                                              {isDefault && (
+                                                <span className="text-[10px] font-sans font-bold text-amber-400">
+                                                  Default
+                                                </span>
+                                              )}
+                                            </div>
+                                            <div className="text-[10px] text-slate-400 font-sans mt-1 flex items-center gap-2">
+                                              <span>Pref: <strong className="text-slate-300">{route.preference || 60}</strong></span>
+                                              {route.description && (
+                                                <span className="text-slate-400 truncate max-w-[160px]" title={route.description}>
+                                                  &bull; {route.description}
+                                                </span>
+                                              )}
+                                            </div>
+                                          </div>
+
+                                          {/* Delete Route */}
+                                          <button
+                                            onClick={() => openDeleteRouteModal(route)}
+                                            disabled={isDeleting}
+                                            title="Ver comando de remoção para este host"
+                                            className="p-1.5 rounded-lg bg-rose-950/30 hover:bg-rose-900/50 text-rose-400 hover:text-rose-200 border border-rose-900/50 transition cursor-pointer disabled:opacity-50 shrink-0"
                                           >
-                                            {route.destination}
-                                          </span>
-                                          {isDefault && (
-                                            <span className="text-[10px] font-sans font-bold text-amber-400">
-                                              Default
-                                            </span>
-                                          )}
+                                            <Trash2 className={`h-3.5 w-3.5 ${isDeleting ? 'animate-spin' : ''}`} />
+                                          </button>
                                         </div>
-                                        <div className="text-[10px] text-slate-400 font-sans mt-1 flex items-center gap-2">
-                                          <span>Pref: <strong className="text-slate-300">{route.preference || 60}</strong></span>
-                                          {route.description && (
-                                            <span className="text-slate-400 truncate max-w-[160px]" title={route.description}>
-                                              &bull; {route.description}
-                                            </span>
-                                          )}
-                                        </div>
-                                      </div>
+                                      )
+                                    })}
+                                  </div>
+                                )}
 
-                                      {/* Delete Route */}
-                                      <button
-                                        onClick={() => handleDeleteRoute(route)}
-                                        disabled={isDeleting}
-                                        title="Remover este bloco do roteador"
-                                        className="p-1.5 rounded-lg bg-rose-950/30 hover:bg-rose-900/50 text-rose-400 hover:text-rose-200 border border-rose-900/50 transition cursor-pointer disabled:opacity-50 shrink-0"
-                                      >
-                                        <Trash2 className={`h-3.5 w-3.5 ${isDeleting ? 'animate-spin' : ''}`} />
-                                      </button>
-                                    </div>
-                                  )
-                                })}
+                                {/* AS Card Footer: Botão de Mais [+] */}
+                                <div className="pt-1">
+                                  <button
+                                    onClick={() => openAddRouteForSection(sec)}
+                                    className="w-full flex items-center justify-center gap-2 py-2.5 px-3 rounded-xl bg-gradient-to-r from-cyan-600/20 to-blue-600/20 hover:from-cyan-600 hover:to-blue-600 border border-cyan-500/40 hover:border-transparent text-cyan-300 hover:text-white text-xs font-semibold shadow-sm transition cursor-pointer group"
+                                  >
+                                    <Plus className="h-4 w-4 text-cyan-400 group-hover:text-white transition" />
+                                    <span>Adicionar Bloco de Saída</span>
+                                  </button>
+                                </div>
                               </div>
                             )}
-                          </div>
-
-                          {/* AS Card Footer: Botão de Mais [+] */}
-                          <div className="pt-2">
-                            <button
-                              onClick={() => openAddRouteForSection(sec)}
-                              className="w-full flex items-center justify-center gap-2 py-2.5 px-3 rounded-xl bg-gradient-to-r from-cyan-600/20 to-blue-600/20 hover:from-cyan-600 hover:to-blue-600 border border-cyan-500/40 hover:border-transparent text-cyan-300 hover:text-white text-xs font-semibold shadow-sm transition cursor-pointer group"
-                            >
-                              <Plus className="h-4 w-4 text-cyan-400 group-hover:text-white transition" />
-                              <span>Adicionar Bloco de Saída</span>
-                            </button>
                           </div>
                         </div>
                       </div>
                     )
                   })}
-                </div>
-              )}
-
-              {/* ================= SEÇÃO: OUTRAS ROTAS ESTÁTICAS / INTERNAS ================= */}
-              {filteredOtherRoutes.length > 0 && (
-                <div className="bg-slate-900/80 border border-slate-800 rounded-2xl shadow-xl overflow-hidden">
-                  <button
-                    onClick={() => setIsOtherRoutesOpen(!isOtherRoutesOpen)}
-                    className="w-full p-4 flex items-center justify-between text-left hover:bg-slate-800/40 transition cursor-pointer"
-                  >
-                    <div className="flex items-center gap-2.5">
-                      <div className="h-7 w-7 rounded-lg bg-slate-800 border border-slate-700 flex items-center justify-center text-slate-400">
-                        <RouteIcon className="h-4 w-4" />
-                      </div>
-                      <div>
-                        <span className="text-sm font-bold text-white">Outras Rotas Estáticas / Internas</span>
-                        <span className="text-xs text-slate-400 ml-2">
-                          ({filteredOtherRoutes.length} rotas para gateways internos ou descarte Null0)
-                        </span>
-                      </div>
-                    </div>
-                    {isOtherRoutesOpen ? (
-                      <ChevronUp className="h-4 w-4 text-slate-400" />
-                    ) : (
-                      <ChevronDown className="h-4 w-4 text-slate-400" />
-                    )}
-                  </button>
-
-                  {isOtherRoutesOpen && (
-                    <div className="border-t border-slate-800 overflow-x-auto">
-                      <table className="w-full text-left border-collapse text-xs">
-                        <thead>
-                          <tr className="border-b border-slate-800 text-slate-400 font-semibold bg-slate-950/40">
-                            <th className="py-3 px-4">Equipamento</th>
-                            <th className="py-3 px-4">Destino / Prefixo</th>
-                            <th className="py-3 px-4">Próximo Salto / Gateway</th>
-                            <th className="py-3 px-4">Preferência</th>
-                            <th className="py-3 px-4">Descrição</th>
-                            <th className="py-3 px-4 text-right">Ações</th>
-                          </tr>
-                        </thead>
-                        <tbody className="divide-y divide-slate-800/60 font-mono">
-                          {filteredOtherRoutes.map((r) => {
-                            const isDiscard = r.next_hop.toUpperCase().includes('NULL')
-                            const isDeleting = deletingId === r.id
-                            return (
-                              <tr key={r.id} className="hover:bg-slate-800/30 transition">
-                                <td className="py-3 px-4 font-sans font-medium text-slate-200">
-                                  {r.device_name}
-                                </td>
-                                <td className="py-3 px-4">
-                                  <span
-                                    className={`px-2 py-0.5 rounded font-bold ${
-                                      isDiscard
-                                        ? 'bg-slate-800 text-slate-300 border border-slate-700'
-                                        : 'bg-cyan-950 text-cyan-300 border border-cyan-800'
-                                    }`}
-                                  >
-                                    {r.destination}
-                                  </span>
-                                </td>
-                                <td className="py-3 px-4 font-semibold text-slate-300">
-                                  {r.next_hop}
-                                </td>
-                                <td className="py-3 px-4 text-slate-400">
-                                  {r.preference || 60}
-                                </td>
-                                <td className="py-3 px-4 font-sans text-slate-400">
-                                  {r.description || '-'}
-                                </td>
-                                <td className="py-3 px-4 text-right">
-                                  <button
-                                    onClick={() => handleDeleteRoute(r)}
-                                    disabled={isDeleting}
-                                    title="Remover rota estática"
-                                    className="p-1.5 rounded-lg bg-rose-950/30 hover:bg-rose-900/50 text-rose-400 hover:text-rose-200 border border-rose-900/50 transition cursor-pointer disabled:opacity-50"
-                                  >
-                                    <Trash2 className={`h-3.5 w-3.5 ${isDeleting ? 'animate-spin' : ''}`} />
-                                  </button>
-                                </td>
-                              </tr>
-                            )
-                          })}
-                        </tbody>
-                      </table>
-                    </div>
-                  )}
                 </div>
               )}
             </div>
@@ -1200,9 +1658,9 @@ export const TrafficManager: React.FC<TrafficManagerProps> = ({
                           </td>
                           <td className="py-3 px-4 text-right">
                             <button
-                              onClick={() => handleDeleteRoute(route)}
+                              onClick={() => openDeleteRouteModal(route)}
                               disabled={isDeleting}
-                              title="Remover rota estática"
+                              title="Ver comando de remoção para este host"
                               className="p-1.5 rounded-lg bg-rose-950/30 hover:bg-rose-900/50 text-rose-400 hover:text-rose-200 border border-rose-900/50 transition cursor-pointer disabled:opacity-50"
                             >
                               <Trash2 className={`h-3.5 w-3.5 ${isDeleting ? 'animate-spin' : ''}`} />
@@ -1222,24 +1680,6 @@ export const TrafficManager: React.FC<TrafficManagerProps> = ({
       {/* ===================== ABA 2: DOWNLOAD (AS-PATH PREPENDING - SOMENTE CONSULTA) ===================== */}
       {activeSubTab === 'download' && (
         <div className="space-y-6">
-          {/* Active Download Traffic Engineering Callout */}
-          <div className="p-4 rounded-2xl bg-gradient-to-r from-indigo-950/40 to-slate-900 border border-indigo-800/60 flex items-start gap-3 shadow-md">
-            <ShieldCheck className="h-5 w-5 text-indigo-400 shrink-0 mt-0.5" />
-            <div className="text-xs space-y-1">
-              <div className="flex items-center gap-2">
-                <span className="font-bold text-indigo-200 uppercase tracking-wide">
-                  Engenharia de Tráfego de Download (AS-Path Prepending & Bloqueio Seletivo)
-                </span>
-                <span className="px-2 py-0.5 rounded-full bg-emerald-950 border border-emerald-800 text-emerald-400 text-[10px] font-bold">
-                  Zero Flap &bull; Route-Refresh Ativo
-                </span>
-              </div>
-              <p className="text-slate-400">
-                Ajuste o caminho de entrada do seu tráfego por bloco IP e por operadora através de Community Tagging de origem. Aplicações em produção são efetivadas com soft-refresh sem reiniciar sessões BGP.
-              </p>
-            </div>
-          </div>
-
           {/* Controls Bar for Download */}
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-slate-900/80 border border-slate-800 rounded-2xl p-4 shadow-sm">
             <div className="flex flex-wrap items-center gap-3">
@@ -1307,6 +1747,21 @@ export const TrafficManager: React.FC<TrafficManagerProps> = ({
                 <span>Auto-Sync: <strong>Diário às 03:30 (Madrugada)</strong></span>
               </div>
 
+              {/* Botão de Dicas & Boas Práticas */}
+              <button
+                type="button"
+                onClick={() => setShowDownloadHelp((prev) => !prev)}
+                title="Dicas de Engenharia de Download & Zero-Flap"
+                className={`flex items-center gap-1.5 px-3 py-2 rounded-xl border text-xs font-semibold transition cursor-pointer ${
+                  showDownloadHelp
+                    ? 'bg-indigo-600/30 text-indigo-200 border-indigo-500/60 shadow-md shadow-indigo-500/10'
+                    : 'bg-slate-800 hover:bg-slate-700 text-slate-300 border-slate-700'
+                }`}
+              >
+                <HelpCircle className="h-4 w-4 text-indigo-400" />
+                <span className="hidden sm:inline">Dicas</span>
+              </button>
+
               <button
                 onClick={() => loadPrepends(selectedPrependDevice, true)}
                 disabled={prependsLoading}
@@ -1317,6 +1772,38 @@ export const TrafficManager: React.FC<TrafficManagerProps> = ({
               </button>
             </div>
           </div>
+
+          {/* Informações / Dicas de Engenharia de Download (Retrátil) */}
+          {showDownloadHelp && (
+            <div className="p-4 rounded-2xl bg-gradient-to-r from-indigo-950/60 via-slate-900 to-slate-900 border border-indigo-700/50 flex items-start gap-3.5 shadow-xl animate-in fade-in slide-in-from-top-2 duration-150">
+              <div className="p-2 rounded-xl bg-indigo-500/10 border border-indigo-500/20 text-indigo-400 shrink-0 mt-0.5">
+                <ShieldCheck className="h-4 w-4" />
+              </div>
+              <div className="text-xs space-y-1.5 flex-1">
+                <div className="flex items-center justify-between">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className="font-bold text-white text-xs uppercase tracking-wide">
+                      Engenharia de Tráfego de Download (AS-Path Prepending & Bloqueio Seletivo)
+                    </span>
+                    <span className="px-2 py-0.5 rounded-full bg-emerald-950 border border-emerald-800 text-emerald-400 text-[10px] font-bold">
+                      Zero Flap &bull; Route-Refresh Ativo
+                    </span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setShowDownloadHelp(false)}
+                    className="p-1 text-slate-400 hover:text-white rounded-lg hover:bg-slate-800 transition cursor-pointer"
+                    title="Fechar dicas"
+                  >
+                    <X className="h-3.5 w-3.5" />
+                  </button>
+                </div>
+                <p className="text-slate-300 text-[11px] leading-relaxed">
+                  Ajuste o caminho de entrada do seu tráfego por bloco IP e por operadora através de Community Tagging de origem. Aplicações em produção são efetivadas com soft-refresh sem reiniciar sessões BGP.
+                </p>
+              </div>
+            </div>
+          )}
 
           {prependsError && (
             <div className="p-4 rounded-xl bg-rose-950/40 border border-rose-800 text-rose-300 text-xs">
@@ -1418,12 +1905,6 @@ export const TrafficManager: React.FC<TrafficManagerProps> = ({
                                         AS{grp.remote_as}
                                       </span>
                                       {renderGroupRoleBadge(grp.role)}
-                                      <span
-                                        className="font-mono text-[11px] font-bold text-indigo-300 bg-indigo-950/80 px-2 py-0.5 rounded border border-indigo-800/80"
-                                        title={`Comunidade BGP base: 1:${grp.community_base}X`}
-                                      >
-                                        Tag: 1:{grp.community_base}X
-                                      </span>
                                     </div>
                                   </div>
                                 </div>
@@ -1463,66 +1944,80 @@ export const TrafficManager: React.FC<TrafficManagerProps> = ({
                             </div>
 
                             {/* Body: Announced Prefixes */}
-                            <div className="p-4 flex-1 flex flex-col justify-between space-y-3 bg-slate-900/40">
+                            <div className="p-4 flex-1 flex flex-col justify-between bg-slate-900/40">
                               <div>
-                                <div className="flex items-center justify-between mb-2.5">
-                                  <span className="text-[11px] font-bold uppercase tracking-wider text-slate-400 flex items-center gap-1.5">
+                                <div className="flex items-center justify-between">
+                                  <div className="flex items-center gap-2">
                                     <RouteIcon className="h-3.5 w-3.5 text-indigo-400" />
-                                    Prefixos Anunciados ({grp.prefixes.length})
-                                  </span>
-                                  <span className="text-[10px] text-slate-500">
-                                    Engenharia por Bloco
-                                  </span>
+                                    <span className="text-[11px] font-bold uppercase tracking-wider text-slate-400">
+                                      Prefixos Anunciados ({grp.prefixes.length})
+                                    </span>
+                                    <span className="text-[10px] text-slate-500 hidden sm:inline">
+                                      Engenharia por Bloco
+                                    </span>
+                                  </div>
+                                  <button
+                                    type="button"
+                                    onClick={() => togglePrefixGroup(grp.id)}
+                                    className="text-[11px] text-indigo-400 hover:text-indigo-300 font-medium flex items-center gap-1 cursor-pointer transition py-0.5 px-1.5 rounded hover:bg-indigo-950/40"
+                                  >
+                                    <span>{expandedPrefixGroups[grp.id] ? 'Ocultar Prefixos' : 'Ver Prefixos'}</span>
+                                    {expandedPrefixGroups[grp.id] ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
+                                  </button>
                                 </div>
 
-                                <div className="space-y-2">
-                                  {grp.prefixes.map((pfx) => (
-                                    <div
-                                      key={pfx.id}
-                                      className="p-3 rounded-xl bg-slate-950/60 border border-slate-800/80 hover:border-slate-700/80 transition flex flex-col sm:flex-row sm:items-center justify-between gap-2.5"
-                                    >
-                                      <div className="space-y-1">
-                                        <div className="flex items-center gap-2">
-                                          <span className="font-mono font-bold text-white text-xs px-2 py-0.5 rounded bg-slate-900 border border-slate-800">
-                                            {pfx.prefix}
-                                          </span>
-                                          {pfx.is_blocked ? (
-                                            <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-rose-950/80 text-rose-300 border border-rose-800 inline-flex items-center gap-1">
-                                              <AlertTriangle className="h-3 w-3 text-rose-400" />
-                                              Bloqueado (Deny)
-                                            </span>
-                                          ) : pfx.prepend_count === 0 ? (
-                                            <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-950/80 text-emerald-300 border border-emerald-800 inline-flex items-center gap-1">
-                                              <CheckCircle2 className="h-3 w-3 text-emerald-400" />
-                                              0P (Primário)
-                                            </span>
-                                          ) : (
-                                            <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-amber-950/80 text-amber-300 border border-amber-800 inline-flex items-center gap-1">
-                                              <Clock className="h-3 w-3 text-amber-400" />
-                                              {pfx.prepend_count}x Prepend ({pfx.prepend_count}P)
-                                            </span>
-                                          )}
-                                        </div>
-                                      </div>
-
-                                      <button
-                                        type="button"
-                                        onClick={() => openPrependModal(pfx, grp)}
-                                        className="inline-flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold shadow-md shadow-indigo-600/20 transition cursor-pointer self-start sm:self-auto"
+                                {expandedPrefixGroups[grp.id] && (
+                                  <div className="mt-3 space-y-2 animate-in fade-in duration-150">
+                                    {grp.prefixes.map((pfx) => (
+                                      <div
+                                        key={pfx.id}
+                                        className="p-3 rounded-xl bg-slate-950/60 border border-slate-800/80 hover:border-slate-700/80 transition flex flex-col sm:flex-row sm:items-center justify-between gap-2.5"
                                       >
-                                        <SlidersHorizontal className="h-3.5 w-3.5" />
-                                        <span>Ajustar Prepend</span>
-                                      </button>
-                                    </div>
-                                  ))}
-                                </div>
+                                        <div className="space-y-1">
+                                          <div className="flex items-center gap-2">
+                                            <span className="font-mono font-bold text-white text-xs px-2 py-0.5 rounded bg-slate-900 border border-slate-800">
+                                              {pfx.prefix}
+                                            </span>
+                                            {pfx.is_blocked ? (
+                                              <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-rose-950/80 text-rose-300 border border-rose-800 inline-flex items-center gap-1">
+                                                <AlertTriangle className="h-3 w-3 text-rose-400" />
+                                                Bloqueado (Deny)
+                                              </span>
+                                            ) : pfx.prepend_count === 0 ? (
+                                              <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-950/80 text-emerald-300 border border-emerald-800 inline-flex items-center gap-1">
+                                                <CheckCircle2 className="h-3 w-3 text-emerald-400" />
+                                                0P (Primário)
+                                              </span>
+                                            ) : (
+                                              <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-amber-950/80 text-amber-300 border border-amber-800 inline-flex items-center gap-1">
+                                                <Clock className="h-3 w-3 text-amber-400" />
+                                                {pfx.prepend_count}x Prepend ({pfx.prepend_count}P)
+                                              </span>
+                                            )}
+                                          </div>
+                                        </div>
+
+                                        <button
+                                          type="button"
+                                          onClick={() => openPrependModal(pfx, grp)}
+                                          className="inline-flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold shadow-md shadow-indigo-600/20 transition cursor-pointer self-start sm:self-auto"
+                                        >
+                                          <SlidersHorizontal className="h-3.5 w-3.5" />
+                                          <span>Ajustar Prepend</span>
+                                        </button>
+                                      </div>
+                                    ))}
+                                  </div>
+                                )}
                               </div>
 
                               {/* Footer Info */}
-                              <div className="pt-2 text-[10px] text-slate-500 flex items-center gap-1.5 border-t border-slate-800/40">
-                                <ShieldCheck className="h-3.5 w-3.5 text-emerald-400 shrink-0" />
-                                <span>Ajustar este bloco afeta simultaneamente todas as {grp.peer_count} sessões deste AS sem repetição.</span>
-                              </div>
+                              {expandedPrefixGroups[grp.id] && (
+                                <div className="mt-3 pt-2 text-[10px] text-slate-500 flex items-center gap-1.5 border-t border-slate-800/40 animate-in fade-in duration-150">
+                                  <ShieldCheck className="h-3.5 w-3.5 text-emerald-400 shrink-0" />
+                                  <span>Ajustar este bloco afeta simultaneamente todas as {grp.peer_count} sessões deste AS sem repetição.</span>
+                                </div>
+                              )}
                             </div>
                           </div>
                         ))}
@@ -1686,8 +2181,8 @@ export const TrafficManager: React.FC<TrafficManagerProps> = ({
 
       {/* ===================== MODAL 1: DEFINIR ROTA ESTÁTICA [+] ===================== */}
       {isAddModalOpen && (
-        <div className="fixed inset-0 bg-black/75 backdrop-blur-xs flex items-center justify-center p-4 z-50">
-          <div className="bg-slate-900 border border-slate-800 rounded-2xl max-w-lg w-full p-6 shadow-2xl space-y-4">
+        <div className="fixed inset-0 bg-black/80 backdrop-blur-xs flex items-center justify-center p-4 z-50 animate-in fade-in duration-200">
+          <div className="bg-slate-900 border border-slate-800 rounded-2xl max-w-lg w-full p-6 shadow-2xl space-y-4 max-h-[92vh] overflow-y-auto">
             <div className="flex items-center justify-between border-b border-slate-800 pb-3">
               <div className="flex items-center gap-2">
                 <div className="h-8 w-8 rounded-xl bg-cyan-500/10 border border-cyan-500/30 flex items-center justify-center text-cyan-400">
@@ -1714,9 +2209,32 @@ export const TrafficManager: React.FC<TrafficManagerProps> = ({
               </button>
             </div>
 
+            {/* Safety Mode Banner */}
+            <div className="p-3.5 rounded-xl bg-amber-950/40 border border-amber-800/60 flex items-start gap-2.5 text-xs text-amber-200 shadow-sm">
+              <ShieldCheck className="h-4 w-4 text-amber-400 shrink-0 mt-0.5" />
+              <div>
+                <strong className="block font-bold text-amber-300">Modo Manual Ativo (Zero Commits Automáticos):</strong>
+                O sistema gera os comandos CLI exatos para o host selecionado. Nenhuma alteração é enviada diretamente ao equipamento pelo software.
+              </div>
+            </div>
+
             {modalError && (
               <div className="p-3 rounded-lg bg-rose-950/50 border border-rose-800 text-rose-300 text-xs">
                 {modalError}
+              </div>
+            )}
+
+            {copiedKey === 'add_route' && (
+              <div className="p-3 rounded-xl bg-emerald-950/70 border border-emerald-700 text-emerald-200 text-xs flex items-center gap-2 animate-in fade-in">
+                <CheckCircle2 className="h-4 w-4 shrink-0 text-emerald-400" />
+                <span><strong>Comandos copiados com sucesso!</strong> Cole no terminal SSH (Putty) do roteador.</span>
+              </div>
+            )}
+
+            {addRouteSuccessMsg && (
+              <div className="p-3 rounded-xl bg-emerald-950/70 border border-emerald-700 text-emerald-200 text-xs flex items-center gap-2 animate-in fade-in">
+                <CheckCircle2 className="h-4 w-4 shrink-0 text-emerald-400" />
+                <span>{addRouteSuccessMsg}</span>
               </div>
             )}
 
@@ -1732,7 +2250,7 @@ export const TrafficManager: React.FC<TrafficManagerProps> = ({
                 >
                   {devices.map((d) => (
                     <option key={d.id} value={d.id}>
-                      {d.name} ({d.host}) - {d.vendor}
+                      {d.name} ({d.host}) - {d.vendor?.toUpperCase()}
                     </option>
                   ))}
                 </select>
@@ -1796,7 +2314,7 @@ export const TrafficManager: React.FC<TrafficManagerProps> = ({
                 )}
               </div>
 
-              {/* Preferência */}
+              {/* Preferência e Descrição */}
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="block text-slate-400 font-medium mb-1">Preferência (Distância)</label>
@@ -1807,7 +2325,7 @@ export const TrafficManager: React.FC<TrafficManagerProps> = ({
                     onChange={(e) => setFormPref(e.target.value)}
                     className="w-full bg-slate-800 border border-slate-700 text-slate-200 font-mono rounded-xl px-3 py-2 focus:ring-2 focus:ring-cyan-500 focus:outline-none"
                   />
-                  <span className="text-[10px] text-slate-500 mt-0.5 block">Huawei padrão: 60</span>
+                  <span className="text-[10px] text-slate-500 mt-0.5 block">Huawei padrão: 60 / MikroTik: 1</span>
                 </div>
                 <div>
                   <label className="block text-slate-400 font-medium mb-1">Descrição / Comentário</label>
@@ -1821,16 +2339,35 @@ export const TrafficManager: React.FC<TrafficManagerProps> = ({
                 </div>
               </div>
 
-              {/* Informative Command Preview */}
-              <div className="p-3 rounded-xl bg-slate-950/80 border border-slate-800 font-mono text-[11px] text-slate-300 space-y-1">
-                <span className="text-slate-500 text-[10px] uppercase tracking-wider font-sans block">
-                  Comando que será enviado ao roteador:
-                </span>
-                <p className="text-cyan-400">
-                  ip route-static {formDest || '<bloco>'} {formNextHop || '<gateway>'} preference {formPref || '60'} {formDesc ? `description ${formDesc}` : ''}
-                </p>
+              {/* Command Preview with Copy Button */}
+              <div className="p-3.5 rounded-xl bg-slate-950 border border-slate-800 font-mono text-[11px] text-slate-300 space-y-2">
+                <div className="flex items-center justify-between">
+                  <span className="text-slate-400 text-[11px] font-sans font-semibold">
+                    Comandos CLI Gerados para o Host ({devices.find(d => d.id === formDevice)?.name || 'Roteador'}):
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => handleCopyToClipboard(getStaticRouteCliPreview(), 'add_route')}
+                    className="px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold flex items-center gap-1.5 transition cursor-pointer"
+                  >
+                    {copiedKey === 'add_route' ? (
+                      <>
+                        <Check className="h-3.5 w-3.5 text-emerald-400" />
+                        <span className="text-emerald-300 font-bold">Copiado!</span>
+                      </>
+                    ) : (
+                      <>
+                        <Copy className="h-3.5 w-3.5 text-slate-400" />
+                        <span>Copiar</span>
+                      </>
+                    )}
+                  </button>
+                </div>
+                <div className="text-cyan-300 space-y-0.5 bg-black/60 p-3 rounded-lg border border-slate-800/80 font-mono leading-relaxed select-all whitespace-pre-wrap">
+                  {getStaticRouteCliPreview()}
+                </div>
                 <p className="text-slate-500 text-[10px] font-sans">
-                  * No Huawei, o comando entra em system-view e executa <strong>commit</strong> imediatamente.
+                  * Cole os comandos no Putty/terminal SSH do host para criar a rota com segurança.
                 </p>
               </div>
 
@@ -1844,6 +2381,14 @@ export const TrafficManager: React.FC<TrafficManagerProps> = ({
                   Cancelar
                 </button>
                 <button
+                  type="button"
+                  onClick={() => handleCopyToClipboard(getStaticRouteCliPreview(), 'add_route')}
+                  className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 font-semibold rounded-xl border border-slate-700 transition cursor-pointer flex items-center gap-2"
+                >
+                  <Copy className="h-4 w-4" />
+                  <span>Copiar Comandos</span>
+                </button>
+                <button
                   type="submit"
                   disabled={submitting}
                   className="px-5 py-2.5 bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-500 hover:to-blue-500 text-white font-semibold rounded-xl shadow-lg shadow-cyan-600/30 transition cursor-pointer disabled:opacity-50 flex items-center gap-2"
@@ -1851,17 +2396,156 @@ export const TrafficManager: React.FC<TrafficManagerProps> = ({
                   {submitting ? (
                     <>
                       <RefreshCw className="h-4 w-4 animate-spin" />
-                      <span>Enviando Comando...</span>
+                      <span>Registrando...</span>
                     </>
                   ) : (
                     <>
                       <Check className="h-4 w-4" />
-                      <span>Enviar Comando para o Roteador</span>
+                      <span>Copiar & Registrar Auditoria</span>
                     </>
                   )}
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* ===================== MODAL 1B: REMOVER ROTA ESTÁTICA (MODO MANUAL SEGURO) ===================== */}
+      {isDeleteRouteModalOpen && routeToDelete && (
+        <div className="fixed inset-0 bg-black/80 backdrop-blur-xs flex items-center justify-center p-4 z-50 animate-in fade-in duration-200">
+          <div className="bg-slate-900 border border-slate-800 rounded-2xl max-w-lg w-full p-6 shadow-2xl space-y-4">
+            <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+              <div className="flex items-center gap-2.5">
+                <div className="h-9 w-9 rounded-xl bg-rose-500/10 border border-rose-500/30 flex items-center justify-center text-rose-400">
+                  <Trash2 className="h-4 w-4" />
+                </div>
+                <div>
+                  <h3 className="text-sm font-bold text-white">
+                    Remover Rota Estática
+                  </h3>
+                  <p className="text-[11px] text-slate-400">
+                    Host: <strong className="text-rose-300">{routeToDelete.device_name}</strong> &bull; Bloco: <strong className="text-cyan-300">{routeToDelete.destination}</strong>
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={() => {
+                  setIsDeleteRouteModalOpen(false)
+                  setRouteToDelete(null)
+                }}
+                className="text-slate-400 hover:text-white p-1 cursor-pointer"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+
+            {/* Safety Mode Banner */}
+            <div className="p-3.5 rounded-xl bg-amber-950/40 border border-amber-800/60 flex items-start gap-2.5 text-xs text-amber-200">
+              <ShieldCheck className="h-4 w-4 text-amber-400 shrink-0 mt-0.5" />
+              <div>
+                <strong className="block font-bold text-amber-300">Modo Manual Ativo (Zero Alteração no Roteador):</strong>
+                O comando de remoção abaixo foi gerado para você executar com segurança no terminal SSH do roteador. Nenhuma alteração é enviada diretamente ao equipamento pelo software.
+              </div>
+            </div>
+
+            {/* Feedback Notifications */}
+            {copiedKey === 'delete_route' && (
+              <div className="p-3 rounded-xl bg-emerald-950/70 border border-emerald-700 text-emerald-200 text-xs flex items-center gap-2 animate-in fade-in">
+                <CheckCircle2 className="h-4 w-4 shrink-0 text-emerald-400" />
+                <span><strong>Comando de remoção copiado!</strong> Cole no terminal SSH (Putty) do roteador.</span>
+              </div>
+            )}
+            {deleteRouteSuccessMsg && (
+              <div className="p-3 rounded-xl bg-emerald-950/70 border border-emerald-700 text-emerald-200 text-xs flex items-center gap-2 animate-in fade-in">
+                <CheckCircle2 className="h-4 w-4 shrink-0 text-emerald-400" />
+                <span>{deleteRouteSuccessMsg}</span>
+              </div>
+            )}
+
+            {/* Details Box */}
+            <div className="grid grid-cols-2 gap-3 p-3 rounded-xl bg-slate-950/70 border border-slate-800 text-[11px] font-mono">
+              <div>
+                <span className="text-slate-500 block text-[10px] font-sans">Prefixo / Destino:</span>
+                <span className="text-cyan-300 font-bold">{routeToDelete.destination}</span>
+              </div>
+              <div>
+                <span className="text-slate-500 block text-[10px] font-sans">Gateway / Próximo Salto:</span>
+                <span className="text-emerald-400 font-bold">{routeToDelete.next_hop}</span>
+              </div>
+            </div>
+
+            {/* Command Preview with Copy Button */}
+            <div className="p-3.5 rounded-xl bg-slate-950 border border-slate-800 font-mono text-[11px] text-slate-300 space-y-2">
+              <div className="flex items-center justify-between">
+                <span className="text-slate-400 text-[11px] font-sans font-semibold">
+                  Comando CLI de Remoção para {routeToDelete.device_name}:
+                </span>
+                <button
+                  type="button"
+                  onClick={() => handleCopyToClipboard(getDeleteStaticRouteCliPreview(routeToDelete), 'delete_route')}
+                  className="px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold flex items-center gap-1.5 transition cursor-pointer"
+                >
+                  {copiedKey === 'delete_route' ? (
+                    <>
+                      <Check className="h-3.5 w-3.5 text-emerald-400" />
+                      <span className="text-emerald-300 font-bold">Copiado!</span>
+                    </>
+                  ) : (
+                    <>
+                      <Copy className="h-3.5 w-3.5 text-slate-400" />
+                      <span>Copiar</span>
+                    </>
+                  )}
+                </button>
+              </div>
+              <div className="text-rose-300 space-y-0.5 bg-black/60 p-3 rounded-lg border border-slate-800/80 font-mono leading-relaxed select-all whitespace-pre-wrap">
+                {getDeleteStaticRouteCliPreview(routeToDelete)}
+              </div>
+              <p className="text-slate-500 text-[10px] font-sans">
+                * Cole os comandos no Putty/terminal SSH do host para remover a rota com segurança.
+              </p>
+            </div>
+
+            {/* Action Buttons */}
+            <div className="flex items-center justify-end gap-3 pt-2">
+              <button
+                type="button"
+                onClick={() => {
+                  setIsDeleteRouteModalOpen(false)
+                  setRouteToDelete(null)
+                }}
+                className="px-4 py-2 rounded-xl text-slate-400 hover:text-white transition cursor-pointer"
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                onClick={() => handleCopyToClipboard(getDeleteStaticRouteCliPreview(routeToDelete), 'delete_route')}
+                className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 font-semibold rounded-xl border border-slate-700 transition cursor-pointer flex items-center gap-2"
+              >
+                <Copy className="h-4 w-4" />
+                <span>Copiar Comando</span>
+              </button>
+              <button
+                type="button"
+                disabled={Boolean(deletingId)}
+                onClick={handleConfirmDeleteRoute}
+                className="px-5 py-2.5 bg-gradient-to-r from-rose-600 to-red-600 hover:from-rose-500 hover:to-red-500 text-white font-semibold rounded-xl shadow-lg shadow-rose-600/30 transition cursor-pointer disabled:opacity-50 flex items-center gap-2"
+              >
+                {deletingId ? (
+                  <>
+                    <RefreshCw className="h-4 w-4 animate-spin" />
+                    <span>Registrando...</span>
+                  </>
+                ) : (
+                  <>
+                    <Check className="h-4 w-4" />
+                    <span>Copiar & Registrar Remoção</span>
+                  </>
+                )}
+              </button>
+            </div>
           </div>
         </div>
       )}
@@ -2527,6 +3211,596 @@ export const TrafficManager: React.FC<TrafficManagerProps> = ({
           </div>
         </div>
       )}
+
+      {/* ===================== MODAL: SALVAR ESTADO ATUAL COMO PERFIL ===================== */}
+      {isCaptureModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm animate-in fade-in duration-200">
+          <div className="bg-slate-900 border border-slate-800 rounded-2xl max-w-lg w-full p-6 shadow-2xl space-y-5">
+            <div className="flex items-center justify-between border-b border-slate-800 pb-4">
+              <div className="flex items-center gap-2.5">
+                <div className="p-2 rounded-xl bg-cyan-500/10 text-cyan-400 border border-cyan-500/30">
+                  <Camera className="h-5 w-5" />
+                </div>
+                <div>
+                  <h3 className="text-base font-bold text-white">Salvar Configuração Atual como Perfil</h3>
+                  <p className="text-xs text-slate-400">Gera um snapshot reutilizável com 1 clique</p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsCaptureModalOpen(false)}
+                className="text-slate-400 hover:text-white p-1 rounded-lg transition cursor-pointer"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            <form onSubmit={handleSaveCapture} className="space-y-4">
+              {captureError && (
+                <div className="p-3 rounded-xl bg-rose-950/50 border border-rose-800 text-rose-300 text-xs">
+                  {captureError}
+                </div>
+              )}
+
+              <div>
+                <label className="block text-xs font-semibold text-slate-300 mb-1">
+                  Nome do Perfil / Cenário *
+                </label>
+                <input
+                  type="text"
+                  required
+                  value={captureName}
+                  onChange={(e) => setCaptureName(e.target.value)}
+                  placeholder="Ex: Operação Padrão, Rompimento Fibra Belém, Manutenção SEA"
+                  className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3.5 py-2.5 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-cyan-500 transition"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-slate-300 mb-1">
+                  Classificação / Tipo do Cenário
+                </label>
+                <select
+                  value={captureTag}
+                  onChange={(e) => setCaptureTag(e.target.value as ProfileTag)}
+                  className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3.5 py-2.5 text-xs text-white focus:outline-none focus:border-cyan-500 transition cursor-pointer"
+                >
+                  <option value="normal">Operação Padrão / Nominal</option>
+                  <option value="contingency">Contingência / Rompimento de Link</option>
+                  <option value="maintenance">Manutenção Programada de Operadora</option>
+                  <option value="peak">Horário de Pico / Balanceamento ECMP</option>
+                  <option value="custom">Personalizado</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-slate-300 mb-1">
+                  Descrição Operacional
+                </label>
+                <textarea
+                  rows={2}
+                  value={captureDesc}
+                  onChange={(e) => setCaptureDesc(e.target.value)}
+                  placeholder="Ex: Utilizado para drenar o link da operadora secundária e priorizar PTT São Paulo"
+                  className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3.5 py-2 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-cyan-500 transition"
+                />
+              </div>
+
+              {/* Informação sobre os dados capturados */}
+              <div className="p-3 bg-slate-950/80 rounded-xl border border-slate-800/80 text-[11px] text-slate-400 space-y-1">
+                <span className="text-cyan-400 font-semibold flex items-center gap-1.5">
+                  <ShieldCheck className="h-3.5 w-3.5" />
+                  O que será registrado neste perfil:
+                </span>
+                <p>• Todos os anúncios BGP e AS-Path Prepends configurados (Download)</p>
+                <p>• Todas as preferências de Local-Preference em peers de trânsito e PTTs (Upload)</p>
+                <p>• Todas as rotas estáticas ativas direcionadas aos gateways das operadoras</p>
+              </div>
+
+              <div className="flex items-center justify-end gap-3 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setIsCaptureModalOpen(false)}
+                  className="px-4 py-2 rounded-xl text-xs text-slate-400 hover:text-white transition cursor-pointer"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="submit"
+                  disabled={capturing}
+                  className="px-5 py-2.5 bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-500 hover:to-blue-500 text-white text-xs font-bold rounded-xl shadow-lg shadow-cyan-600/30 transition cursor-pointer disabled:opacity-50 flex items-center gap-2"
+                >
+                  {capturing ? (
+                    <>
+                      <RefreshCw className="h-3.5 w-3.5 animate-spin" />
+                      <span>Salvando...</span>
+                    </>
+                  ) : (
+                    <>
+                      <Check className="h-3.5 w-3.5" />
+                      <span>Salvar Snapshot</span>
+                    </>
+                  )}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* ===================== MODAL: REVISAR DIFERENÇAS E APLICAR CENÁRIO ===================== */}
+      {isDiffModalOpen && diffProfile && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/85 backdrop-blur-md animate-in fade-in duration-200">
+          <div className="bg-slate-900 border border-slate-800 rounded-2xl max-w-4xl w-full max-h-[90vh] flex flex-col p-6 shadow-2xl space-y-4">
+            
+            {/* Modal Header */}
+            <div className="flex items-start justify-between border-b border-slate-800 pb-4">
+              <div>
+                <div className="flex items-center gap-2.5">
+                  <div className="p-2 rounded-xl bg-amber-500/10 text-amber-400 border border-amber-500/30">
+                    <Zap className="h-5 w-5" />
+                  </div>
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <h3 className="text-base font-bold text-white">{diffProfile.name}</h3>
+                      {getProfileTagBadge(diffProfile.tag)}
+                      {diffProfile.is_active && (
+                        <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-500/40">
+                          ● Atualmente Ativo
+                        </span>
+                      )}
+                    </div>
+                    <p className="text-xs text-slate-400 mt-0.5">{diffProfile.description}</p>
+                  </div>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsDiffModalOpen(false)}
+                className="text-slate-400 hover:text-white p-1 rounded-lg transition cursor-pointer"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            {/* Aviso de Modo Seguro */}
+            <div className="p-3 rounded-xl bg-amber-950/30 border border-amber-800/60 text-[11px] text-amber-200 flex items-center gap-2.5">
+              <ShieldCheck className="h-4 w-4 text-amber-400 shrink-0" />
+              <span>
+                <strong>Modo Seguro Operacional (Zero Commits Automáticos):</strong> Nenhum comando é enviado aos seus roteadores físicos sem a sua revisão e cópia para o terminal SSH. O sistema calcula o diff e gera os scripts prontos para você.
+              </span>
+            </div>
+
+            {/* Tabs do Modal: Comparativo Visual vs Scripts CLI */}
+            <div className="flex items-center justify-between border-b border-slate-800 pb-2">
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  onClick={() => setDiffModalTab('diff')}
+                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition cursor-pointer ${
+                    diffModalTab === 'diff'
+                      ? 'bg-amber-600 text-white shadow-sm'
+                      : 'text-slate-400 hover:text-white bg-slate-950 border border-slate-800'
+                  }`}
+                >
+                  <Layers className="h-3.5 w-3.5" />
+                  <span>Comparativo Visual ({diffData?.diff.total_changes ?? 0} Mudanças)</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setDiffModalTab('scripts')}
+                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition cursor-pointer ${
+                    diffModalTab === 'scripts'
+                      ? 'bg-amber-600 text-white shadow-sm'
+                      : 'text-slate-400 hover:text-white bg-slate-950 border border-slate-800'
+                  }`}
+                >
+                  <Copy className="h-3.5 w-3.5" />
+                  <span>Scripts CLI para os Roteadores</span>
+                </button>
+              </div>
+
+              {diffData && (
+                <div className="flex items-center gap-3 text-[11px] text-slate-400">
+                  <span>Prepends: <strong className="text-white">{diffData.diff.prepends_diff.filter(p => p.changed).length}</strong></span>
+                  <span>LocalPref: <strong className="text-white">{diffData.diff.local_prefs_diff.filter(l => l.changed).length}</strong></span>
+                  <span>Rotas: <strong className="text-white">{diffData.diff.routes_diff.filter(r => r.action !== 'KEEP').length}</strong></span>
+                </div>
+              )}
+            </div>
+
+            {/* Conteúdo com Scroll */}
+            <div className="flex-1 overflow-y-auto max-h-[50vh] pr-1 space-y-4">
+              {diffLoading ? (
+                <div className="py-12 flex flex-col items-center justify-center text-slate-400 gap-3">
+                  <RefreshCw className="h-6 w-6 animate-spin text-amber-500" />
+                  <span className="text-xs">Calculando diferenças entre o estado atual e o perfil...</span>
+                </div>
+              ) : diffError ? (
+                <div className="p-4 rounded-xl bg-rose-950/40 border border-rose-800 text-rose-300 text-xs">
+                  {diffError}
+                </div>
+              ) : diffModalTab === 'diff' ? (
+                /* TAB 1: COMPARATIVO VISUAL */
+                <div className="space-y-4">
+                  {/* Download Prepends Diff Table */}
+                  <div>
+                    <h4 className="text-xs font-bold text-slate-300 mb-2 flex items-center gap-1.5">
+                      <Download className="h-3.5 w-3.5 text-indigo-400" />
+                      <span>Download (AS-Path Prepending & Anúncios BGP)</span>
+                    </h4>
+                    {!diffData || diffData.diff.prepends_diff.length === 0 ? (
+                      <p className="text-xs text-slate-500 italic">Nenhuma regra de prepend definida.</p>
+                    ) : (
+                      <div className="border border-slate-800 rounded-xl overflow-hidden">
+                        <table className="w-full text-left text-xs">
+                          <thead className="bg-slate-950 text-slate-400 border-b border-slate-800">
+                            <tr>
+                              <th className="px-3 py-2 font-medium">Operadora / PTT</th>
+                              <th className="px-3 py-2 font-medium">Prefixo</th>
+                              <th className="px-3 py-2 font-medium">Estado Atual</th>
+                              <th className="px-3 py-2 font-medium">Estado Alvo</th>
+                              <th className="px-3 py-2 font-medium">Ação</th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-slate-800/60 bg-slate-900/40">
+                            {diffData.diff.prepends_diff.map((p, idx) => (
+                              <tr key={idx} className={p.changed ? 'bg-amber-950/10' : ''}>
+                                <td className="px-3 py-2 font-semibold text-white">
+                                  {p.group_name} <span className="text-slate-500 font-mono text-[10px]">AS{p.remote_as}</span>
+                                </td>
+                                <td className="px-3 py-2 font-mono text-[11px] text-slate-300">
+                                  {p.prefix || 'Todos os prefixos'}
+                                </td>
+                                <td className="px-3 py-2">
+                                  {p.current_block ? (
+                                    <span className="text-rose-400 font-bold">Bloqueado (0:0)</span>
+                                  ) : (
+                                    <span className="text-slate-300 font-mono">{p.current_count} Prepends</span>
+                                  )}
+                                </td>
+                                <td className="px-3 py-2">
+                                  {p.target_block ? (
+                                    <span className="text-rose-400 font-bold">Bloquear (0:0)</span>
+                                  ) : (
+                                    <span className={`font-mono font-bold ${p.changed ? 'text-amber-400' : 'text-slate-400'}`}>
+                                      {p.target_count} Prepends
+                                    </span>
+                                  )}
+                                </td>
+                                <td className="px-3 py-2">
+                                  {p.changed ? (
+                                    <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-amber-950 border border-amber-800 text-amber-300">
+                                      MODIFICAR
+                                    </span>
+                                  ) : (
+                                    <span className="text-slate-500 text-[11px]">Inalterado</span>
+                                  )}
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Upload Local-Preference Diff Table */}
+                  <div>
+                    <h4 className="text-xs font-bold text-slate-300 mb-2 flex items-center gap-1.5">
+                      <Upload className="h-3.5 w-3.5 text-cyan-400" />
+                      <span>Upload (BGP Local-Preference & Prioridades)</span>
+                    </h4>
+                    {!diffData || diffData.diff.local_prefs_diff.length === 0 ? (
+                      <p className="text-xs text-slate-500 italic">Nenhuma regra de local-pref definida.</p>
+                    ) : (
+                      <div className="border border-slate-800 rounded-xl overflow-hidden">
+                        <table className="w-full text-left text-xs">
+                          <thead className="bg-slate-950 text-slate-400 border-b border-slate-800">
+                            <tr>
+                              <th className="px-3 py-2 font-medium">Peer BGP</th>
+                              <th className="px-3 py-2 font-medium">IP do Peer</th>
+                              <th className="px-3 py-2 font-medium">Local-Pref Atual</th>
+                              <th className="px-3 py-2 font-medium">Local-Pref Alvo</th>
+                              <th className="px-3 py-2 font-medium">Ação</th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-slate-800/60 bg-slate-900/40">
+                            {diffData.diff.local_prefs_diff.map((lp, idx) => (
+                              <tr key={idx} className={lp.changed ? 'bg-amber-950/10' : ''}>
+                                <td className="px-3 py-2 font-semibold text-white">
+                                  {lp.peer_name} <span className="text-slate-500 font-mono text-[10px]">AS{lp.remote_as}</span>
+                                </td>
+                                <td className="px-3 py-2 font-mono text-[11px] text-slate-400">
+                                  {lp.peer_ip}
+                                </td>
+                                <td className="px-3 py-2 font-mono text-slate-300">
+                                  {lp.current_pref || '100 (Default)'}
+                                </td>
+                                <td className="px-3 py-2">
+                                  <span className={`font-mono font-bold ${lp.changed ? 'text-cyan-400' : 'text-slate-400'}`}>
+                                    {lp.target_pref}
+                                  </span>
+                                </td>
+                                <td className="px-3 py-2">
+                                  {lp.changed ? (
+                                    <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-cyan-950 border border-cyan-800 text-cyan-300">
+                                      AJUSTAR
+                                    </span>
+                                  ) : (
+                                    <span className="text-slate-500 text-[11px]">Inalterado</span>
+                                  )}
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Static Routes Diff Table */}
+                  {diffData && diffData.diff.routes_diff.length > 0 && (
+                    <div>
+                      <h4 className="text-xs font-bold text-slate-300 mb-2 flex items-center gap-1.5">
+                        <RouteIcon className="h-3.5 w-3.5 text-emerald-400" />
+                        <span>Rotas Estáticas de Upload</span>
+                      </h4>
+                      <div className="border border-slate-800 rounded-xl overflow-hidden">
+                        <table className="w-full text-left text-xs">
+                          <thead className="bg-slate-950 text-slate-400 border-b border-slate-800">
+                            <tr>
+                              <th className="px-3 py-2 font-medium">Destino</th>
+                              <th className="px-3 py-2 font-medium">Gateway / Próximo Salto</th>
+                              <th className="px-3 py-2 font-medium">Preferência</th>
+                              <th className="px-3 py-2 font-medium">Ação Proposta</th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-slate-800/60 bg-slate-900/40">
+                            {diffData.diff.routes_diff.map((r, idx) => (
+                              <tr key={idx}>
+                                <td className="px-3 py-2 font-mono text-[11px] text-white">{r.destination}</td>
+                                <td className="px-3 py-2 font-mono text-[11px] text-slate-300">{r.next_hop}</td>
+                                <td className="px-3 py-2 font-mono text-slate-400">{r.preference}</td>
+                                <td className="px-3 py-2">
+                                  <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${
+                                    r.action === 'ADD'
+                                      ? 'bg-emerald-950 border border-emerald-800 text-emerald-300'
+                                      : r.action === 'DELETE'
+                                      ? 'bg-rose-950 border border-rose-800 text-rose-300'
+                                      : 'bg-slate-800 text-slate-400'
+                                  }`}>
+                                    {r.action === 'ADD' ? 'ADICIONAR' : r.action === 'DELETE' ? 'REMOVER' : 'MANTER'}
+                                  </span>
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              ) : (
+                /* TAB 2: SCRIPTS CLI */
+                <div className="space-y-3">
+                  {/* Seletor de Roteador para Script */}
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-1.5 overflow-x-auto py-1">
+                      <button
+                        type="button"
+                        onClick={() => setSelectedDiffDevice('all')}
+                        className={`px-3 py-1 rounded-lg text-xs font-medium transition cursor-pointer whitespace-nowrap ${
+                          selectedDiffDevice === 'all'
+                            ? 'bg-amber-600 text-white'
+                            : 'bg-slate-950 text-slate-400 hover:text-white border border-slate-800'
+                        }`}
+                      >
+                        Todos os Roteadores
+                      </button>
+                      {devices.filter(d => diffData?.scripts_by_device && diffData.scripts_by_device[d.id]).map(d => (
+                        <button
+                          key={d.id}
+                          type="button"
+                          onClick={() => setSelectedDiffDevice(d.id)}
+                          className={`px-3 py-1 rounded-lg text-xs font-medium transition cursor-pointer whitespace-nowrap ${
+                            selectedDiffDevice === d.id
+                              ? 'bg-amber-600 text-white'
+                              : 'bg-slate-950 text-slate-400 hover:text-white border border-slate-800'
+                          }`}
+                        >
+                          {d.name} ({d.vendor?.toUpperCase()})
+                        </button>
+                      ))}
+                    </div>
+
+                    {/* Botão Copiar Script */}
+                    <button
+                      type="button"
+                      onClick={() => {
+                        let text = ''
+                        if (selectedDiffDevice === 'all') {
+                          text = Object.values(diffData?.scripts_by_device || {}).join('\n\n')
+                        } else {
+                          text = diffData?.scripts_by_device[selectedDiffDevice] || ''
+                        }
+                        handleCopyToClipboard(text, 'profile_script')
+                      }}
+                      className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 text-xs transition cursor-pointer"
+                    >
+                      {copiedKey === 'profile_script' ? (
+                        <>
+                          <Check className="h-3.5 w-3.5 text-emerald-400" />
+                          <span className="text-emerald-400 font-bold">Copiado!</span>
+                        </>
+                      ) : (
+                        <>
+                          <Copy className="h-3.5 w-3.5 text-slate-400" />
+                          <span>Copiar Script</span>
+                        </>
+                      )}
+                    </button>
+                  </div>
+
+                  {/* Terminal Code Block */}
+                  <div className="bg-slate-950 border border-slate-800 p-4 rounded-xl font-mono text-[11px] text-emerald-400 leading-relaxed whitespace-pre-wrap select-all max-h-72 overflow-y-auto shadow-inner">
+                    {selectedDiffDevice === 'all'
+                      ? Object.values(diffData?.scripts_by_device || {}).join('\n\n') || '# Nenhum comando gerado para este cenário'
+                      : diffData?.scripts_by_device[selectedDiffDevice] || '# Nenhum comando necessário para este equipamento'}
+                  </div>
+                  <p className="text-[10px] text-slate-500 font-sans">
+                    * Os comandos acima estão formatados com nodes de route-policy, communities e commits específicos para cada equipamento.
+                  </p>
+                </div>
+              )}
+            </div>
+
+            {/* Modal Footer */}
+            <div className="border-t border-slate-800 pt-4 flex items-center justify-between">
+              <div>
+                {applyResult && (
+                  <span className="text-xs text-emerald-400 font-semibold flex items-center gap-1.5">
+                    <CheckCircle className="h-4 w-4" />
+                    {applyResult.message}
+                  </span>
+                )}
+              </div>
+              <div className="flex items-center gap-3">
+                <button
+                  type="button"
+                  onClick={() => setIsDiffModalOpen(false)}
+                  className="px-4 py-2 rounded-xl text-xs text-slate-400 hover:text-white transition cursor-pointer"
+                >
+                  Fechar
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleApplyProfile(diffProfile.id)}
+                  disabled={applyingProfile || !canOperate}
+                  className="px-5 py-2.5 bg-gradient-to-r from-amber-600 to-orange-600 hover:from-amber-500 hover:to-orange-500 text-white text-xs font-bold rounded-xl shadow-lg shadow-amber-600/30 transition cursor-pointer disabled:opacity-50 flex items-center gap-2"
+                  title="Marca o perfil como ativo no sistema e registra log de auditoria"
+                >
+                  {applyingProfile ? (
+                    <>
+                      <RefreshCw className="h-3.5 w-3.5 animate-spin" />
+                      <span>Ativando no Sistema...</span>
+                    </>
+                  ) : (
+                    <>
+                      <Check className="h-3.5 w-3.5" />
+                      <span>Ativar Perfil no Sistema</span>
+                    </>
+                  )}
+                </button>
+              </div>
+            </div>
+
+          </div>
+        </div>
+      )}
+
+      {/* ===================== MODAL: GERENCIAR PERFIS ===================== */}
+      {isManageModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm animate-in fade-in duration-200">
+          <div className="bg-slate-900 border border-slate-800 rounded-2xl max-w-3xl w-full p-6 shadow-2xl space-y-4">
+            <div className="flex items-center justify-between border-b border-slate-800 pb-4">
+              <div className="flex items-center gap-2.5">
+                <div className="p-2 rounded-xl bg-purple-500/10 text-purple-400 border border-purple-500/30">
+                  <Sliders className="h-5 w-5" />
+                </div>
+                <div>
+                  <h3 className="text-base font-bold text-white">Perfis de Tráfego & Cenários de Contingência</h3>
+                  <p className="text-xs text-slate-400">Gerencie cenários pré-configurados e criados por você</p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsManageModalOpen(false)}
+                className="text-slate-400 hover:text-white p-1 rounded-lg transition cursor-pointer"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            <div className="space-y-3 max-h-[60vh] overflow-y-auto pr-1">
+              {profiles.map(p => (
+                <div
+                  key={p.id}
+                  className={`p-4 rounded-xl border transition ${
+                    p.is_active
+                      ? 'bg-slate-950 border-emerald-500/50 shadow-sm'
+                      : 'bg-slate-950/60 border-slate-800 hover:border-slate-700'
+                  }`}
+                >
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <span className="font-bold text-sm text-white">{p.name}</span>
+                        {getProfileTagBadge(p.tag)}
+                        {p.is_active && (
+                          <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-500/40">
+                            ● Ativo
+                          </span>
+                        )}
+                        {p.is_default && (
+                          <span className="flex items-center gap-1 text-[10px] text-slate-500 border border-slate-800 px-1.5 py-0.5 rounded">
+                            <Lock className="h-3 w-3" /> Padrão
+                          </span>
+                        )}
+                      </div>
+                      <p className="text-xs text-slate-400 mt-1">{p.description}</p>
+                      <div className="flex items-center gap-3 mt-2 text-[11px] text-slate-500">
+                        <span>{p.prepends?.length || 0} regras de download</span>
+                        <span>•</span>
+                        <span>{p.local_prefs?.length || 0} regras de upload</span>
+                        <span>•</span>
+                        <span>{p.routes?.length || 0} rotas estáticas</span>
+                      </div>
+                    </div>
+
+                    <div className="flex items-center gap-2 shrink-0">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setIsManageModalOpen(false)
+                          handleOpenDiff(p)
+                        }}
+                        className="px-3 py-1.5 rounded-lg text-xs font-bold bg-amber-600/90 hover:bg-amber-600 text-white transition cursor-pointer flex items-center gap-1"
+                      >
+                        <Zap className="h-3 w-3" />
+                        <span>Revisar / Subir</span>
+                      </button>
+
+                      {!p.is_default && (
+                        <button
+                          type="button"
+                          onClick={() => handleDeleteProfile(p.id, p.name)}
+                          disabled={deletingProfileId === p.id || !canOperate}
+                          className="p-1.5 rounded-lg text-slate-500 hover:text-rose-400 hover:bg-rose-950/30 transition cursor-pointer disabled:opacity-50"
+                          title="Excluir perfil"
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            <div className="border-t border-slate-800 pt-3 flex justify-end">
+              <button
+                type="button"
+                onClick={() => setIsManageModalOpen(false)}
+                className="px-4 py-2 rounded-xl text-xs text-slate-400 hover:text-white transition cursor-pointer"
+              >
+                Fechar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
+

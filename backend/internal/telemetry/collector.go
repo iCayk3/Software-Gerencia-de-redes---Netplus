@@ -2,6 +2,7 @@ package telemetry
 
 import (
 	"context"
+	"fmt"
 	"log"
 	"strings"
 	"sync"
@@ -10,6 +11,7 @@ import (
 	"network-software/internal/drivers"
 	"network-software/internal/models"
 	"network-software/internal/storage"
+	"network-software/internal/telemetry/bmp"
 )
 
 // Collector performs scheduled or on-demand data collection across network devices.
@@ -18,6 +20,7 @@ type Collector struct {
 	alertStore  *AlertStore
 	detector    *Detector
 	broadcaster *Broadcaster
+	bmpServer   *bmp.Server
 
 	mu              sync.RWMutex
 	cachedBGP       map[string][]models.BGPSession
@@ -32,12 +35,14 @@ func NewCollector(
 	alertStore *AlertStore,
 	detector *Detector,
 	broadcaster *Broadcaster,
+	bmpServer *bmp.Server,
 ) *Collector {
 	return &Collector{
 		store:           store,
 		alertStore:      alertStore,
 		detector:        detector,
 		broadcaster:     broadcaster,
+		bmpServer:       bmpServer,
 		cachedBGP:       make(map[string][]models.BGPSession),
 		cachedOSPF:      make(map[string][]models.OSPFNeighbor),
 		latestSnapshots: make(map[string]models.TelemetrySnapshot),
@@ -130,11 +135,26 @@ func (c *Collector) collectDevice(dev models.Device) {
 	// 1. Collect BGP (only if device is flagged as BGP router)
 	var currBGP []models.BGPSession
 	if dev.IsBGP {
-		bgpSessions, err := driver.GetBGPSessions()
-		if err != nil {
-			log.Printf("[Collector] Warning: BGP fetch error on %s: %v", dev.Name, err)
-		} else {
-			currBGP = bgpSessions
+		// Modo Primário: Telemetria universal em tempo real via BMP (RFC 7854)
+		if c.bmpServer != nil && c.bmpServer.HasActiveSession(dev.Host, dev.Name) {
+			bmpSessions := c.bmpServer.GetDeviceBGPSessions(dev.ID, dev.Name, dev.Host)
+			if len(bmpSessions) > 0 {
+				currBGP = bmpSessions
+				log.Printf("[Collector] 🟢 Telemetria Universal BMP ativa em %s (%d peers ativos, ZERO SSH)", dev.Name, len(bmpSessions))
+			}
+		}
+
+		// Fallback para leitura tradicional via SSH se o roteador ainda não conectou no BMP
+		if len(currBGP) == 0 {
+			bgpSessions, err := driver.GetBGPSessions()
+			if err != nil {
+				log.Printf("[Collector] Warning: BGP fetch error on %s: %v", dev.Name, err)
+			} else {
+				for i := range bgpSessions {
+					bgpSessions[i].TelemetrySource = "ssh"
+				}
+				currBGP = bgpSessions
+			}
 		}
 	}
 
@@ -208,8 +228,20 @@ func (c *Collector) collectDevice(dev models.Device) {
 	c.alertStore.AddSnapshot(snap)
 }
 
-// GetCachedBGP returns cached BGP sessions for a device.
+// GetCachedBGP returns cached BGP sessions for a device, preferring real-time BMP stream.
 func (c *Collector) GetCachedBGP(deviceID string) ([]models.BGPSession, bool) {
+	// First check real-time BMP live stream
+	if c.bmpServer != nil {
+		if dev, err := c.store.GetByID(deviceID); err == nil && dev != nil {
+			if c.bmpServer.HasActiveSession(dev.Host, dev.Name) {
+				bmpSessions := c.bmpServer.GetDeviceBGPSessions(dev.ID, dev.Name, dev.Host)
+				if len(bmpSessions) > 0 {
+					return bmpSessions, true
+				}
+			}
+		}
+	}
+
 	c.mu.RLock()
 	defer c.mu.RUnlock()
 
@@ -217,14 +249,33 @@ func (c *Collector) GetCachedBGP(deviceID string) ([]models.BGPSession, bool) {
 	return sessions, ok
 }
 
-// GetAllCachedBGP returns all cached BGP sessions across all devices.
+// GetAllCachedBGP returns all cached BGP sessions across all devices, merging live BMP data.
 func (c *Collector) GetAllCachedBGP() []models.BGPSession {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
 
-	var result []models.BGPSession
+	resultMap := make(map[string]models.BGPSession)
+
+	// Add cached SSH polling sessions
 	for _, sessions := range c.cachedBGP {
-		result = append(result, sessions...)
+		for _, s := range sessions {
+			key := fmt.Sprintf("%s:%s", s.DeviceID, s.PeerIP)
+			resultMap[key] = s
+		}
+	}
+
+	// Override with real-time BMP stream sessions (RFC 7854)
+	if c.bmpServer != nil {
+		bmpSessions := c.bmpServer.GetAllBGPSessions()
+		for _, s := range bmpSessions {
+			key := fmt.Sprintf("%s:%s", s.DeviceID, s.PeerIP)
+			resultMap[key] = s
+		}
+	}
+
+	var result []models.BGPSession
+	for _, s := range resultMap {
+		result = append(result, s)
 	}
 	return result
 }

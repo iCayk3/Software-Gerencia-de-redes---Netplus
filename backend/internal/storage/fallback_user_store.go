@@ -28,18 +28,46 @@ func NewMemoryUserStore(filePath string) *MemoryUserStore {
 	return store
 }
 
+type storedUser struct {
+	ID           string          `json:"id"`
+	TenantID     string          `json:"tenant_id"`
+	Name         string          `json:"name"`
+	Email        string          `json:"email"`
+	PasswordHash string          `json:"password_hash"`
+	Role         models.UserRole `json:"role"`
+	Status       string          `json:"status"`
+	CreatedAt    time.Time       `json:"created_at"`
+	LastLogin    *time.Time      `json:"last_login,omitempty"`
+}
+
 func (s *MemoryUserStore) loadOrSeed() {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
 	data, err := os.ReadFile(s.filePath)
 	if err == nil {
-		var list []*models.User
+		var list []*storedUser
 		if err := json.Unmarshal(data, &list); err == nil && len(list) > 0 {
-			for _, u := range list {
-				s.users[u.Email] = u
+			hasValidHash := false
+			for _, su := range list {
+				if su.PasswordHash != "" {
+					hasValidHash = true
+				}
+				s.users[su.Email] = &models.User{
+					ID:           su.ID,
+					TenantID:     su.TenantID,
+					Name:         su.Name,
+					Email:        su.Email,
+					PasswordHash: su.PasswordHash,
+					Role:         su.Role,
+					Status:       su.Status,
+					CreatedAt:    su.CreatedAt,
+					LastLogin:    su.LastLogin,
+				}
 			}
-			return
+			if hasValidHash {
+				return
+			}
 		}
 	}
 
@@ -74,9 +102,19 @@ func (s *MemoryUserStore) loadOrSeed() {
 }
 
 func (s *MemoryUserStore) saveLocked() {
-	var list []*models.User
+	var list []*storedUser
 	for _, u := range s.users {
-		list = append(list, u)
+		list = append(list, &storedUser{
+			ID:           u.ID,
+			TenantID:     u.TenantID,
+			Name:         u.Name,
+			Email:        u.Email,
+			PasswordHash: u.PasswordHash,
+			Role:         u.Role,
+			Status:       u.Status,
+			CreatedAt:    u.CreatedAt,
+			LastLogin:    u.LastLogin,
+		})
 	}
 	data, _ := json.MarshalIndent(list, "", "  ")
 	_ = os.WriteFile(s.filePath, data, 0644)

@@ -1,0 +1,16 @@
+2026/09/25 11:09:27 [Syslog] Listening for network events on UDP port 1514
+2026/09/25 11:09:27 [BMP] 🚀 BMP Universal Collector listening on TCP port 11019 (RFC 7854)
+2026/09/25 11:09:27 [Database] ⚠️  PostgreSQL não conectado (postgres ping failed: dial tcp [::1]:5432: connectex: Nenhuma conexão pôde ser feita porque a máquina de destino as recusou ativamente.). Usando armazenamento local em arquivo.
+2026/09/25 11:09:27 ==================================================
+2026/09/25 11:09:27    NetPulse - BGP & OSPF Routing Manager (Go)     
+2026/09/25 11:09:27    Vendors: Huawei (NE/CloudEngine), Datacom DmOS,
+2026/09/25 11:09:27             MikroTik (RouterOS v6 & v7)           
+2026/09/25 11:09:27    Server listening on http://localhost:8080       
+2026/09/25 11:09:27    API Health Check: http://localhost:8080/api/health
+2026/09/25 11:09:27    Telemetry Engine: Background Collector (every 45s)
+2026/09/25 11:09:27    Syslog Server:    UDP Port 1514 (Active)        
+2026/09/25 11:09:27    BMP Collector:    TCP Port 11019 (RFC 7854 Active)
+2026/09/25 11:09:27 ==================================================
+2026/09/25 11:09:28 [GET] /api/health - 0s
+2026/09/25 11:09:28 [GET] /api/alerts - 0s
+2026/09/25 11:09:28 [GET] /api/devices - 0s

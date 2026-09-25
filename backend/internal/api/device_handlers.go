@@ -138,6 +138,16 @@ func (c *DeviceController) GetDeviceBGP(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
+	// Se o roteador estiver conectado ao BMP (RFC 7854), entrega telemetria em tempo real sem SSH
+	if c.engine != nil && c.engine.GetBMPServer() != nil && c.engine.GetBMPServer().HasActiveSession(device.Host, device.Name) {
+		bmpSessions := c.engine.GetBMPServer().GetDeviceBGPSessions(device.ID, device.Name, device.Host)
+		if len(bmpSessions) > 0 {
+			c.store.UpdateStatus(device.ID, "online")
+			WriteJSON(w, http.StatusOK, bmpSessions)
+			return
+		}
+	}
+
 	driver, err := drivers.NewDriver(device)
 	if err != nil {
 		WriteError(w, http.StatusBadRequest, err.Error())
@@ -151,6 +161,10 @@ func (c *DeviceController) GetDeviceBGP(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 	c.store.UpdateStatus(device.ID, "online")
+
+	for i := range sessions {
+		sessions[i].TelemetrySource = "ssh"
+	}
 
 	WriteJSON(w, http.StatusOK, sessions)
 }
@@ -253,12 +267,27 @@ func (c *DeviceController) GetAllBGP(w http.ResponseWriter, r *http.Request) {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
+
+			// Checa telemetria BMP em tempo real
+			if c.engine != nil && c.engine.GetBMPServer() != nil && c.engine.GetBMPServer().HasActiveSession(dev.Host, dev.Name) {
+				bmpSessions := c.engine.GetBMPServer().GetDeviceBGPSessions(dev.ID, dev.Name, dev.Host)
+				if len(bmpSessions) > 0 {
+					mu.Lock()
+					allSessions = append(allSessions, bmpSessions...)
+					mu.Unlock()
+					return
+				}
+			}
+
 			driver, err := drivers.NewDriver(&dev)
 			if err != nil {
 				return
 			}
 			sessions, err := driver.GetBGPSessions()
 			if err == nil {
+				for i := range sessions {
+					sessions[i].TelemetrySource = "ssh"
+				}
 				mu.Lock()
 				allSessions = append(allSessions, sessions...)
 				mu.Unlock()

@@ -192,7 +192,13 @@ func (c *SSHClient) RunInteractiveSession(commands []string, waitAfterCommand ti
 		for {
 			n, err := stdout.Read(buf)
 			if n > 0 {
-				outputBuf.Write(buf[:n])
+				chunk := buf[:n]
+				outputBuf.Write(chunk)
+
+				// Auto-answer security warning or confirmation prompts (e.g. Huawei initial password [Y/N])
+				if bytes.Contains(chunk, []byte("[Y/N]")) || bytes.Contains(chunk, []byte("[y/n]")) {
+					_, _ = io.WriteString(stdin, "N\n")
+				}
 			}
 			if err != nil {
 				break
@@ -201,18 +207,19 @@ func (c *SSHClient) RunInteractiveSession(commands []string, waitAfterCommand ti
 		close(done)
 	}()
 
-	time.Sleep(400 * time.Millisecond)
+	time.Sleep(600 * time.Millisecond)
 
 	for _, cmd := range commands {
 		_, _ = io.WriteString(stdin, cmd+"\n")
 		time.Sleep(waitAfterCommand)
 	}
 
+	_, _ = io.WriteString(stdin, "quit\n")
 	_ = stdin.Close()
 
 	select {
 	case <-done:
-	case <-time.After(5 * time.Second):
+	case <-time.After(3 * time.Second):
 	}
 
 	return cleanOutput(outputBuf.String()), nil

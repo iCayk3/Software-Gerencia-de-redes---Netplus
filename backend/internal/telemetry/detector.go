@@ -176,3 +176,35 @@ func (d *Detector) RecordSyslogAlert(deviceID, deviceName, alertType string, sev
 	d.broadcaster.Broadcast("alert_created", newAlert)
 	return newAlert
 }
+
+// HandleBMPPeerDown handles instant peer down events from BMP exporter.
+func (d *Detector) HandleBMPPeerDown(deviceID, deviceName, peerIP string, remoteAS uint32, reason string) {
+	target := fmt.Sprintf("Peer %s (AS %d)", peerIP, remoteAS)
+	existing := d.alertStore.FindActiveAlert(deviceID, models.AlertBGPDown, target)
+	if existing == nil {
+		newAlert := d.alertStore.AddAlert(models.Alert{
+			DeviceID:   deviceID,
+			DeviceName: deviceName,
+			Type:       models.AlertBGPDown,
+			Severity:   models.SeverityCritical,
+			Target:     target,
+			Message:    fmt.Sprintf("Sessão BGP com %s (AS %d) caiu no roteador %s via BMP. Motivo: %s", peerIP, remoteAS, deviceName, reason),
+			StartedAt:  time.Now(),
+			Status:     "active",
+		})
+		d.broadcaster.Broadcast("alert_created", newAlert)
+	}
+}
+
+// HandleBMPPeerUp handles instant peer up events from BMP exporter.
+func (d *Detector) HandleBMPPeerUp(deviceID, deviceName, peerIP string, remoteAS uint32) {
+	target := fmt.Sprintf("Peer %s (AS %d)", peerIP, remoteAS)
+	existing := d.alertStore.FindActiveAlert(deviceID, models.AlertBGPDown, target)
+	if existing != nil {
+		resolved, err := d.alertStore.ResolveAlert(existing.ID)
+		if err == nil && resolved != nil {
+			d.broadcaster.Broadcast("alert_resolved", resolved)
+		}
+	}
+}
+

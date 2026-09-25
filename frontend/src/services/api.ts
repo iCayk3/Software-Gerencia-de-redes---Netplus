@@ -90,6 +90,12 @@ export interface BGPSession {
   prefixes_sent?: number
   description?: string
   raw_output?: string
+  telemetry_source?: 'bmp' | 'ssh'
+  pre_policy_prefixes?: number
+  post_policy_prefixes?: number
+  rejected_prefixes?: number
+  router_id?: string
+  last_update?: string
 }
 
 export interface OSPFNeighbor {
@@ -236,6 +242,150 @@ export interface TelemetryStatus {
   active_alerts_count: number
   syslog_port: number
   syslog_active: boolean
+  bmp_port?: number
+  bmp_active?: boolean
+  bmp_connected_routers?: number
+  bmp_total_peers?: number
+}
+
+export interface BMPClientInfo {
+  remote_addr: string
+  router_ip: string
+  sys_name?: string
+  sys_descr?: string
+  device_id?: string
+  device_name?: string
+  vendor?: string
+  connected_at: string
+  messages_received: number
+  peers_count: number
+  last_activity: string
+}
+
+export interface BMPStatus {
+  running: boolean
+  port: number
+  connected_routers: number
+  total_peers_monitored: number
+  established_peers: number
+  down_peers: number
+  total_messages_parsed: number
+  total_routes_received: number
+  clients: BMPClientInfo[]
+}
+
+export interface BMPPeerState {
+  peer_ip: string
+  remote_as: number
+  local_as: number
+  local_addr?: string
+  router_id?: string
+  router_ip: string
+  router_name: string
+  device_id?: string
+  state: string
+  established_at?: string
+  down_at?: string
+  down_reason?: string
+  uptime: string
+  pre_policy_prefixes: number
+  post_policy_prefixes: number
+  rejected_prefixes: number
+  total_announced: number
+  total_withdrawn: number
+  last_update: string
+}
+
+export interface BMPEvent {
+  id: string
+  timestamp: string
+  router_ip: string
+  router_name: string
+  device_id?: string
+  peer_ip: string
+  remote_as: number
+  event_type: 'peer_up' | 'peer_down' | 'route_update' | 'stats_report'
+  reason?: string
+  details: string
+}
+
+export interface BMPConfigGuide {
+  bmp_port: number
+  rfc: string
+  vendors: Record<string, {
+    title: string
+    description: string
+    commands: string[]
+    verify_commands: string[]
+  }>
+}
+
+// --- BGP Churn Telemetry Types (Flapping & Oscillations) ---
+export interface ChurnBucket {
+  timestamp: string
+  withdrawn: number
+  announced: number
+}
+
+export interface PeerChurnMetrics {
+  peer_ip: string
+  router_ip: string
+  router_name: string
+  peer_name: string
+  remote_as: number
+  withdrawn_1h: number
+  announced_1h: number
+  withdrawn_24h: number
+  announced_24h: number
+  total_flaps: number
+  stability_score: number // 0 to 100%
+  status: 'stable' | 'moderate_churn' | 'high_churn' | 'critical_flapping'
+  history_1h?: ChurnBucket[]
+  last_flap?: string
+  last_update: string
+}
+
+export interface ChurnRankingResponse {
+  last_calculated: string
+  total_withdrawn_1h: number
+  total_announced_1h: number
+  average_stability: number
+  top_churners: PeerChurnMetrics[]
+  timeline_aggregate: ChurnBucket[]
+}
+
+// --- RPKI Route Origin Authorization (RFC 6811) Types ---
+export type RPKIStatusType = 'valid' | 'invalid' | 'not_found'
+
+export interface ROAEntry {
+  prefix: string
+  max_length: number
+  asn: number
+  trust_anchor?: string
+}
+
+export interface RPKIValidationResult {
+  prefix: string
+  origin_asn: number
+  status: RPKIStatusType
+  reason: string
+  peer_ip?: string
+  router_name?: string
+  as_path?: string
+  matching_roa?: ROAEntry
+  validated_at: string
+}
+
+export interface RPKISummary {
+  total_evaluated: number
+  valid_count: number
+  invalid_count: number
+  not_found_count: number
+  valid_percentage: number
+  recent_invalids: RPKIValidationResult[]
+  own_as_protected: boolean
+  own_prefixes_count: number
+  last_updated: string
 }
 
 export interface TelemetryOverview {
@@ -514,6 +664,57 @@ export async function acknowledgeAlert(id: string): Promise<Alert> {
   return res.json()
 }
 
+// --- Universal BMP Telemetry (RFC 7854) APIs ---
+
+export async function fetchBMPStatus(): Promise<BMPStatus> {
+  const res = await apiFetch(`${API_BASE}/bmp/status`)
+  if (!res.ok) throw new Error(`Erro ao buscar status do BMP: HTTP ${res.status}`)
+  return res.json()
+}
+
+export async function fetchBMPPeers(): Promise<BMPPeerState[]> {
+  const res = await apiFetch(`${API_BASE}/bmp/peers`)
+  if (!res.ok) throw new Error(`Erro ao buscar peers BMP: HTTP ${res.status}`)
+  return res.json()
+}
+
+export async function fetchBMPEvents(limit = 50): Promise<BMPEvent[]> {
+  const res = await apiFetch(`${API_BASE}/bmp/events?limit=${limit}`)
+  if (!res.ok) throw new Error(`Erro ao buscar eventos BMP: HTTP ${res.status}`)
+  return res.json()
+}
+
+export async function fetchBMPConfigGuide(): Promise<BMPConfigGuide> {
+  const res = await apiFetch(`${API_BASE}/bmp/config-guide`)
+  if (!res.ok) throw new Error(`Erro ao buscar guia BMP: HTTP ${res.status}`)
+  return res.json()
+}
+
+// --- BGP Churn & RPKI Security APIs ---
+export async function fetchBGPChurnRanking(): Promise<ChurnRankingResponse> {
+  const res = await apiFetch(`${API_BASE}/bmp/churn/ranking`)
+  if (!res.ok) throw new Error(`Erro ao buscar ranking de BGP Churn: HTTP ${res.status}`)
+  return res.json()
+}
+
+export async function fetchRPKISummary(): Promise<RPKISummary> {
+  const res = await apiFetch(`${API_BASE}/rpki/summary`)
+  if (!res.ok) throw new Error(`Erro ao buscar resumo de RPKI: HTTP ${res.status}`)
+  return res.json()
+}
+
+export async function validateRPKI(prefix: string, asn: number): Promise<RPKIValidationResult> {
+  const res = await apiFetch(`${API_BASE}/rpki/validate?prefix=${encodeURIComponent(prefix)}&asn=${asn}`)
+  if (!res.ok) throw new Error(`Erro ao validar prefixo RPKI: HTTP ${res.status}`)
+  return res.json()
+}
+
+export async function fetchRPKIInvalids(limit = 50): Promise<RPKIValidationResult[]> {
+  const res = await apiFetch(`${API_BASE}/rpki/invalids?limit=${limit}`)
+  if (!res.ok) throw new Error(`Erro ao buscar rotas inválidas RPKI: HTTP ${res.status}`)
+  return res.json()
+}
+
 // Static Routes & Traffic Engineering APIs
 export async function fetchDeviceStaticRoutes(id: string, fresh = false): Promise<StaticRoute[]> {
   const url = `${API_BASE}/devices/${encodeURIComponent(id)}/routes/static${fresh ? '?fresh=true' : ''}`
@@ -532,7 +733,18 @@ export async function fetchAllStaticRoutes(fresh = false): Promise<StaticRoute[]
   return res.json()
 }
 
-export async function createStaticRoute(deviceId: string, req: StaticRouteRequest): Promise<{ message: string }> {
+export interface StaticRouteCommandResult {
+  status: string
+  message: string
+  commands?: string[]
+  cli_script?: string
+  device_id?: string
+  device_name?: string
+  device_host?: string
+  vendor?: string
+}
+
+export async function createStaticRoute(deviceId: string, req: StaticRouteRequest): Promise<StaticRouteCommandResult> {
   const res = await apiFetch(`${API_BASE}/devices/${encodeURIComponent(deviceId)}/routes/static`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -545,7 +757,7 @@ export async function createStaticRoute(deviceId: string, req: StaticRouteReques
   return res.json()
 }
 
-export async function deleteStaticRoute(deviceId: string, destination: string, nextHop: string): Promise<{ message: string }> {
+export async function deleteStaticRoute(deviceId: string, destination: string, nextHop: string): Promise<StaticRouteCommandResult> {
   const url = `${API_BASE}/devices/${encodeURIComponent(deviceId)}/routes/static?destination=${encodeURIComponent(destination)}&next_hop=${encodeURIComponent(nextHop)}`
   const res = await apiFetch(url, { method: 'DELETE' })
   if (!res.ok) {
@@ -592,7 +804,14 @@ export interface PrependApplyRequest {
   block?: boolean
 }
 
-export async function applyPrepend(req: PrependApplyRequest): Promise<{ message: string }> {
+export interface PrependCommandResult {
+  status?: string
+  message: string
+  commands?: string[]
+  cli_script?: string
+}
+
+export async function applyPrepend(req: PrependApplyRequest): Promise<PrependCommandResult> {
   const res = await apiFetch(`${API_BASE}/traffic/download/prepend`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -652,6 +871,19 @@ export interface LocalPrefApplyRequest {
   node?: number
 }
 
+export function sanitizeText(text: string | null | undefined): string {
+  if (!text) return ''
+  return text
+    .replace(/Tr\ufffdnsito/gi, 'Trânsito')
+    .replace(/Secund\ufffdrio/gi, 'Secundário')
+    .replace(/Tr\ufffdfego/gi, 'Tráfego')
+    .replace(/Padr\ufffdo/gi, 'Padrão')
+    .replace(/Conex\ufffdo/gi, 'Conexão')
+    .replace(/Sess\ufffdo/gi, 'Sessão')
+    .replace(/Sess\ufffdes/gi, 'Sessões')
+    .replace(/\ufffd/g, '')
+}
+
 export async function fetchUploadOverview(deviceId = 'all', fresh = false): Promise<UploadOverviewResponse> {
   const url = `${API_BASE}/traffic/upload/overview?device_id=${encodeURIComponent(deviceId)}${fresh ? '&fresh=true' : ''}`
   const res = await apiFetch(url)
@@ -659,10 +891,26 @@ export async function fetchUploadOverview(deviceId = 'all', fresh = false): Prom
     const err = await res.json().catch(() => ({}))
     throw new Error(err.error || `Erro ao buscar visão geral de upload: HTTP ${res.status}`)
   }
-  return res.json()
+  const data: UploadOverviewResponse = await res.json()
+  if (data?.sections) {
+    data.sections.forEach((sec) => {
+      if (sec.metadata?.alias) sec.metadata.alias = sanitizeText(sec.metadata.alias)
+      if (sec.metadata?.description) sec.metadata.description = sanitizeText(sec.metadata.description)
+    })
+  }
+  return data
 }
 
-export async function applyLocalPreference(req: LocalPrefApplyRequest): Promise<{ message: string; peer_ip: string; local_pref: number }> {
+export interface LocalPrefCommandResult {
+  status?: string
+  message: string
+  peer_ip?: string
+  local_pref?: number
+  commands?: string[]
+  cli_script?: string
+}
+
+export async function applyLocalPreference(req: LocalPrefApplyRequest): Promise<LocalPrefCommandResult> {
   const res = await apiFetch(`${API_BASE}/traffic/upload/local-pref`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -678,7 +926,14 @@ export async function applyLocalPreference(req: LocalPrefApplyRequest): Promise<
 export async function fetchASMetadata(): Promise<Record<string, ASMetadata>> {
   const res = await apiFetch(`${API_BASE}/traffic/as-metadata`)
   if (!res.ok) throw new Error(`Erro ao buscar metadados de AS: HTTP ${res.status}`)
-  return res.json()
+  const data = await res.json()
+  if (data && typeof data === 'object') {
+    Object.values(data).forEach((m: any) => {
+      if (m?.alias) m.alias = sanitizeText(m.alias)
+      if (m?.description) m.description = sanitizeText(m.description)
+    })
+  }
+  return data
 }
 
 export async function updateASMetadata(meta: Partial<ASMetadata> & { asn: string }): Promise<{ message: string; metadata: ASMetadata }> {
@@ -690,6 +945,44 @@ export async function updateASMetadata(meta: Partial<ASMetadata> & { asn: string
   if (!res.ok) {
     const err = await res.json().catch(() => ({}))
     throw new Error(err.error || `Erro ao atualizar metadados do AS: HTTP ${res.status}`)
+  }
+  return res.json()
+}
+
+export interface PeerMetadata {
+  key?: string
+  device_id?: string
+  peer_ip: string
+  remote_as?: string
+  description: string
+  updated_at?: string
+}
+
+export async function fetchPeerMetadata(): Promise<Record<string, PeerMetadata>> {
+  try {
+    const res = await apiFetch(`${API_BASE}/traffic/peer-metadata`)
+    if (!res.ok) return {}
+    const data = await res.json()
+    if (data && typeof data === 'object') {
+      Object.values(data).forEach((m: any) => {
+        if (m?.description) m.description = sanitizeText(m.description)
+      })
+    }
+    return data || {}
+  } catch {
+    return {}
+  }
+}
+
+export async function updatePeerMetadata(meta: { device_id?: string; peer_ip: string; remote_as?: string; description: string }): Promise<{ message: string; metadata: PeerMetadata }> {
+  const res = await apiFetch(`${API_BASE}/traffic/peer-metadata`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(meta),
+  })
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}))
+    throw new Error(err.error || `Erro ao atualizar descrição da sessão: HTTP ${res.status}`)
   }
   return res.json()
 }
@@ -763,3 +1056,205 @@ export async function fetchAuditLogs(filter?: AuditFilter): Promise<AuditListRes
   }
   return res.json()
 }
+
+// --- Traffic Engineering Profiles & Presets ---
+
+export type ProfileTag = 'normal' | 'contingency' | 'maintenance' | 'peak' | 'custom'
+
+export interface ProfilePrependRule {
+  device_id: string
+  remote_as: string
+  group_name: string
+  prefix?: string
+  prepend_count: number
+  block: boolean
+}
+
+export interface ProfileLocalPrefRule {
+  device_id: string
+  device_name?: string
+  remote_as: string
+  peer_ip: string
+  peer_name?: string
+  local_pref: number
+  policy_name?: string
+  policy_node?: number
+}
+
+export interface ProfileRouteRule {
+  device_id: string
+  device_name?: string
+  destination: string
+  next_hop: string
+  preference: number
+  description: string
+}
+
+export interface TrafficProfile {
+  id: string
+  tenant_id?: string
+  name: string
+  description: string
+  tag: ProfileTag
+  color: string
+  is_active: boolean
+  is_default: boolean
+  created_at: string
+  updated_at: string
+  prepends: ProfilePrependRule[]
+  local_prefs: ProfileLocalPrefRule[]
+  routes: ProfileRouteRule[]
+}
+
+export interface PrependDiff {
+  device_id: string
+  group_name: string
+  remote_as: string
+  prefix: string
+  current_count: number
+  target_count: number
+  current_block: boolean
+  target_block: boolean
+  changed: boolean
+}
+
+export interface LocalPrefDiff {
+  device_id: string
+  peer_ip: string
+  peer_name: string
+  remote_as: string
+  current_pref: number
+  target_pref: number
+  changed: boolean
+}
+
+export interface RouteDiff {
+  device_id: string
+  destination: string
+  next_hop: string
+  preference: number
+  action: 'ADD' | 'DELETE' | 'KEEP'
+}
+
+export interface ProfileDiffSummary {
+  profile_id: string
+  profile_name: string
+  total_changes: number
+  prepends_diff: PrependDiff[]
+  local_prefs_diff: LocalPrefDiff[]
+  routes_diff: RouteDiff[]
+}
+
+export interface ProfileDiffResponse {
+  profile: TrafficProfile
+  diff: ProfileDiffSummary
+  scripts_by_device: Record<string, string>
+  commands_by_device: Record<string, string[]>
+}
+
+export interface ApplyProfileResult {
+  profile_id: string
+  profile_name: string
+  status: 'SUCCESS' | 'MANUAL_DISPATCH' | 'FAILED'
+  executed: boolean
+  message: string
+  diff_summary?: ProfileDiffSummary
+  scripts_by_device: Record<string, string>
+  commands_by_device: Record<string, string[]>
+}
+
+export async function fetchTrafficProfiles(): Promise<TrafficProfile[]> {
+  const res = await apiFetch(`${API_BASE}/traffic/profiles`)
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}))
+    throw new Error(err.error || `Erro ao consultar perfis: HTTP ${res.status}`)
+  }
+  return res.json()
+}
+
+export async function fetchTrafficProfile(id: string): Promise<TrafficProfile> {
+  const res = await apiFetch(`${API_BASE}/traffic/profiles/${encodeURIComponent(id)}`)
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}))
+    throw new Error(err.error || `Erro ao consultar perfil: HTTP ${res.status}`)
+  }
+  return res.json()
+}
+
+export async function createTrafficProfile(profile: Partial<TrafficProfile>): Promise<TrafficProfile> {
+  const res = await apiFetch(`${API_BASE}/traffic/profiles`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(profile),
+  })
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}))
+    throw new Error(err.error || `Erro ao criar perfil: HTTP ${res.status}`)
+  }
+  return res.json()
+}
+
+export async function updateTrafficProfile(id: string, profile: Partial<TrafficProfile>): Promise<TrafficProfile> {
+  const res = await apiFetch(`${API_BASE}/traffic/profiles/${encodeURIComponent(id)}`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(profile),
+  })
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}))
+    throw new Error(err.error || `Erro ao atualizar perfil: HTTP ${res.status}`)
+  }
+  return res.json()
+}
+
+export async function deleteTrafficProfile(id: string): Promise<{ message: string }> {
+  const res = await apiFetch(`${API_BASE}/traffic/profiles/${encodeURIComponent(id)}`, {
+    method: 'DELETE',
+  })
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}))
+    throw new Error(err.error || `Erro ao excluir perfil: HTTP ${res.status}`)
+  }
+  return res.json()
+}
+
+export async function captureCurrentProfile(req: {
+  name: string
+  description?: string
+  tag?: ProfileTag
+  color?: string
+}): Promise<TrafficProfile> {
+  const res = await apiFetch(`${API_BASE}/traffic/profiles/capture`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(req),
+  })
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}))
+    throw new Error(err.error || `Erro ao capturar estado atual: HTTP ${res.status}`)
+  }
+  return res.json()
+}
+
+export async function diffTrafficProfile(id: string): Promise<ProfileDiffResponse> {
+  const res = await apiFetch(`${API_BASE}/traffic/profiles/${encodeURIComponent(id)}/diff`, {
+    method: 'POST',
+  })
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}))
+    throw new Error(err.error || `Erro ao calcular diferenças do perfil: HTTP ${res.status}`)
+  }
+  return res.json()
+}
+
+export async function applyTrafficProfile(id: string): Promise<ApplyProfileResult> {
+  const res = await apiFetch(`${API_BASE}/traffic/profiles/${encodeURIComponent(id)}/apply`, {
+    method: 'POST',
+  })
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}))
+    throw new Error(err.error || `Erro ao ativar perfil: HTTP ${res.status}`)
+  }
+  return res.json()
+}
+

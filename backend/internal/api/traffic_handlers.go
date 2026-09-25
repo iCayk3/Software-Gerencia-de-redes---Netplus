@@ -17,11 +17,12 @@ import (
 )
 
 type TrafficController struct {
-	store       *storage.DeviceStore
-	asMetaStore *storage.ASMetadataStore
-	trafficSvc  *traffic.Service
-	uploadDir   string
-	auditStore  storage.IAuditStore
+	store         *storage.DeviceStore
+	asMetaStore   *storage.ASMetadataStore
+	peerMetaStore *storage.PeerMetadataStore
+	trafficSvc    *traffic.Service
+	uploadDir     string
+	auditStore    storage.IAuditStore
 }
 
 func NewTrafficController(store *storage.DeviceStore, asMetaStore *storage.ASMetadataStore, trafficSvc *traffic.Service, uploadDir string, auditStore storage.IAuditStore) *TrafficController {
@@ -32,6 +33,10 @@ func NewTrafficController(store *storage.DeviceStore, asMetaStore *storage.ASMet
 		uploadDir:   uploadDir,
 		auditStore:  auditStore,
 	}
+}
+
+func (tc *TrafficController) SetPeerMetadataStore(p *storage.PeerMetadataStore) {
+	tc.peerMetaStore = p
 }
 
 // GetUploadOverview handles GET /api/traffic/upload/overview
@@ -89,10 +94,21 @@ func (tc *TrafficController) UpdateASMetadata(w http.ResponseWriter, r *http.Req
 	}
 
 	if tc.asMetaStore != nil {
-		// If image_url was omitted, preserve existing image_url if present
-		if meta.ImageURL == "" {
-			if existing, ok := tc.asMetaStore.GetByASN(asn); ok {
+		if existing, ok := tc.asMetaStore.GetByASN(asn); ok {
+			if meta.ImageURL == "" {
 				meta.ImageURL = existing.ImageURL
+			}
+			if meta.Role == "" {
+				meta.Role = existing.Role
+			}
+			if meta.Description == "" {
+				meta.Description = existing.Description
+			}
+			if meta.Color == "" {
+				meta.Color = existing.Color
+			}
+			if meta.CustomGateway == "" {
+				meta.CustomGateway = existing.CustomGateway
 			}
 		}
 		if err := tc.asMetaStore.Set(meta); err != nil {
@@ -103,6 +119,50 @@ func (tc *TrafficController) UpdateASMetadata(w http.ResponseWriter, r *http.Req
 
 	WriteJSON(w, http.StatusOK, map[string]any{
 		"message":  "Metadados do AS atualizados com sucesso",
+		"metadata": meta,
+	})
+}
+
+// GetPeerMetadata handles GET /api/traffic/peer-metadata
+func (tc *TrafficController) GetPeerMetadata(w http.ResponseWriter, r *http.Request) {
+	if tc.peerMetaStore == nil {
+		WriteJSON(w, http.StatusOK, map[string]models.PeerMetadata{})
+		return
+	}
+	WriteJSON(w, http.StatusOK, tc.peerMetaStore.GetAll())
+}
+
+// UpdatePeerMetadata handles POST /api/traffic/peer-metadata
+func (tc *TrafficController) UpdatePeerMetadata(w http.ResponseWriter, r *http.Request) {
+	var req models.PeerMetadataUpdateRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		WriteError(w, http.StatusBadRequest, "Corpo da requisição inválido: "+err.Error())
+		return
+	}
+
+	peerIP := strings.TrimSpace(req.PeerIP)
+	if peerIP == "" {
+		WriteError(w, http.StatusBadRequest, "Campo 'peer_ip' é obrigatório")
+		return
+	}
+
+	meta := models.PeerMetadata{
+		DeviceID:    strings.TrimSpace(req.DeviceID),
+		PeerIP:      peerIP,
+		RemoteAS:    strings.TrimSpace(req.RemoteAS),
+		Description: strings.TrimSpace(req.Description),
+		UpdatedAt:   time.Now(),
+	}
+
+	if tc.peerMetaStore != nil {
+		if err := tc.peerMetaStore.Set(meta); err != nil {
+			WriteError(w, http.StatusInternalServerError, "Erro ao salvar descrição da sessão BGP: "+err.Error())
+			return
+		}
+	}
+
+	WriteJSON(w, http.StatusOK, map[string]any{
+		"message":  "Descrição da sessão atualizada com sucesso",
 		"metadata": meta,
 	})
 }
@@ -302,15 +362,14 @@ func (tc *TrafficController) ApplyPrepend(w http.ResponseWriter, r *http.Request
 		msg = fmt.Sprintf("[Modo Manual Ativo] Comandos de Bloqueio gerados para %s. Nenhuma alteração foi executada no equipamento.", req.PeerIP)
 	}
 
+	dev, _ := tc.store.GetByID(req.DeviceID)
+	cmds, cliScript := buildPrependCLI(dev, req)
+
 	if tc.auditStore != nil {
 		user := GetAuthUser(r)
 		userName, userEmail, userID := "Sistema", "system@netpulse.com", "sys"
 		if user != nil {
 			userName, userEmail, userID = user.Name, user.Email, user.UserID
-		}
-		actionDesc := fmt.Sprintf("Prepend %dx aplicado para peer %s (bloco %s)", req.PrependCount, req.PeerIP, req.Prefix)
-		if req.Block {
-			actionDesc = fmt.Sprintf("Bloqueio de rota aplicado para peer %s (bloco %s)", req.PeerIP, req.Prefix)
 		}
 		_ = tc.auditStore.Record(&models.AuditLog{
 			TenantID:         "default-tenant",
@@ -320,12 +379,13 @@ func (tc *TrafficController) ApplyPrepend(w http.ResponseWriter, r *http.Request
 			ClientIP:         r.RemoteAddr,
 			Action:           models.ActionApplyPrepend,
 			TargetDeviceID:   req.DeviceID,
-			CommandExecuted:  actionDesc,
+			CommandExecuted:  cliScript,
 			Status:           "MANUAL_DISPATCH",
 		})
 	}
 
 	WriteJSON(w, http.StatusOK, map[string]any{
+		"status":        "MANUAL_DISPATCH",
 		"message":       msg,
 		"device_id":     req.DeviceID,
 		"peer_ip":       req.PeerIP,
@@ -333,6 +393,8 @@ func (tc *TrafficController) ApplyPrepend(w http.ResponseWriter, r *http.Request
 		"prepend_count": req.PrependCount,
 		"block":         req.Block,
 		"mode":          "manual",
+		"commands":      cmds,
+		"cli_script":    cliScript,
 	})
 }
 
@@ -371,10 +433,185 @@ func (tc *TrafficController) SetLocalPreference(w http.ResponseWriter, r *http.R
 		}
 	}
 
+	dev, _ := tc.store.GetByID(req.DeviceID)
+	cmds, cliScript := buildLocalPrefCLI(dev, req)
+
+	if tc.auditStore != nil {
+		user := GetAuthUser(r)
+		userName, userEmail, userID := "Sistema", "system@netpulse.com", "sys"
+		if user != nil {
+			userName, userEmail, userID = user.Name, user.Email, user.UserID
+		}
+		_ = tc.auditStore.Record(&models.AuditLog{
+			TenantID:         "default-tenant",
+			UserID:           userID,
+			UserName:         userName,
+			UserEmail:        userEmail,
+			ClientIP:         r.RemoteAddr,
+			Action:           "SET_LOCAL_PREFERENCE",
+			TargetDeviceID:   req.DeviceID,
+			CommandExecuted:  cliScript,
+			Status:           "MANUAL_DISPATCH",
+		})
+	}
+
 	WriteJSON(w, http.StatusOK, map[string]any{
+		"status":     "MANUAL_DISPATCH",
 		"message":    fmt.Sprintf("[Modo Manual Ativo] Comandos para Local-Preference %d gerados com sucesso. Nenhuma alteração foi executada no equipamento.", req.LocalPref),
 		"peer_ip":    req.PeerIP,
 		"local_pref": req.LocalPref,
 		"mode":       "manual",
+		"commands":   cmds,
+		"cli_script": cliScript,
 	})
+}
+
+func buildPrependCLI(dev *models.Device, req models.PrependApplyRequest) ([]string, string) {
+	devName := "Roteador"
+	devHost := ""
+	vendor := models.VendorHuawei
+	if dev != nil {
+		devName = dev.Name
+		devHost = dev.Host
+		vendor = dev.Vendor
+	}
+
+	switch vendor {
+	case models.VendorHuawei:
+		nodeNum := 10
+		if strings.HasSuffix(req.Prefix, "/22") {
+			nodeNum = 10
+		} else if strings.Contains(req.Prefix, ".28.") && strings.HasSuffix(req.Prefix, "/23") {
+			nodeNum = 20
+		} else if strings.Contains(req.Prefix, ".30.") && strings.HasSuffix(req.Prefix, "/23") {
+			nodeNum = 30
+		} else if strings.Contains(req.Prefix, ".28.") && strings.HasSuffix(req.Prefix, "/24") {
+			nodeNum = 40
+		} else if strings.Contains(req.Prefix, ".29.") && strings.HasSuffix(req.Prefix, "/24") {
+			nodeNum = 50
+		} else if strings.Contains(req.Prefix, ".30.") && strings.HasSuffix(req.Prefix, "/24") {
+			nodeNum = 60
+		} else if strings.Contains(req.Prefix, ".31.") && strings.HasSuffix(req.Prefix, "/24") {
+			nodeNum = 70
+		}
+
+		base := "2003"
+		pfxLower := strings.ToLower(req.PeerIP)
+		if strings.Contains(pfxLower, "wiki") || strings.Contains(req.PeerIP, "45.181.") || strings.Contains(req.PeerIP, "10.200.") {
+			base = "2002"
+		} else if strings.Contains(req.PeerIP, "45.68.") {
+			base = "4500" // Belém
+		} else if strings.Contains(req.PeerIP, "187.16.195.") {
+			base = "4400" // Fortaleza
+		} else if strings.Contains(req.PeerIP, "187.16.216.") {
+			base = "4100" // SP
+		} else if strings.Contains(req.PeerIP, "45.184.") {
+			base = "4000" // BSB
+		}
+
+		comm := fmt.Sprintf("1:%s%d", base, req.PrependCount)
+		if req.Block {
+			comm = fmt.Sprintf("0:%s0", base)
+		}
+
+		cmds := []string{
+			"system-view",
+			fmt.Sprintf("route-policy RP-TAG-V4-ORIGIN permit node %d", nodeNum),
+			fmt.Sprintf("apply community 267943:1000 %s 1:40000 1:41000 1:42000 1:43000 additive", comm),
+			"commit",
+			"return",
+			"refresh bgp all export",
+		}
+		script := fmt.Sprintf("# [%s] %s (Huawei VRP)\n%s", devName, devHost, strings.Join(cmds, "\n"))
+		return cmds, script
+
+	case models.VendorMikrotikV7:
+		rule := fmt.Sprintf("if (dst == %s) { set bgp-path-prepend=%d; accept; }", req.Prefix, req.PrependCount)
+		if req.Block {
+			rule = fmt.Sprintf("if (dst == %s) { reject; }", req.Prefix)
+		}
+		cmds := []string{
+			fmt.Sprintf(`/routing/filter/rule/set [find where rule~"%s"] rule="%s"`, req.Prefix, rule),
+			"/routing/bgp/connection/refresh",
+		}
+		script := fmt.Sprintf("# [%s] %s (MikroTik RouterOS v7)\n%s", devName, devHost, strings.Join(cmds, "\n"))
+		return cmds, script
+
+	case models.VendorMikrotikV6:
+		cmd := fmt.Sprintf(`/routing filter set [find prefix="%s"] action=accept set-bgp-prepend=%d`, req.Prefix, req.PrependCount)
+		if req.Block {
+			cmd = fmt.Sprintf(`/routing filter set [find prefix="%s"] action=discard`, req.Prefix)
+		}
+		cmds := []string{cmd, "/routing bgp peer refresh-all"}
+		script := fmt.Sprintf("# [%s] %s (MikroTik RouterOS v6)\n%s", devName, devHost, strings.Join(cmds, "\n"))
+		return cmds, script
+
+	default:
+		cmd := fmt.Sprintf("# Prepend %dx para %s (bloco %s)", req.PrependCount, req.PeerIP, req.Prefix)
+		return []string{cmd}, fmt.Sprintf("# [%s] %s\n%s", devName, devHost, cmd)
+	}
+}
+
+func buildLocalPrefCLI(dev *models.Device, req models.LocalPrefApplyRequest) ([]string, string) {
+	devName := "Roteador"
+	devHost := ""
+	vendor := models.VendorHuawei
+	if dev != nil {
+		devName = dev.Name
+		devHost = dev.Host
+		vendor = dev.Vendor
+	}
+
+	policyName := req.PolicyName
+	if policyName == "" {
+		policyName = fmt.Sprintf("RP-IN-%s", req.PeerIP)
+	}
+	nodeNum := req.Node
+	if nodeNum <= 0 {
+		nodeNum = 11
+	}
+
+	switch vendor {
+	case models.VendorHuawei:
+		cmds := []string{
+			"system-view",
+			fmt.Sprintf("route-policy %s permit node %d", policyName, nodeNum),
+			fmt.Sprintf(" apply local-preference %d", req.LocalPref),
+			"commit",
+			"return",
+			fmt.Sprintf("refresh bgp %s import", req.PeerIP),
+		}
+		script := fmt.Sprintf("# [%s] %s (Huawei VRP)\n%s", devName, devHost, strings.Join(cmds, "\n"))
+		return cmds, script
+
+	case models.VendorMikrotikV7:
+		cmds := []string{
+			fmt.Sprintf(`/routing/filter/rule/add chain=bgp-in rule="if (bgp-peer == %s) { set bgp-local-pref %d; }"`, req.PeerIP, req.LocalPref),
+			"/routing/bgp/connection/refresh",
+		}
+		script := fmt.Sprintf("# [%s] %s (MikroTik RouterOS v7)\n%s", devName, devHost, strings.Join(cmds, "\n"))
+		return cmds, script
+
+	case models.VendorMikrotikV6:
+		cmds := []string{
+			fmt.Sprintf(`/routing filter add chain=bgp-in peer="%s" set-bgp-local-pref=%d`, req.PeerIP, req.LocalPref),
+			"/routing bgp peer refresh-all",
+		}
+		script := fmt.Sprintf("# [%s] %s (MikroTik RouterOS v6)\n%s", devName, devHost, strings.Join(cmds, "\n"))
+		return cmds, script
+
+	case models.VendorDatacom:
+		cmds := []string{
+			"configure terminal",
+			"route-map RM-BGP-IN permit 10",
+			fmt.Sprintf(" set local-preference %d", req.LocalPref),
+			"exit",
+		}
+		script := fmt.Sprintf("# [%s] %s (Datacom DmOS)\n%s", devName, devHost, strings.Join(cmds, "\n"))
+		return cmds, script
+
+	default:
+		cmd := fmt.Sprintf("# Local-Preference %d para peer %s", req.LocalPref, req.PeerIP)
+		return []string{cmd}, fmt.Sprintf("# [%s] %s\n%s", devName, devHost, cmd)
+	}
 }

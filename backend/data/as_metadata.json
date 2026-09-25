@@ -1,23 +1,44 @@
 [
   {
+    "asn": "20121",
+    "alias": "IX.br / PTT São Paulo",
+    "description": "Ponto de Troca de Tráfego SP",
+    "role": "ix_ptt",
+    "updated_at": "2026-09-25T10:38:45.1523222-03:00"
+  },
+  {
     "asn": "266445",
-    "alias": "SEA Telecom (Tr�nsito Principal)",
-    "description": "Circuito IP Tr�nsito Principal 10Gbps",
+    "alias": "SEA Telecom (Trânsito Principal)",
+    "description": "Circuito IP Trânsito Principal 10Gbps",
     "role": "transit_primary",
-    "updated_at": "2026-09-22T09:06:30.1018928-03:00"
+    "updated_at": "2026-09-25T09:43:41.7773731-03:00"
   },
   {
     "asn": "262503",
-    "alias": "WIKI Telecom (Tr�nsito Secund�rio)",
-    "description": "Link de Tr�nsito IP via WIKI",
+    "alias": "WIKI Telecom (Trânsito Secundário)",
+    "description": "Link de Trânsito IP via WIKI",
     "role": "transit_secondary",
-    "updated_at": "2026-09-22T09:30:12.8620212-03:00"
+    "updated_at": "2026-09-25T09:43:41.7412959-03:00"
   },
   {
     "asn": "26162",
-    "alias": "IX.br / PTT Metro",
-    "description": "Ponto de Troca de Tr�fego Internet (IX.br)",
+    "alias": "IX.br PTT CE",
+    "description": "Ponto de Troca de Tráfego Internet (IX.br)",
     "role": "ix_ptt",
-    "updated_at": "2026-09-22T09:30:38.7596698-03:00"
+    "updated_at": "2026-09-25T11:19:59.5590981-03:00"
+  },
+  {
+    "asn": "267943",
+    "alias": "SOL PROVEDOR DE INTERNET",
+    "description": "Rede Própria / iBGP",
+    "role": "internal",
+    "updated_at": "2026-09-25T11:13:55.9889192-03:00"
+  },
+  {
+    "asn": "267643",
+    "alias": "SOL PROVEDOR DE INTERNET",
+    "description": "Sol Telecom",
+    "role": "internal",
+    "updated_at": "2026-09-25T11:12:33.1947621-03:00"
   }
 ]

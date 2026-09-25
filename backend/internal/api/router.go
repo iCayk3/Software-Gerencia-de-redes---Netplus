@@ -1,11 +1,13 @@
 package api
 
 import (
+	"log"
 	"net/http"
 	"os"
 	"path/filepath"
 
 	"network-software/internal/models"
+	"network-software/internal/rpki"
 	"network-software/internal/storage"
 	"network-software/internal/telemetry"
 	"network-software/internal/traffic"
@@ -28,12 +30,30 @@ func NewRouter(
 	trafficSvc := traffic.NewService(store, asMetaStore)
 	trafficSvc.Start()
 
+	profileStore, err := storage.NewProfileStore(dataDir)
+	if err != nil {
+		log.Printf("[Router] Aviso: falha ao inicializar ProfileStore: %v", err)
+	}
+	profileSvc := traffic.NewProfileService(trafficSvc, profileStore, store)
+	profileCtrl := NewProfileController(profileSvc, auditStore)
+
 	devCtrl := NewDeviceController(store, engine)
 	telCtrl := NewTelemetryController(engine)
 	routesCtrl := NewRoutesController(store, trafficSvc, auditStore)
+
+	peerMetaStore, err := storage.NewPeerMetadataStore(dataDir)
+	if err != nil {
+		log.Printf("[Router] Aviso: falha ao inicializar PeerMetadataStore: %v", err)
+	}
+
 	trafficCtrl := NewTrafficController(store, asMetaStore, trafficSvc, uploadDir, auditStore)
+	if peerMetaStore != nil {
+		trafficCtrl.SetPeerMetadataStore(peerMetaStore)
+	}
+
 	authCtrl := NewAuthController(userStore, auditStore)
 	auditCtrl := NewAuditController(auditStore)
+	rpkiCtrl := NewRPKIController(rpki.NewValidator())
 
 	// Base & Health check
 	mux.HandleFunc("GET /api/health", HandleHealth)
@@ -80,6 +100,8 @@ func NewRouter(
 	mux.HandleFunc("GET /api/traffic/as-metadata", trafficCtrl.GetASMetadata)
 	mux.HandleFunc("POST /api/traffic/as-metadata", RequireRole(models.RoleAdmin, models.RoleNOCOperator)(trafficCtrl.UpdateASMetadata))
 	mux.HandleFunc("POST /api/traffic/as-metadata/upload-image", RequireRole(models.RoleAdmin)(trafficCtrl.UploadASImage))
+	mux.HandleFunc("GET /api/traffic/peer-metadata", trafficCtrl.GetPeerMetadata)
+	mux.HandleFunc("POST /api/traffic/peer-metadata", RequireRole(models.RoleAdmin, models.RoleNOCOperator)(trafficCtrl.UpdatePeerMetadata))
 
 	// Static file server for uploaded AS logos/images
 	mux.Handle("GET /api/uploads/", http.StripPrefix("/api/uploads/", http.FileServer(http.Dir(uploadDir))))
@@ -91,6 +113,16 @@ func NewRouter(
 	mux.HandleFunc("POST /api/devices/{id}/bgp/prepends", RequireRole(models.RoleAdmin, models.RoleNOCOperator)(trafficCtrl.ApplyPrepend))
 	mux.HandleFunc("POST /api/traffic/download/prepend", RequireRole(models.RoleAdmin, models.RoleNOCOperator)(trafficCtrl.ApplyPrepend))
 
+	// Traffic Engineering Profiles & Presets (Cenários e Perfis Rápidos)
+	mux.HandleFunc("GET /api/traffic/profiles", profileCtrl.ListProfiles)
+	mux.HandleFunc("GET /api/traffic/profiles/{id}", profileCtrl.GetProfile)
+	mux.HandleFunc("POST /api/traffic/profiles", RequireRole(models.RoleAdmin, models.RoleNOCOperator)(profileCtrl.CreateProfile))
+	mux.HandleFunc("PUT /api/traffic/profiles/{id}", RequireRole(models.RoleAdmin, models.RoleNOCOperator)(profileCtrl.UpdateProfile))
+	mux.HandleFunc("DELETE /api/traffic/profiles/{id}", RequireRole(models.RoleAdmin)(profileCtrl.DeleteProfile))
+	mux.HandleFunc("POST /api/traffic/profiles/capture", RequireRole(models.RoleAdmin, models.RoleNOCOperator)(profileCtrl.CaptureCurrentProfile))
+	mux.HandleFunc("POST /api/traffic/profiles/{id}/diff", profileCtrl.DiffProfile)
+	mux.HandleFunc("POST /api/traffic/profiles/{id}/apply", RequireRole(models.RoleAdmin, models.RoleNOCOperator)(profileCtrl.ApplyProfile))
+
 	// Telemetry & Anomaly Detections
 	mux.HandleFunc("GET /api/telemetry/status", telCtrl.GetStatus)
 	mux.HandleFunc("GET /api/telemetry/overview", telCtrl.GetOverview)
@@ -99,6 +131,18 @@ func NewRouter(
 	mux.HandleFunc("GET /api/alerts", telCtrl.ListAlerts)
 	mux.HandleFunc("POST /api/alerts/{id}/ack", telCtrl.AcknowledgeAlert)
 	mux.HandleFunc("GET /api/telemetry/events", telCtrl.StreamEvents)
+
+	// Universal BMP Telemetry (RFC 7854)
+	mux.HandleFunc("GET /api/bmp/status", telCtrl.GetBMPStatus)
+	mux.HandleFunc("GET /api/bmp/peers", telCtrl.GetBMPPeers)
+	mux.HandleFunc("GET /api/bmp/events", telCtrl.GetBMPEvents)
+	mux.HandleFunc("GET /api/bmp/config-guide", telCtrl.GetBMPConfigGuide)
+	mux.HandleFunc("GET /api/bmp/churn/ranking", telCtrl.GetBMPChurnRanking)
+
+	// RPKI Validation & Origin Security (RFC 6811)
+	mux.HandleFunc("GET /api/rpki/summary", rpkiCtrl.GetSummary)
+	mux.HandleFunc("GET /api/rpki/validate", rpkiCtrl.Validate)
+	mux.HandleFunc("GET /api/rpki/invalids", rpkiCtrl.GetInvalids)
 
 	// Wrap with middlewares: CORS -> Logger -> Auth
 	handler := AuthMiddleware(mux)

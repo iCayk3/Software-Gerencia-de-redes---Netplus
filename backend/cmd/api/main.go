@@ -33,6 +33,13 @@ func main() {
 		}
 	}
 
+	bmpPort := 11019
+	if bp := os.Getenv("BMP_PORT"); bp != "" {
+		if val, err := strconv.Atoi(bp); err == nil && val > 0 {
+			bmpPort = val
+		}
+	}
+
 	pollInterval := 45 // seconds
 	if pi := os.Getenv("POLL_INTERVAL"); pi != "" {
 		if val, err := strconv.Atoi(pi); err == nil && val > 0 {
@@ -50,12 +57,12 @@ func main() {
 		log.Fatalf("Failed to initialize AS metadata storage: %v", err)
 	}
 
-	telEngine, err := telemetry.NewEngine(store, dataDir, syslogPort, pollInterval)
+	telEngine, err := telemetry.NewEngine(store, dataDir, syslogPort, bmpPort, pollInterval)
 	if err != nil {
 		log.Fatalf("Failed to initialize telemetry engine: %v", err)
 	}
 
-	// Start background readings collector and Syslog UDP server
+	// Start background readings collector, Syslog UDP server, and BMP TCP collector
 	telEngine.Start()
 	defer telEngine.Stop()
 
@@ -87,6 +94,7 @@ func main() {
 	log.Printf("   API Health Check: http://localhost%s/api/health", addr)
 	log.Printf("   Telemetry Engine: Background Collector (every %ds)", pollInterval)
 	log.Printf("   Syslog Server:    UDP Port %d (Active)        ", syslogPort)
+	log.Printf("   BMP Collector:    TCP Port %d (RFC 7854 Active)", bmpPort)
 	log.Printf("==================================================")
 
 	if err := http.ListenAndServe(addr, router); err != nil {

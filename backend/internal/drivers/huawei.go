@@ -75,6 +75,7 @@ func (d *HuaweiDriver) GetStaticRoutes() ([]models.StaticRoute, error) {
 }
 
 func (d *HuaweiDriver) AddStaticRoute(req models.StaticRouteRequest) error {
+	// Modo Seguro: Zero disparo automático para roteadores
 	ip, mask := splitCIDR(req.Destination)
 	cmd := fmt.Sprintf("ip route-static %s %s %s", ip, mask, req.NextHop)
 	if req.Preference > 0 {
@@ -85,16 +86,17 @@ func (d *HuaweiDriver) AddStaticRoute(req models.StaticRouteRequest) error {
 	}
 
 	cmds := []string{"system-view", cmd, "commit", "return"}
-	_, err := d.client.RunInteractiveSession(cmds, 1000*time.Millisecond)
-	return err
+	log.Printf("[MODO MANUAL SEGURO - HUAWEI] Rota estática gerada para host %s (%s): %s", d.device.Name, d.device.Host, strings.Join(cmds, " ; "))
+	return nil
 }
 
 func (d *HuaweiDriver) DeleteStaticRoute(destination, nextHop string) error {
+	// Modo Seguro: Zero disparo automático para roteadores
 	ip, mask := splitCIDR(destination)
 	cmd := fmt.Sprintf("undo ip route-static %s %s %s", ip, mask, nextHop)
 	cmds := []string{"system-view", cmd, "commit", "return"}
-	_, err := d.client.RunInteractiveSession(cmds, 1000*time.Millisecond)
-	return err
+	log.Printf("[MODO MANUAL SEGURO - HUAWEI] Remoção de rota gerada para host %s (%s): %s", d.device.Name, d.device.Host, strings.Join(cmds, " ; "))
+	return nil
 }
 
 // GetBGPPrepends queries and parses BGP prepends and export policies on Huawei (read-only).

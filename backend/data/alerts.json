@@ -1,5 +1,81 @@
 [
   {
+    "id": "alt-f6b404ce61e6",
+    "device_id": "738398e45a892540",
+    "device_name": "BGP2 [BGP-RT.02.PA.PMVR.01] (45.166.28.249)",
+    "type": "syslog_event",
+    "severity": "info",
+    "target": "Peer 10.200.1.162",
+    "message": "🟢 [Huawei BGP] Sessão BGP Estabelecida (ESTABLISHED)\nPeer: 10.200.1.162 | Transição: OPENCONFIRM ➔ ESTABLISHED | Evento: Keepalive recebido (Sessão Saudável) (RECV_KA)",
+    "started_at": "2026-09-24T15:24:46.4036996-03:00",
+    "acknowledged": true,
+    "status": "acknowledged"
+  },
+  {
+    "id": "alt-f3bac196a8e3",
+    "device_id": "738398e45a892540",
+    "device_name": "BGP2",
+    "type": "bgp_down",
+    "severity": "critical",
+    "target": "Peer 10.200.1.162 (AS 262503)",
+    "message": "Sessão BGP com 10.200.1.162 (AS 262503) caiu no roteador BGP2. Estado: Idle",
+    "started_at": "2026-09-24T15:24:43.707145-03:00",
+    "resolved_at": "2026-09-24T15:25:28.6412845-03:00",
+    "acknowledged": false,
+    "status": "resolved"
+  },
+  {
+    "id": "alt-b1760c6c3860",
+    "device_id": "738398e45a892540",
+    "device_name": "BGP2 [BGP-RT.02.PA.PMVR.01] (45.166.28.249)",
+    "type": "syslog_event",
+    "severity": "critical",
+    "target": "Peer 10.200.1.162",
+    "message": "🔴 [Huawei BGP] Queda de Sessão BGP (DOWN/IDLE)\nPeer: 10.200.1.162 | Transição: ESTABLISHED ➔ IDLE | Evento: Falha na conexão TCP (Enlace ou Roteador Inacessível) (TCP_FAIL)",
+    "started_at": "2026-09-24T15:24:23.3046756-03:00",
+    "acknowledged": true,
+    "status": "acknowledged"
+  },
+  {
+    "id": "alt-f5efb35822ac",
+    "device_id": "738398e45a892540",
+    "device_name": "BGP2",
+    "type": "bgp_prefix_drop",
+    "severity": "warning",
+    "target": "Prefixos 45.181.228.24 (AS 262503)",
+    "message": "Queda abrupta de rotas recebidas do peer 45.181.228.24: prefixos caíram de 17 para 0",
+    "started_at": "2026-09-24T15:23:13.5626907-03:00",
+    "resolved_at": "2026-09-24T15:24:43.7084471-03:00",
+    "acknowledged": false,
+    "status": "resolved"
+  },
+  {
+    "id": "alt-3dfca23dc1b5",
+    "device_id": "7a5d2d4230302c56",
+    "device_name": "BGP",
+    "type": "device_offline",
+    "severity": "critical",
+    "target": "BGP (45.166.28.254:2210)",
+    "message": "Equipamento BGP (45.166.28.254) está inacessível via SSH/Rede. Detalhe: SSH authentication failed: ssh: handshake failed: read tcp 10.12.199.137:62657-\u003e45.166.28.254:2210: wsarecv: Foi forçado o cancelamento de uma conexão existente pelo host remoto.",
+    "started_at": "2026-09-24T14:19:11.8479047-03:00",
+    "resolved_at": "2026-09-24T14:24:27.0875193-03:00",
+    "acknowledged": false,
+    "status": "resolved"
+  },
+  {
+    "id": "alt-41f892d2847b",
+    "device_id": "7a5d2d4230302c56",
+    "device_name": "BGP",
+    "type": "device_offline",
+    "severity": "critical",
+    "target": "BGP (45.166.28.254:2210)",
+    "message": "Equipamento BGP (45.166.28.254) está inacessível via SSH/Rede. Detalhe: SSH authentication failed: ssh: handshake failed: ssh: unable to authenticate, attempted methods [none password], no supported methods remain",
+    "started_at": "2026-09-24T14:16:57.3901385-03:00",
+    "resolved_at": "2026-09-24T14:18:27.1754172-03:00",
+    "acknowledged": false,
+    "status": "resolved"
+  },
+  {
     "id": "alt-070be94e7b62",
     "device_id": "738398e45a892540",
     "device_name": "BGP2 [BGP-RT.02.PA.PMVR.01] (45.166.28.249)",
@@ -8,8 +84,8 @@
     "target": "Peer 45.68.79.253",
     "message": "🟢 [Huawei BGP] Sessão BGP Estabelecida (ESTABLISHED)\nPeer: 45.68.79.253 | Transição: OPENCONFIRM ➔ ESTABLISHED | Evento: Keepalive recebido (Sessão Saudável) (RECV_KA)",
     "started_at": "2026-09-23T11:28:19.8606656-03:00",
-    "acknowledged": false,
-    "status": "active"
+    "acknowledged": true,
+    "status": "acknowledged"
   },
   {
     "id": "alt-2049727232da",
@@ -20,8 +96,8 @@
     "target": "Peer 45.68.79.254",
     "message": "🟢 [Huawei BGP] Sessão BGP Estabelecida (ESTABLISHED)\nPeer: 45.68.79.254 | Transição: OPENCONFIRM ➔ ESTABLISHED | Evento: Keepalive recebido (Sessão Saudável) (RECV_KA)",
     "started_at": "2026-09-23T11:28:13.8250898-03:00",
-    "acknowledged": false,
-    "status": "active"
+    "acknowledged": true,
+    "status": "acknowledged"
   },
   {
     "id": "alt-1e536d4bcbe5",
@@ -32,8 +108,8 @@
     "target": "Peer 10.200.1.162",
     "message": "🟢 [Huawei BGP] Sessão BGP Estabelecida (ESTABLISHED)\nPeer: 10.200.1.162 | Transição: OPENCONFIRM ➔ ESTABLISHED | Evento: Keepalive recebido (Sessão Saudável) (RECV_KA)",
     "started_at": "2026-09-23T11:28:09.8193501-03:00",
-    "acknowledged": false,
-    "status": "active"
+    "acknowledged": true,
+    "status": "acknowledged"
   },
   {
     "id": "alt-a66a8529b2c9",
@@ -83,8 +159,8 @@
     "target": "Peer 10.200.1.162",
     "message": "🔴 [Huawei BGP] Queda de Sessão BGP (DOWN/IDLE)\nPeer: 10.200.1.162 | Transição: ESTABLISHED ➔ IDLE | Evento: Falha na conexão TCP (Enlace ou Roteador Inacessível) (TCP_FAIL)",
     "started_at": "2026-09-23T11:24:50.394378-03:00",
-    "acknowledged": false,
-    "status": "active"
+    "acknowledged": true,
+    "status": "acknowledged"
   },
   {
     "id": "alt-8b210f9c27ee",
@@ -108,8 +184,8 @@
     "target": "Peer 45.166.30.250",
     "message": "🟡 [Huawei BGP] Sessão BGP em Negociação (CONNECT)\nPeer: 45.166.30.250 | Transição: ACTIVE ➔ CONNECT | Evento: CR_TIMER (CR_TIMER)",
     "started_at": "2026-09-22T17:00:52.1642536-03:00",
-    "acknowledged": false,
-    "status": "active"
+    "acknowledged": true,
+    "status": "acknowledged"
   },
   {
     "id": "alt-d2c02909b699",
@@ -120,8 +196,8 @@
     "target": "Peer 45.166.30.250",
     "message": "🟡 [Huawei BGP] Sessão BGP em Negociação (CONNECT)\nPeer: 45.166.30.250 | Transição: ACTIVE ➔ CONNECT | Evento: CR_TIMER (CR_TIMER)",
     "started_at": "2026-09-22T16:50:33.0539139-03:00",
-    "acknowledged": false,
-    "status": "active"
+    "acknowledged": true,
+    "status": "acknowledged"
   },
   {
     "id": "alt-c9ebd2b5b7e6",
@@ -132,8 +208,8 @@
     "target": "Peer 45.166.30.250",
     "message": "🟡 [Huawei BGP] Sessão BGP em Negociação (CONNECT)\nPeer: 45.166.30.250 | Transição: ACTIVE ➔ CONNECT | Evento: CR_TIMER (CR_TIMER)",
     "started_at": "2026-09-22T16:40:30.919844-03:00",
-    "acknowledged": false,
-    "status": "active"
+    "acknowledged": true,
+    "status": "acknowledged"
   },
   {
     "id": "alt-3e57c55c6c87",
@@ -144,8 +220,8 @@
     "target": "Peer 45.166.30.250",
     "message": "🟡 [Huawei BGP] Sessão BGP em Negociação (CONNECT)\nPeer: 45.166.30.250 | Transição: ACTIVE ➔ CONNECT | Evento: CR_TIMER (CR_TIMER)",
     "started_at": "2026-09-22T16:30:30.8307733-03:00",
-    "acknowledged": false,
-    "status": "active"
+    "acknowledged": true,
+    "status": "acknowledged"
   },
   {
     "id": "alt-7b000ffd187d",
@@ -156,8 +232,8 @@
     "target": "Peer 45.166.30.250",
     "message": "🟡 [Huawei BGP] Sessão BGP em Negociação (CONNECT)\nPeer: 45.166.30.250 | Transição: ACTIVE ➔ CONNECT | Evento: CR_TIMER (CR_TIMER)",
     "started_at": "2026-09-22T16:20:12.7270391-03:00",
-    "acknowledged": false,
-    "status": "active"
+    "acknowledged": true,
+    "status": "acknowledged"
   },
   {
     "id": "alt-4f9ea51107ee",
@@ -168,8 +244,8 @@
     "target": "Peer 45.166.30.250",
     "message": "🟡 [Huawei BGP] Sessão BGP em Negociação (CONNECT)\nPeer: 45.166.30.250 | Transição: ACTIVE ➔ CONNECT | Evento: CR_TIMER (CR_TIMER)",
     "started_at": "2026-09-22T16:10:04.621641-03:00",
-    "acknowledged": false,
-    "status": "active"
+    "acknowledged": true,
+    "status": "acknowledged"
   },
   {
     "id": "alt-6263bbd10fcc",
@@ -180,8 +256,8 @@
     "target": "Peer 45.166.30.250",
     "message": "🟡 [Huawei BGP] Sessão BGP em Negociação (CONNECT)\nPeer: 45.166.30.250 | Transição: ACTIVE ➔ CONNECT | Evento: CR_TIMER (CR_TIMER)",
     "started_at": "2026-09-22T15:59:55.5719115-03:00",
-    "acknowledged": false,
-    "status": "active"
+    "acknowledged": true,
+    "status": "acknowledged"
   },
   {
     "id": "alt-4eb3d5bf57f6",
@@ -192,8 +268,8 @@
     "target": "Peer 45.166.30.250",
     "message": "🟡 [Huawei BGP] Sessão BGP em Negociação (CONNECT)\nPeer: 45.166.30.250 | Transição: ACTIVE ➔ CONNECT | Evento: CR_TIMER (CR_TIMER)",
     "started_at": "2026-09-22T15:49:53.4727389-03:00",
-    "acknowledged": false,
-    "status": "active"
+    "acknowledged": true,
+    "status": "acknowledged"
   },
   {
     "id": "alt-6278673a267c",
@@ -204,8 +280,8 @@
     "target": "Peer 45.166.30.250",
     "message": "🟡 [Huawei BGP] Sessão BGP em Negociação (CONNECT)\nPeer: 45.166.30.250 | Transição: ACTIVE ➔ CONNECT | Evento: CR_TIMER (CR_TIMER)",
     "started_at": "2026-09-22T15:39:44.4319405-03:00",
-    "acknowledged": false,
-    "status": "active"
+    "acknowledged": true,
+    "status": "acknowledged"
   },
   {
     "id": "alt-2b0dca83c144",
@@ -216,8 +292,8 @@
     "target": "Peer 45.166.30.250",
     "message": "🟡 [Huawei BGP] Sessão BGP em Negociação (CONNECT)\nPeer: 45.166.30.250 | Transição: ACTIVE ➔ CONNECT | Evento: CR_TIMER (CR_TIMER)",
     "started_at": "2026-09-22T15:29:42.3485283-03:00",
-    "acknowledged": false,
-    "status": "active"
+    "acknowledged": true,
+    "status": "acknowledged"
   },
   {
     "id": "alt-af432e554a3f",
@@ -228,8 +304,8 @@
     "target": "Peer 45.166.30.250",
     "message": "🟡 [Huawei BGP] Sessão BGP em Negociação (CONNECT)\nPeer: 45.166.30.250 | Transição: ACTIVE ➔ CONNECT | Evento: CR_TIMER (CR_TIMER)",
     "started_at": "2026-09-22T15:19:22.310463-03:00",
-    "acknowledged": false,
-    "status": "active"
+    "acknowledged": true,
+    "status": "acknowledged"
   },
   {
     "id": "alt-54fabcd07068",
@@ -240,8 +316,8 @@
     "target": "Peer 45.166.30.250",
     "message": "🟡 [Huawei BGP] Sessão BGP em Negociação (CONNECT)\nPeer: 45.166.30.250 | Transição: ACTIVE ➔ CONNECT | Evento: CR_TIMER (CR_TIMER)",
     "started_at": "2026-09-22T14:59:14.2160871-03:00",
-    "acknowledged": false,
-    "status": "active"
+    "acknowledged": true,
+    "status": "acknowledged"
   },
   {
     "id": "alt-ff61310df51b",
@@ -252,8 +328,8 @@
     "target": "Peer 45.166.30.250",
     "message": "🟡 [Huawei BGP] Sessão BGP em Negociação (CONNECT)\nPeer: 45.166.30.250 | Transição: ACTIVE ➔ CONNECT | Evento: CR_TIMER (CR_TIMER)",
     "started_at": "2026-09-22T14:48:58.165008-03:00",
-    "acknowledged": false,
-    "status": "active"
+    "acknowledged": true,
+    "status": "acknowledged"
   },
   {
     "id": "alt-be13b5f21469",
@@ -264,8 +340,8 @@
     "target": "Peer 45.166.30.250",
     "message": "🟡 [Huawei BGP] Sessão BGP em Negociação (CONNECT)\nPeer: 45.166.30.250 | Transição: ACTIVE ➔ CONNECT | Evento: CR_TIMER (CR_TIMER)",
     "started_at": "2026-09-22T14:38:40.0356267-03:00",
-    "acknowledged": false,
-    "status": "active"
+    "acknowledged": true,
+    "status": "acknowledged"
   },
   {
     "id": "alt-1a884ee652a3",
@@ -276,8 +352,8 @@
     "target": "Peer 45.166.30.250",
     "message": "🟡 [Huawei BGP] Sessão BGP em Negociação (CONNECT)\nPeer: 45.166.30.250 | Transição: ACTIVE ➔ CONNECT | Evento: CR_TIMER (CR_TIMER)",
     "started_at": "2026-09-22T14:28:17.9514352-03:00",
-    "acknowledged": false,
-    "status": "active"
+    "acknowledged": true,
+    "status": "acknowledged"
   },
   {
     "id": "alt-81861115839d",
@@ -288,8 +364,8 @@
     "target": "Peer 45.166.30.250",
     "message": "🟡 [Huawei BGP] Sessão BGP em Negociação (CONNECT)\nPeer: 45.166.30.250 | Transição: ACTIVE ➔ CONNECT | Evento: CR_TIMER (CR_TIMER)",
     "started_at": "2026-09-22T14:18:04.0244124-03:00",
-    "acknowledged": false,
-    "status": "active"
+    "acknowledged": true,
+    "status": "acknowledged"
   },
   {
     "id": "alt-d847e98af73a",
@@ -300,8 +376,8 @@
     "target": "Peer 45.166.30.250",
     "message": "🟡 [Huawei BGP] Sessão BGP em Negociação (CONNECT)\nPeer: 45.166.30.250 | Transição: ACTIVE ➔ CONNECT | Evento: CR_TIMER (CR_TIMER)",
     "started_at": "2026-09-22T14:07:52.8757874-03:00",
-    "acknowledged": false,
-    "status": "active"
+    "acknowledged": true,
+    "status": "acknowledged"
   },
   {
     "id": "alt-f3e7ec59ab70",
@@ -312,8 +388,8 @@
     "target": "Peer 45.166.30.250",
     "message": "🟡 [Huawei BGP] Sessão BGP em Negociação (CONNECT)\nPeer: 45.166.30.250 | Transição: ACTIVE ➔ CONNECT | Evento: CR_TIMER (CR_TIMER)",
     "started_at": "2026-09-22T13:57:27.7915521-03:00",
-    "acknowledged": false,
-    "status": "active"
+    "acknowledged": true,
+    "status": "acknowledged"
   },
   {
     "id": "alt-923ad3e13330",
@@ -324,8 +400,8 @@
     "target": "Peer 45.166.30.250",
     "message": "🟡 [Huawei BGP] Sessão BGP em Negociação (CONNECT)\nPeer: 45.166.30.250 | Transição: ACTIVE ➔ CONNECT | Evento: CR_TIMER (CR_TIMER)",
     "started_at": "2026-09-22T13:47:16.7601281-03:00",
-    "acknowledged": false,
-    "status": "active"
+    "acknowledged": true,
+    "status": "acknowledged"
   },
   {
     "id": "alt-b3a3a4be2e71",
@@ -336,8 +412,8 @@
     "target": "Peer 45.166.30.250",
     "message": "🟡 [Huawei BGP] Sessão BGP em Negociação (CONNECT)\nPeer: 45.166.30.250 | Transição: ACTIVE ➔ CONNECT | Evento: CR_TIMER (CR_TIMER)",
     "started_at": "2026-09-22T13:36:56.7193566-03:00",
-    "acknowledged": false,
-    "status": "active"
+    "acknowledged": true,
+    "status": "acknowledged"
   },
   {
     "id": "alt-ca63eaef47fb",
@@ -348,8 +424,8 @@
     "target": "Peer 45.166.30.250",
     "message": "🟡 [Huawei BGP] Sessão BGP em Negociação (CONNECT)\nPeer: 45.166.30.250 | Transição: ACTIVE ➔ CONNECT | Evento: CR_TIMER (CR_TIMER)",
     "started_at": "2026-09-22T13:26:29.609504-03:00",
-    "acknowledged": false,
-    "status": "active"
+    "acknowledged": true,
+    "status": "acknowledged"
   },
   {
     "id": "alt-413ec1db11f3",
@@ -360,8 +436,8 @@
     "target": "Peer 45.166.30.250",
     "message": "🟡 [Huawei BGP] Sessão BGP em Negociação (CONNECT)\nPeer: 45.166.30.250 | Transição: ACTIVE ➔ CONNECT | Evento: CR_TIMER (CR_TIMER)",
     "started_at": "2026-09-22T13:16:15.4974628-03:00",
-    "acknowledged": false,
-    "status": "active"
+    "acknowledged": true,
+    "status": "acknowledged"
   },
   {
     "id": "alt-dfdb81dea52c",
@@ -372,8 +448,8 @@
     "target": "Peer 45.166.30.250",
     "message": "🟡 [Huawei BGP] Sessão BGP em Negociação (CONNECT)\nPeer: 45.166.30.250 | Transição: ACTIVE ➔ CONNECT | Evento: CR_TIMER (CR_TIMER)",
     "started_at": "2026-09-22T13:06:11.4155726-03:00",
-    "acknowledged": false,
-    "status": "active"
+    "acknowledged": true,
+    "status": "acknowledged"
   },
   {
     "id": "alt-b4510a6d292e",
@@ -384,8 +460,8 @@
     "target": "Peer 45.166.30.250",
     "message": "🟡 [Huawei BGP] Sessão BGP em Negociação (CONNECT)\nPeer: 45.166.30.250 | Transição: ACTIVE ➔ CONNECT | Evento: CR_TIMER (CR_TIMER)",
     "started_at": "2026-09-22T12:55:55.3271873-03:00",
-    "acknowledged": false,
-    "status": "active"
+    "acknowledged": true,
+    "status": "acknowledged"
   },
   {
     "id": "alt-25321191e9f0",
@@ -396,8 +472,8 @@
     "target": "Peer 45.166.30.250",
     "message": "🟡 [Huawei BGP] Sessão BGP em Negociação (CONNECT)\nPeer: 45.166.30.250 | Transição: ACTIVE ➔ CONNECT | Evento: CR_TIMER (CR_TIMER)",
     "started_at": "2026-09-22T12:45:41.2475579-03:00",
-    "acknowledged": false,
-    "status": "active"
+    "acknowledged": true,
+    "status": "acknowledged"
   },
   {
     "id": "alt-edbc1471b354",
@@ -408,8 +484,8 @@
     "target": "Peer 45.166.30.250",
     "message": "🟡 [Huawei BGP] Sessão BGP em Negociação (CONNECT)\nPeer: 45.166.30.250 | Transição: ACTIVE ➔ CONNECT | Evento: CR_TIMER (CR_TIMER)",
     "started_at": "2026-09-22T12:35:35.1825717-03:00",
-    "acknowledged": false,
-    "status": "active"
+    "acknowledged": true,
+    "status": "acknowledged"
   },
   {
     "id": "alt-8801b4b147ce",
@@ -420,8 +496,8 @@
     "target": "Peer 45.166.30.250",
     "message": "🟡 [Huawei BGP] Sessão BGP em Negociação (CONNECT)\nPeer: 45.166.30.250 | Transição: ACTIVE ➔ CONNECT | Evento: CR_TIMER (CR_TIMER)",
     "started_at": "2026-09-22T12:25:33.114997-03:00",
-    "acknowledged": false,
-    "status": "active"
+    "acknowledged": true,
+    "status": "acknowledged"
   },
   {
     "id": "alt-7ebc64e203c8",
@@ -432,8 +508,8 @@
     "target": "Peer 45.166.30.250",
     "message": "🟡 [Huawei BGP] Sessão BGP em Negociação (CONNECT)\nPeer: 45.166.30.250 | Transição: ACTIVE ➔ CONNECT | Evento: CR_TIMER (CR_TIMER)",
     "started_at": "2026-09-22T12:15:17.0348082-03:00",
-    "acknowledged": false,
-    "status": "active"
+    "acknowledged": true,
+    "status": "acknowledged"
   },
   {
     "id": "alt-5665c09aa080",
@@ -444,8 +520,8 @@
     "target": "Peer 45.166.30.250",
     "message": "🟡 [Huawei BGP] Sessão BGP em Negociação (CONNECT)\nPeer: 45.166.30.250 | Transição: ACTIVE ➔ CONNECT | Evento: CR_TIMER (CR_TIMER)",
     "started_at": "2026-09-22T12:05:03.9931635-03:00",
-    "acknowledged": false,
-    "status": "active"
+    "acknowledged": true,
+    "status": "acknowledged"
   },
   {
     "id": "alt-8e14f0203502",
@@ -456,8 +532,8 @@
     "target": "Peer 45.166.30.250",
     "message": "🟡 [Huawei BGP] Sessão BGP em Negociação (CONNECT)\nPeer: 45.166.30.250 | Transição: ACTIVE ➔ CONNECT | Evento: CR_TIMER (CR_TIMER)",
     "started_at": "2026-09-22T11:55:03.9488148-03:00",
-    "acknowledged": false,
-    "status": "active"
+    "acknowledged": true,
+    "status": "acknowledged"
   },
   {
     "id": "alt-f8cd3c5bdfd7",
@@ -468,8 +544,8 @@
     "target": "Peer 45.68.79.253",
     "message": "🟢 [Huawei BGP] Sessão BGP Estabelecida (ESTABLISHED)\nPeer: 45.68.79.253 | Transição: OPENCONFIRM ➔ ESTABLISHED | Evento: Keepalive recebido (RECV_KA)",
     "started_at": "2026-09-22T11:16:48.9000393-03:00",
-    "acknowledged": false,
-    "status": "active"
+    "acknowledged": true,
+    "status": "acknowledged"
   },
   {
     "id": "alt-2bcd540e44e6",
@@ -480,8 +556,8 @@
     "target": "Peer 45.68.79.254",
     "message": "🟢 [Huawei BGP] Sessão BGP Estabelecida (ESTABLISHED)\nPeer: 45.68.79.254 | Transição: OPENCONFIRM ➔ ESTABLISHED | Evento: Keepalive recebido (RECV_KA)",
     "started_at": "2026-09-22T11:16:46.9022978-03:00",
-    "acknowledged": false,
-    "status": "active"
+    "acknowledged": true,
+    "status": "acknowledged"
   },
   {
     "id": "alt-b3d24f98c9b9",
@@ -505,8 +581,8 @@
     "target": "Peer 45.68.79.254",
     "message": "🔴 [Huawei BGP] Queda de Sessão BGP (DOWN/IDLE)!\nPeer: 45.68.79.254 | Transição: ESTABLISHED ➔ IDLE | Causa: Falha de conexão TCP (TCP_FAIL)",
     "started_at": "2026-09-22T11:15:58.8004056-03:00",
-    "acknowledged": false,
-    "status": "active"
+    "acknowledged": true,
+    "status": "acknowledged"
   },
   {
     "id": "alt-480b630dcaf2",
@@ -517,8 +593,8 @@
     "target": "Peer 45.184.145.254 (AS 26162)",
     "message": "Sessão BGP com 45.184.145.254 (AS 26162) caiu no roteador BGP. Estado: Idle",
     "started_at": "2026-09-21T11:31:29.0949815-03:00",
-    "acknowledged": false,
-    "status": "active"
+    "acknowledged": true,
+    "status": "acknowledged"
   },
   {
     "id": "alt-64562fa78c13",
@@ -529,8 +605,8 @@
     "target": "Peer 45.184.145.253 (AS 26162)",
     "message": "Sessão BGP com 45.184.145.253 (AS 26162) caiu no roteador BGP. Estado: Idle",
     "started_at": "2026-09-21T11:31:29.0914984-03:00",
-    "acknowledged": false,
-    "status": "active"
+    "acknowledged": true,
+    "status": "acknowledged"
   },
   {
     "id": "alt-31685a81f05b",
@@ -541,7 +617,7 @@
     "target": "Peer 45.166.30.250 (AS 267943)",
     "message": "Sessão BGP com 45.166.30.250 (AS 267943) caiu no roteador BGP. Estado: Active",
     "started_at": "2026-09-21T11:31:29.087015-03:00",
-    "acknowledged": false,
-    "status": "active"
+    "acknowledged": true,
+    "status": "acknowledged"
   }
 ]

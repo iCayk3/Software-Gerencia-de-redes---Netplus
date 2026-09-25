@@ -149,10 +149,16 @@ type BGPSession struct {
 	LocalAS          string `json:"local_as,omitempty"`
 	State            string `json:"state"` // "Established", "Active", "Idle", "Connect", "OpenSent", etc.
 	Uptime           string `json:"uptime"`
-	PrefixesReceived int    `json:"prefixes_received"`
-	PrefixesSent     int    `json:"prefixes_sent,omitempty"`
-	Description      string `json:"description,omitempty"`
-	RawOutput        string `json:"raw_output,omitempty"`
+	PrefixesReceived   int    `json:"prefixes_received"`
+	PrefixesSent       int    `json:"prefixes_sent,omitempty"`
+	Description        string `json:"description,omitempty"`
+	RawOutput          string `json:"raw_output,omitempty"`
+	TelemetrySource    string `json:"telemetry_source,omitempty"`    // "bmp" or "ssh"
+	PrePolicyPrefixes  int    `json:"pre_policy_prefixes,omitempty"`
+	PostPolicyPrefixes int    `json:"post_policy_prefixes,omitempty"`
+	RejectedPrefixes   int    `json:"rejected_prefixes,omitempty"`
+	RouterID           string `json:"router_id,omitempty"`
+	LastUpdate         string `json:"last_update,omitempty"`
 }
 
 // OSPFNeighbor represents a normalized OSPF adjacency.

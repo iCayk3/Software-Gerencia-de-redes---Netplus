@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"testing"
 	"time"
 
@@ -13,6 +14,11 @@ import (
 )
 
 func TestAuthAndRBAC(t *testing.T) {
+	_ = os.Remove("test_users.json")
+	_ = os.Remove("test_audit.json")
+	defer os.Remove("test_users.json")
+	defer os.Remove("test_audit.json")
+
 	// Initialize memory stores
 	userStore := storage.NewMemoryUserStore("test_users.json")
 	auditStore := storage.NewMemoryAuditStore("test_audit.json")
@@ -101,6 +107,9 @@ func TestAuthAndRBAC(t *testing.T) {
 }
 
 func TestAuditTrailRecording(t *testing.T) {
+	_ = os.Remove("test_audit_trail.json")
+	defer os.Remove("test_audit_trail.json")
+
 	auditStore := storage.NewMemoryAuditStore("test_audit_trail.json")
 
 	entry := &models.AuditLog{

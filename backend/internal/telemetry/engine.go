@@ -8,6 +8,7 @@ import (
 
 	"network-software/internal/models"
 	"network-software/internal/storage"
+	"network-software/internal/telemetry/bmp"
 )
 
 // Engine coordinates the collector, detector, syslog server, alerts store and SSE broadcaster.
@@ -18,6 +19,7 @@ type Engine struct {
 	detector     *Detector
 	collector    *Collector
 	syslogServer *SyslogServer
+	bmpServer    *bmp.Server
 
 	mu                  sync.RWMutex
 	running             bool
@@ -28,7 +30,7 @@ type Engine struct {
 }
 
 // NewEngine constructs and wires the telemetry system.
-func NewEngine(store *storage.DeviceStore, dataDir string, syslogPort int, pollIntervalSec int) (*Engine, error) {
+func NewEngine(store *storage.DeviceStore, dataDir string, syslogPort int, bmpPort int, pollIntervalSec int) (*Engine, error) {
 	if pollIntervalSec <= 0 {
 		pollIntervalSec = 45 // 45 seconds default
 	}
@@ -40,7 +42,28 @@ func NewEngine(store *storage.DeviceStore, dataDir string, syslogPort int, pollI
 
 	broadcaster := NewBroadcaster()
 	detector := NewDetector(alertStore, broadcaster)
-	collector := NewCollector(store, alertStore, detector, broadcaster)
+
+	bmpServer := bmp.NewServer(bmpPort, store)
+
+	// Wire BMP event hooks directly into anomaly detection & live SSE broadcasting
+	bmpServer.SetHooks(
+		// OnPeerUp:
+		func(event bmp.BMPEvent) {
+			detector.HandleBMPPeerUp(event.DeviceID, event.RouterName, event.PeerIP, event.RemoteAS)
+			broadcaster.Broadcast("bmp_event", event)
+		},
+		// OnPeerDown:
+		func(event bmp.BMPEvent) {
+			detector.HandleBMPPeerDown(event.DeviceID, event.RouterName, event.PeerIP, event.RemoteAS, event.Reason)
+			broadcaster.Broadcast("bmp_event", event)
+		},
+		// OnRouteChange:
+		func(event bmp.BMPEvent) {
+			broadcaster.Broadcast("bmp_event", event)
+		},
+	)
+
+	collector := NewCollector(store, alertStore, detector, broadcaster, bmpServer)
 	syslogServer := NewSyslogServer(syslogPort, store, detector)
 
 	return &Engine{
@@ -50,6 +73,7 @@ func NewEngine(store *storage.DeviceStore, dataDir string, syslogPort int, pollI
 		detector:            detector,
 		collector:           collector,
 		syslogServer:        syslogServer,
+		bmpServer:           bmpServer,
 		pollIntervalSeconds: pollIntervalSec,
 		manualTrigger:       make(chan struct{}, 1),
 	}, nil
@@ -73,7 +97,12 @@ func (e *Engine) Start() {
 		log.Printf("[Telemetry] Warning: Could not start Syslog UDP server: %v", err)
 	}
 
-	// 2. Start Polling Loop in background
+	// 2. Start BMP Universal Collector (RFC 7854, non-blocking)
+	if err := e.bmpServer.Start(); err != nil {
+		log.Printf("[Telemetry] Warning: Could not start BMP TCP server: %v", err)
+	}
+
+	// 3. Start Polling Loop in background
 	go e.loop(ctx)
 }
 
@@ -90,6 +119,7 @@ func (e *Engine) Stop() {
 		e.cancelFunc()
 	}
 	e.syslogServer.Stop()
+	e.bmpServer.Stop()
 	e.running = false
 }
 
@@ -146,6 +176,8 @@ func (e *Engine) GetStatus() models.TelemetryEngineStatus {
 		nextTime = &nt
 	}
 
+	bmpStat := e.bmpServer.GetStatus()
+
 	return models.TelemetryEngineStatus{
 		Running:             e.running,
 		PollIntervalSeconds: e.pollIntervalSeconds,
@@ -155,6 +187,10 @@ func (e *Engine) GetStatus() models.TelemetryEngineStatus {
 		ActiveAlertsCount:   len(e.alertStore.GetActiveAlerts()),
 		SyslogPort:          e.syslogServer.Port(),
 		SyslogActive:        e.syslogServer.IsRunning(),
+		BMPPort:             bmpStat.Port,
+		BMPActive:           bmpStat.Running,
+		BMPConnectedRouters: bmpStat.ConnectedRouters,
+		BMPTotalPeers:       bmpStat.TotalPeersMonitored,
 	}
 }
 
@@ -171,6 +207,11 @@ func (e *Engine) GetCollector() *Collector {
 // GetBroadcaster exposes the SSE broadcaster.
 func (e *Engine) GetBroadcaster() *Broadcaster {
 	return e.broadcaster
+}
+
+// GetBMPServer exposes the underlying BMP Server.
+func (e *Engine) GetBMPServer() *bmp.Server {
+	return e.bmpServer
 }
 
 // GetOverview returns aggregate stats.

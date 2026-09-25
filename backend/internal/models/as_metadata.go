@@ -70,3 +70,21 @@ type BGPImportPolicyInfo struct {
 	LocalPref  int    `json:"local_pref"`
 }
 
+// PeerMetadata defines custom per-session description and labels.
+type PeerMetadata struct {
+	Key         string    `json:"key"` // e.g. "device_id:peer_ip" or "peer_ip"
+	DeviceID    string    `json:"device_id,omitempty"`
+	PeerIP      string    `json:"peer_ip"`
+	RemoteAS    string    `json:"remote_as,omitempty"`
+	Description string    `json:"description"`
+	UpdatedAt   time.Time `json:"updated_at"`
+}
+
+// PeerMetadataUpdateRequest is the payload to update custom description for an individual session.
+type PeerMetadataUpdateRequest struct {
+	DeviceID    string `json:"device_id,omitempty"`
+	PeerIP      string `json:"peer_ip"`
+	RemoteAS    string `json:"remote_as,omitempty"`
+	Description string `json:"description"`
+}
+
