@@ -52,6 +52,7 @@ type RPKISummary struct {
 	RecentInvalids   []RPKIValidationResult `json:"recent_invalids"`
 	OwnASProtected   bool                   `json:"own_as_protected"`
 	OwnPrefixesCount int                    `json:"own_prefixes_count"`
+	OwnASN           string                 `json:"own_asn,omitempty"`
 	LastUpdated      time.Time              `json:"last_updated"`
 }
 

@@ -1,5 +1,17 @@
 [
   {
+    "id": "alt-e13fe0720f09",
+    "device_id": "738398e45a892540",
+    "device_name": "BGP2 [BGP-RT.02.PA.PMVR.01] (45.166.28.249)",
+    "type": "syslog_event",
+    "severity": "critical",
+    "target": "Peer 10.12.199.137",
+    "message": "🔴 [Huawei BGP] Queda de Sessão BGP (DOWN/IDLE)\nPeer: 10.12.199.137 | Transição: ESTABLISHED ➔ IDLE | Evento: Falha na conexão TCP (Enlace ou Roteador Inacessível) (TCP_FAIL)",
+    "started_at": "2026-09-25T16:38:53.9999537-03:00",
+    "acknowledged": true,
+    "status": "acknowledged"
+  },
+  {
     "id": "alt-f6b404ce61e6",
     "device_id": "738398e45a892540",
     "device_name": "BGP2 [BGP-RT.02.PA.PMVR.01] (45.166.28.249)",

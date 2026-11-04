@@ -8,9 +8,11 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"time"
 
+	"network-software/internal/crypto"
 	"network-software/internal/models"
 )
 
@@ -59,19 +61,49 @@ func (s *DeviceStore) load() error {
 	}
 
 	s.devices = make(map[string]models.Device)
+	key := crypto.GetEncryptionKey()
+	hadPlaintext := false
+
 	for _, d := range list {
 		if d.TenantID == "" {
 			d.TenantID = "default-tenant"
 		}
+		if d.Password != "" && !strings.HasPrefix(d.Password, crypto.PrefixV1) {
+			hadPlaintext = true
+		}
+		if d.Password != "" {
+			if plain, err := crypto.Decrypt(d.Password, key); err == nil {
+				d.Password = plain
+			}
+		}
 		s.devices[d.ID] = d
 	}
+
+	// Auto-migrate plaintext passwords to encrypted on disk immediately
+	if hadPlaintext {
+		_ = s.saveLocked()
+	}
+
 	return nil
 }
 
 func (s *DeviceStore) save() error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.saveLocked()
+}
+
+func (s *DeviceStore) saveLocked() error {
+	key := crypto.GetEncryptionKey()
 	list := make([]models.Device, 0, len(s.devices))
 	for _, d := range s.devices {
-		list = append(list, d)
+		dCopy := d
+		if dCopy.Password != "" {
+			if enc, err := crypto.Encrypt(dCopy.Password, key); err == nil {
+				dCopy.Password = enc
+			}
+		}
+		list = append(list, dCopy)
 	}
 
 	data, err := json.MarshalIndent(list, "", "  ")
@@ -175,7 +207,7 @@ func (s *DeviceStore) Create(d models.Device) (*models.Device, error) {
 	d.CreatedAt = time.Now()
 
 	s.devices[d.ID] = d
-	if err := s.save(); err != nil {
+	if err := s.saveLocked(); err != nil {
 		return nil, err
 	}
 	return &d, nil
@@ -205,7 +237,7 @@ func (s *DeviceStore) Update(d models.Device) error {
 	d.LastSeen = existing.LastSeen
 
 	s.devices[d.ID] = d
-	return s.save()
+	return s.saveLocked()
 }
 
 // Delete removes a device by ID.
@@ -217,7 +249,7 @@ func (s *DeviceStore) Delete(id string) error {
 		return ErrDeviceNotFound
 	}
 	delete(s.devices, id)
-	return s.save()
+	return s.saveLocked()
 }
 
 // UpdateStatus updates the online/offline status and last seen timestamp.
@@ -230,6 +262,6 @@ func (s *DeviceStore) UpdateStatus(id string, status string) {
 		d.Status = status
 		d.LastSeen = &now
 		s.devices[id] = d
-		_ = s.save()
+		_ = s.saveLocked()
 	}
 }

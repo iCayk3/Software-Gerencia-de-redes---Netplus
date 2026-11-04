@@ -13,12 +13,13 @@ import {
   LogOut,
   Building2,
   Users,
+  KeyRound,
   X
 } from 'lucide-react'
 import type { HealthResponse } from '../services/api'
 import { useAuth } from '../context/AuthContext'
 
-export type MainSectionType = 'traffic' | 'devices' | 'telemetry' | 'diagnostics' | 'audit' | 'tenants' | 'users'
+export type MainSectionType = 'bgp' | 'ospf' | 'devices' | 'telemetry' | 'diagnostics' | 'audit' | 'tenants' | 'users' | 'traffic' | 'license'
 
 interface NavSectionItem {
   id: MainSectionType
@@ -57,12 +58,20 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
   const navSections: NavSectionItem[] = [
     {
-      id: 'traffic',
-      label: 'Engenharia de Tráfego',
-      shortLabel: 'Tráfego & BGP',
-      description: 'Prepends, Local-Pref, BGP & OSPF',
+      id: 'bgp',
+      label: 'Protocolo BGP',
+      shortLabel: 'BGP',
+      description: 'Engenharia de tráfego, sessões, churn & RPKI',
       icon: ArrowUpDown,
       defaultSubTab: 'download',
+    },
+    {
+      id: 'ospf',
+      label: 'Protocolo OSPF',
+      shortLabel: 'OSPF',
+      description: 'Adjacências, áreas, topologia & CLI',
+      icon: Network,
+      defaultSubTab: 'neighbors',
     },
     {
       id: 'devices',
@@ -96,6 +105,14 @@ export const Sidebar: React.FC<SidebarProps> = ({
       description: 'Logs imutáveis de ações e comandos',
       icon: ShieldCheck,
       defaultSubTab: 'logs',
+    },
+    {
+      id: 'license',
+      label: 'Licença & Sistema',
+      shortLabel: 'Licença',
+      description: 'Plano, capacidades e servidor master',
+      icon: KeyRound,
+      defaultSubTab: 'overview',
     },
     ...(isSuperAdmin ? [{
       id: 'tenants' as MainSectionType,

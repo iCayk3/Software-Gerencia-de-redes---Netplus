@@ -1,15 +1,20 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"log"
 	"net/http"
 	"os"
+	"os/signal"
 	"path/filepath"
 	"strconv"
+	"syscall"
+	"time"
 
 	"network-software/internal/api"
 	"network-software/internal/database"
+	"network-software/internal/sshclient"
 	"network-software/internal/storage"
 	"network-software/internal/storage/postgres"
 	"network-software/internal/telemetry"
@@ -89,6 +94,14 @@ func main() {
 	router := api.NewRouter(store, asMetaStore, telEngine, dataDir, tenantStore, userStore, auditStore)
 	addr := fmt.Sprintf(":%s", port)
 
+	server := &http.Server{
+		Addr:         addr,
+		Handler:      router,
+		ReadTimeout:  30 * time.Second,
+		WriteTimeout: 60 * time.Second,
+		IdleTimeout:  120 * time.Second,
+	}
+
 	log.Printf("==================================================")
 	log.Printf("   NetPulse - BGP & OSPF Routing Manager (Go)     ")
 	log.Printf("   Vendors: Huawei (NE/CloudEngine), Datacom DmOS,")
@@ -100,7 +113,33 @@ func main() {
 	log.Printf("   BMP Collector:    TCP Port %d (RFC 7854 Active)", bmpPort)
 	log.Printf("==================================================")
 
-	if err := http.ListenAndServe(addr, router); err != nil {
-		log.Fatalf("Server stopped unexpectedly: %v", err)
+	// Channel to capture termination signals (Ctrl+C, SIGTERM, Docker stop)
+	stopChan := make(chan os.Signal, 1)
+	signal.Notify(stopChan, os.Interrupt, syscall.SIGTERM)
+
+	go func() {
+		if err := server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+			log.Fatalf("Server stopped unexpectedly: %v", err)
+		}
+	}()
+
+	<-stopChan
+	log.Printf("[Shutdown] 🛑 Sinal de encerramento recebido. Desligando graciosamente...")
+
+	shutdownCtx, cancel := context.WithTimeout(context.Background(), 8*time.Second)
+	defer cancel()
+
+	if err := server.Shutdown(shutdownCtx); err != nil {
+		log.Printf("[Shutdown] ⚠️ Erro durante encerramento do HTTP Server: %v", err)
 	}
+
+	sshclient.CloseAllPools()
+	log.Printf("[Shutdown] 🔌 Conexões SSH do pool encerradas.")
+
+	if db != nil {
+		_ = db.Close()
+		log.Printf("[Shutdown] 🐘 Conexão com PostgreSQL encerrada.")
+	}
+
+	log.Printf("[Shutdown] ✅ NetPulse encerrado com segurança.")
 }

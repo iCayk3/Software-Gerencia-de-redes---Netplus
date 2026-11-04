@@ -30,6 +30,15 @@ func PingHost(host string, timeoutMs int, port int) models.PingResponse {
 		}
 	}
 
+	// Security: Sanitize host input to prevent flag injection (e.g. "-t", "-f") or escape characters
+	if strings.HasPrefix(trimmedHost, "-") || strings.ContainsAny(trimmedHost, " ;&|<>$`\r\n\"'\\") {
+		return models.PingResponse{
+			Host:    host,
+			Success: false,
+			Message: "Host inválido ou caracteres inseguros detectados",
+		}
+	}
+
 	// Resolve IP if possible
 	resolvedIP := ""
 	ips, err := net.LookupIP(trimmedHost)

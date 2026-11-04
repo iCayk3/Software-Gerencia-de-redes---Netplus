@@ -50,7 +50,7 @@ func (s *MemoryTenantStore) loadOrSeed() {
 		}
 	}
 
-	// Default seed companies
+	// Default seed company
 	defaultTenants := []models.Tenant{
 		{
 			ID:           "default-tenant",
@@ -58,35 +58,11 @@ func (s *MemoryTenantStore) loadOrSeed() {
 			Slug:         "netplus",
 			ASN:          "267943",
 			Document:     "00.000.000/0001-00",
-			ContactEmail: "noc@netplus.com.br",
-			ContactPhone: "+55 (11) 3000-0000",
+			ContactEmail: "noc@netpulse.com",
+			ContactPhone: "+55 11 3000-0000",
 			Plan:         "enterprise",
 			Status:       "active",
 			CreatedAt:    time.Now().Add(-30 * 24 * time.Hour),
-		},
-		{
-			ID:           "tenant-alpha",
-			Name:         "Alpha Fibra Internet (Cliente)",
-			Slug:         "alpha-fibra",
-			ASN:          "26162",
-			Document:     "12.345.678/0001-90",
-			ContactEmail: "noc@alphafibra.com.br",
-			ContactPhone: "+55 (11) 4000-1122",
-			Plan:         "enterprise",
-			Status:       "active",
-			CreatedAt:    time.Now().Add(-10 * 24 * time.Hour),
-		},
-		{
-			ID:           "tenant-beta",
-			Name:         "Beta Telecom Conectividade (Cliente)",
-			Slug:         "beta-telecom",
-			ASN:          "266445",
-			Document:     "98.765.432/0001-10",
-			ContactEmail: "noc@betatelecom.com.br",
-			ContactPhone: "+55 (61) 3200-9988",
-			Plan:         "pro",
-			Status:       "active",
-			CreatedAt:    time.Now().Add(-5 * 24 * time.Hour),
 		},
 	}
 

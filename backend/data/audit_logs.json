@@ -1,5 +1,53 @@
 [
   {
+    "id": "aud-78f21a253bc82f7da0c7ad81d894bbe8",
+    "tenant_id": "default-tenant",
+    "timestamp": "2026-09-28T17:54:44.6092236-03:00",
+    "user_id": "usr-4f50793813f4d443",
+    "user_name": "Administrador Geral",
+    "user_email": "admin@netpulse.com",
+    "client_ip": "[::1]:62597",
+    "action": "USER_LOGIN",
+    "command_executed": "Usuário efetuou login no console (Tenant: default-tenant)",
+    "status": "SUCCESS"
+  },
+  {
+    "id": "aud-9531fcbea69df882c1adbdee423a686f",
+    "tenant_id": "default-tenant",
+    "timestamp": "2026-09-28T14:57:10.5802094-03:00",
+    "user_id": "usr-4f50793813f4d443",
+    "user_name": "Administrador Geral",
+    "user_email": "admin@netpulse.com",
+    "client_ip": "[::1]:54576",
+    "action": "USER_LOGIN",
+    "command_executed": "Usuário efetuou login no console (Tenant: default-tenant)",
+    "status": "SUCCESS"
+  },
+  {
+    "id": "aud-9760528bec79e661d3cf121a1fbcceb9",
+    "tenant_id": "default-tenant",
+    "timestamp": "2026-09-28T14:56:40.1673793-03:00",
+    "user_id": "usr-4f50793813f4d443",
+    "user_name": "Administrador Geral",
+    "user_email": "admin@netpulse.com",
+    "client_ip": "[::1]:55161",
+    "action": "USER_LOGIN",
+    "command_executed": "Usuário efetuou login no console (Tenant: default-tenant)",
+    "status": "SUCCESS"
+  },
+  {
+    "id": "aud-4dc385922e06bc5fdc1b8d48fb2029ec",
+    "tenant_id": "default-tenant",
+    "timestamp": "2026-09-28T11:43:26.2088369-03:00",
+    "user_id": "usr-4f50793813f4d443",
+    "user_name": "Administrador Geral",
+    "user_email": "admin@netpulse.com",
+    "client_ip": "[::1]:57512",
+    "action": "USER_LOGIN",
+    "command_executed": "Usuário efetuou login no console (Tenant: default-tenant)",
+    "status": "SUCCESS"
+  },
+  {
     "id": "aud-6359b25e6d3a5bfda743fff3f8eb430b",
     "tenant_id": "default-tenant",
     "timestamp": "2026-09-25T15:34:32.3444712-03:00",

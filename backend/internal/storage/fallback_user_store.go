@@ -84,7 +84,7 @@ func (s *MemoryUserStore) loadOrSeed() {
 		}
 	}
 
-	// Seed default demonstration users across tenants
+	// Seed default users for default tenant
 	defaultUsers := []struct {
 		Name         string
 		Email        string
@@ -96,9 +96,6 @@ func (s *MemoryUserStore) loadOrSeed() {
 		{"Administrador Geral (Netplus)", "admin@netpulse.com", "admin123", models.RoleAdmin, "default-tenant", true},
 		{"Operador NOC (Netplus)", "operador@netpulse.com", "operador123", models.RoleNOCOperator, "default-tenant", false},
 		{"Diretoria (Netplus)", "diretoria@netpulse.com", "diretoria123", models.RoleViewer, "default-tenant", false},
-		{"Admin Alpha Fibra (Cliente)", "admin@alphafibra.com.br", "alpha123", models.RoleAdmin, "tenant-alpha", false},
-		{"Operador BGP Alpha (Cliente)", "operador@alphafibra.com.br", "operador123", models.RoleNOCOperator, "tenant-alpha", false},
-		{"Operador NOC Beta (Cliente)", "noc@betatelecom.com.br", "beta123", models.RoleNOCOperator, "tenant-beta", false},
 	}
 
 	for _, d := range defaultUsers {

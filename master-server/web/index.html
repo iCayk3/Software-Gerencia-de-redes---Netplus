@@ -1,0 +1,346 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>NetPulse Central Master - Gestão de Licenças & Frota</title>
+  <!-- Tailwind CSS via CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- Lucide Icons -->
+  <script src="https://unpkg.com/lucide@latest"></script>
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          colors: {
+            brand: {
+              50: '#ecfeff',
+              400: '#22d3ee',
+              500: '#06b6d4',
+              600: '#0891b2',
+              900: '#164e63',
+              950: '#083344',
+            }
+          }
+        }
+      }
+    }
+  </script>
+  <style>
+    body { background-color: #0b0f19; font-family: system-ui, -apple-system, sans-serif; }
+    .glass { background: rgba(15, 23, 42, 0.85); backdrop-filter: blur(12px); border: 1px solid rgba(51, 65, 85, 0.6); }
+    .glass-card { background: rgba(30, 41, 59, 0.5); backdrop-filter: blur(8px); border: 1px solid rgba(51, 65, 85, 0.5); }
+  </style>
+</head>
+<body class="text-slate-200 min-h-screen flex flex-col antialiased select-none">
+
+  <!-- ======================= 1. TELA DE LOGIN ======================= -->
+  <div id="login-section" class="flex-1 flex items-center justify-center p-4">
+    <div class="glass max-w-md w-full rounded-3xl p-8 shadow-2xl space-y-6">
+      <div class="text-center space-y-2">
+        <div class="h-14 w-14 rounded-2xl bg-gradient-to-tr from-cyan-500 via-blue-600 to-indigo-600 mx-auto flex items-center justify-center shadow-lg shadow-cyan-500/25">
+          <i data-lucide="key-round" class="h-7 w-7 text-white"></i>
+        </div>
+        <h1 class="text-2xl font-extrabold text-white tracking-tight">NetPulse Master</h1>
+        <p class="text-xs text-slate-400">Servidor Central de Licenciamento & Monitoramento de Frota</p>
+      </div>
+
+      <form id="login-form" class="space-y-4">
+        <div>
+          <label class="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-1.5">Senha Mestre de Acesso</label>
+          <input
+            type="password"
+            id="password-input"
+            required
+            placeholder="Digite a senha MASTER_ADMIN_PASSWORD"
+            class="w-full bg-slate-950 border border-slate-700 rounded-xl px-4 py-3 text-sm text-slate-100 placeholder:text-slate-600 focus:outline-none focus:border-cyan-500 transition font-mono"
+          />
+        </div>
+
+        <div id="login-error" class="hidden p-3 rounded-xl bg-rose-950/60 border border-rose-800 text-rose-300 text-xs flex items-center gap-2">
+          <i data-lucide="alert-circle" class="h-4 w-4 shrink-0"></i>
+          <span id="login-error-msg">Senha inválida</span>
+        </div>
+
+        <button
+          type="submit"
+          id="login-btn"
+          class="w-full py-3 rounded-xl bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-500 hover:to-blue-500 text-white font-semibold text-sm shadow-lg shadow-cyan-600/25 transition flex items-center justify-center gap-2"
+        >
+          <i data-lucide="lock" class="h-4 w-4"></i>
+          <span>Entrar no Painel Master</span>
+        </button>
+      </form>
+    </div>
+  </div>
+
+  <!-- ======================= 2. DASHBOARD PRINCIPAL ======================= -->
+  <div id="dashboard-section" class="hidden flex-1 flex flex-col">
+    <!-- Top Header -->
+    <header class="glass sticky top-0 z-30 border-b border-slate-800/80 px-4 sm:px-8 py-3.5">
+      <div class="max-w-7xl mx-auto flex items-center justify-between gap-4">
+        <div class="flex items-center gap-3">
+          <div class="h-9 w-9 rounded-xl bg-gradient-to-tr from-cyan-500 via-blue-600 to-indigo-600 flex items-center justify-center shadow-md shadow-cyan-500/20">
+            <i data-lucide="shield-check" class="h-5 w-5 text-white"></i>
+          </div>
+          <div>
+            <div class="flex items-center gap-2">
+              <span class="font-bold text-base text-white tracking-tight">NetPulse Central Master</span>
+              <span class="text-[10px] font-bold px-2 py-0.5 rounded-full bg-cyan-950 text-cyan-400 border border-cyan-800">
+                PROVEDORES ATIVOS
+              </span>
+            </div>
+            <p class="text-[11px] text-slate-400">Servidor de emissão de licenças e acompanhamento de instâncias</p>
+          </div>
+        </div>
+
+        <div class="flex items-center gap-3">
+          <button
+            onclick="loadDashboardData()"
+            class="p-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 transition"
+            title="Recarregar dados"
+          >
+            <i data-lucide="refresh-cw" class="h-4 w-4" id="refresh-icon"></i>
+          </button>
+          <button
+            onclick="logout()"
+            class="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-rose-950/40 hover:bg-rose-900/50 text-rose-300 border border-rose-800/60 text-xs font-semibold transition"
+          >
+            <i data-lucide="log-out" class="h-3.5 w-3.5"></i>
+            <span>Sair</span>
+          </button>
+        </div>
+      </div>
+    </header>
+
+    <!-- Main Body -->
+    <main class="max-w-7xl mx-auto w-full px-4 sm:px-8 py-6 space-y-6 flex-1">
+      <!-- 4 Cards de Métricas da Frota -->
+      <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        <div class="glass-card rounded-2xl p-5 shadow-lg space-y-2">
+          <div class="flex items-center justify-between">
+            <span class="text-xs font-semibold text-slate-400 uppercase tracking-wider">Provedores Clientes</span>
+            <div class="p-2 rounded-xl bg-blue-950/80 text-blue-400 border border-blue-800/60">
+              <i data-lucide="building-2" class="h-4 w-4"></i>
+            </div>
+          </div>
+          <div class="text-3xl font-extrabold text-white" id="stat-total-clients">0</div>
+          <p class="text-[11px] text-slate-400">Instalações cadastradas</p>
+        </div>
+
+        <div class="glass-card rounded-2xl p-5 shadow-lg space-y-2">
+          <div class="flex items-center justify-between">
+            <span class="text-xs font-semibold text-slate-400 uppercase tracking-wider">Instâncias Online</span>
+            <div class="p-2 rounded-xl bg-emerald-950/80 text-emerald-400 border border-emerald-800/60">
+              <i data-lucide="activity" class="h-4 w-4"></i>
+            </div>
+          </div>
+          <div class="text-3xl font-extrabold text-emerald-400 flex items-center gap-2">
+            <span id="stat-online-instances">0</span>
+            <span class="h-2.5 w-2.5 rounded-full bg-emerald-400 animate-pulse"></span>
+          </div>
+          <p class="text-[11px] text-slate-400">Heartbeat nos últimos 45 min</p>
+        </div>
+
+        <div class="glass-card rounded-2xl p-5 shadow-lg space-y-2">
+          <div class="flex items-center justify-between">
+            <span class="text-xs font-semibold text-slate-400 uppercase tracking-wider">Roteadores na Frota</span>
+            <div class="p-2 rounded-xl bg-cyan-950/80 text-cyan-400 border border-cyan-800/60">
+              <i data-lucide="server" class="h-4 w-4"></i>
+            </div>
+          </div>
+          <div class="text-3xl font-extrabold text-cyan-300" id="stat-total-devices">0</div>
+          <p class="text-[11px] text-slate-400">Bordas BGP & OSPF monitoradas</p>
+        </div>
+
+        <div class="glass-card rounded-2xl p-5 shadow-lg space-y-2">
+          <div class="flex items-center justify-between">
+            <span class="text-xs font-semibold text-slate-400 uppercase tracking-wider">Vencendo em Breve</span>
+            <div class="p-2 rounded-xl bg-amber-950/80 text-amber-400 border border-amber-800/60">
+              <i data-lucide="clock" class="h-4 w-4"></i>
+            </div>
+          </div>
+          <div class="text-3xl font-extrabold text-amber-300" id="stat-expiring-soon">0</div>
+          <p class="text-[11px] text-slate-400">Próximos 15 dias</p>
+        </div>
+      </div>
+
+      <!-- Action & Filter Bar -->
+      <div class="glass rounded-2xl p-4 flex flex-col md:flex-row md:items-center justify-between gap-4 shadow-lg">
+        <div class="flex items-center gap-3 flex-1 max-w-md">
+          <div class="relative w-full">
+            <i data-lucide="search" class="h-4 w-4 absolute left-3.5 top-3 text-slate-500"></i>
+            <input
+              type="text"
+              id="search-input"
+              oninput="filterTable()"
+              placeholder="Buscar cliente, chave, e-mail ou host..."
+              class="w-full bg-slate-950 border border-slate-700/80 rounded-xl pl-10 pr-4 py-2 text-xs text-slate-200 placeholder:text-slate-500 focus:outline-none focus:border-cyan-500 transition"
+            />
+          </div>
+          <select
+            id="status-filter"
+            onchange="filterTable()"
+            class="bg-slate-950 border border-slate-700/80 rounded-xl px-3 py-2 text-xs text-slate-300 focus:outline-none focus:border-cyan-500 transition"
+          >
+            <option value="all">Todos os Status</option>
+            <option value="active">Ativas</option>
+            <option value="online">Online Agora</option>
+            <option value="grace_period">Período de Graça</option>
+            <option value="expired">Expiradas</option>
+            <option value="suspended">Suspensas</option>
+          </select>
+        </div>
+
+        <button
+          onclick="openCreateModal()"
+          class="px-5 py-2.5 rounded-xl bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-500 hover:to-blue-500 text-white font-semibold text-xs shadow-lg shadow-cyan-600/20 transition flex items-center justify-center gap-2 shrink-0"
+        >
+          <i data-lucide="plus-circle" class="h-4 w-4"></i>
+          <span>Emitir Nova Licença</span>
+        </button>
+      </div>
+
+      <!-- Tabela de Licenças & Clientes -->
+      <div class="glass rounded-2xl shadow-xl overflow-hidden border border-slate-800">
+        <div class="overflow-x-auto">
+          <table class="w-full text-left border-collapse text-xs">
+            <thead>
+              <tr class="border-b border-slate-800 bg-slate-900/80 text-slate-400 font-semibold uppercase tracking-wider">
+                <th class="py-3 px-4">Provedor / Cliente</th>
+                <th class="py-3 px-4">Plano</th>
+                <th class="py-3 px-4">Chave de Licença</th>
+                <th class="py-3 px-4 text-center">Roteadores</th>
+                <th class="py-3 px-4">Status & Heartbeat</th>
+                <th class="py-3 px-4">Validade</th>
+                <th class="py-3 px-4 text-right">Ações Rápidas</th>
+              </tr>
+            </thead>
+            <tbody id="licenses-tbody" class="divide-y divide-slate-800/60">
+              <!-- Rendered via JS -->
+            </tbody>
+          </table>
+        </div>
+        <div id="empty-state" class="hidden p-8 text-center text-slate-400 text-xs">
+          Nenhuma licença encontrada correspondente aos filtros.
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <!-- ======================= MODAL: NOVA LICENÇA ======================= -->
+  <div id="license-modal" class="hidden fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4">
+    <div class="glass max-w-lg w-full rounded-3xl p-6 shadow-2xl space-y-4 border border-slate-700">
+      <div class="flex items-center justify-between border-b border-slate-800 pb-3">
+        <div class="flex items-center gap-2.5">
+          <div class="p-2 rounded-xl bg-cyan-950 text-cyan-400 border border-cyan-800">
+            <i data-lucide="key-round" class="h-5 w-5"></i>
+          </div>
+          <h2 class="text-base font-bold text-white tracking-tight" id="modal-title">Emitir Nova Licença</h2>
+        </div>
+        <button onclick="closeModal()" class="text-slate-400 hover:text-white p-1 rounded-lg">
+          <i data-lucide="x" class="h-5 w-5"></i>
+        </button>
+      </div>
+
+      <form id="license-form" onsubmit="handleSaveLicense(event)" class="space-y-3.5 text-xs">
+        <input type="hidden" id="form-license-id" value="">
+
+        <div>
+          <label class="block font-semibold text-slate-300 mb-1">Nome do Provedor / Cliente *</label>
+          <input
+            type="text"
+            id="form-client-name"
+            required
+            placeholder="Ex: Alfa Fibra Telecomunicações Ltda"
+            class="w-full bg-slate-950 border border-slate-700 rounded-xl px-3.5 py-2 text-slate-100 placeholder:text-slate-600 focus:outline-none focus:border-cyan-500"
+          />
+        </div>
+
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <div>
+            <label class="block font-semibold text-slate-300 mb-1">E-mail do NOC / Gestor</label>
+            <input
+              type="email"
+              id="form-client-email"
+              placeholder="noc@provedor.com.br"
+              class="w-full bg-slate-950 border border-slate-700 rounded-xl px-3.5 py-2 text-slate-100 placeholder:text-slate-600 focus:outline-none focus:border-cyan-500"
+            />
+          </div>
+          <div>
+            <label class="block font-semibold text-slate-300 mb-1">Plano / Categoria *</label>
+            <select
+              id="form-tier"
+              required
+              class="w-full bg-slate-950 border border-slate-700 rounded-xl px-3.5 py-2 text-slate-100 focus:outline-none focus:border-cyan-500"
+            >
+              <option value="pro">Pro ISP (Recomendado)</option>
+              <option value="enterprise">Enterprise (Ilimitado)</option>
+              <option value="starter">Starter</option>
+              <option value="trial">Avaliação / Testes</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <div>
+            <label class="block font-semibold text-slate-300 mb-1">Limite de Roteadores</label>
+            <input
+              type="number"
+              id="form-max-devices"
+              min="0"
+              value="10"
+              placeholder="0 = Sem Limite"
+              class="w-full bg-slate-950 border border-slate-700 rounded-xl px-3.5 py-2 text-slate-100 focus:outline-none focus:border-cyan-500 font-mono"
+            />
+            <span class="text-[10px] text-slate-500">Deixe 0 para roteadores ilimitados</span>
+          </div>
+          <div>
+            <label class="block font-semibold text-slate-300 mb-1">Validade Inicial (Dias)</label>
+            <input
+              type="number"
+              id="form-valid-days"
+              min="1"
+              value="365"
+              placeholder="365"
+              class="w-full bg-slate-950 border border-slate-700 rounded-xl px-3.5 py-2 text-slate-100 focus:outline-none focus:border-cyan-500 font-mono"
+            />
+          </div>
+        </div>
+
+        <div>
+          <label class="block font-semibold text-slate-300 mb-1">Observações de Contrato / Faturamento</label>
+          <textarea
+            id="form-notes"
+            rows="2"
+            placeholder="Ex: Contrato Anual #2026-04, Vencimento dia 10..."
+            class="w-full bg-slate-950 border border-slate-700 rounded-xl px-3.5 py-2 text-slate-100 placeholder:text-slate-600 focus:outline-none focus:border-cyan-500"
+          ></textarea>
+        </div>
+
+        <div id="modal-error" class="hidden p-2.5 rounded-xl bg-rose-950/60 border border-rose-800 text-rose-300 text-xs"></div>
+
+        <div class="flex items-center justify-end gap-3 pt-3 border-t border-slate-800">
+          <button
+            type="button"
+            onclick="closeModal()"
+            class="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 font-semibold"
+          >
+            Cancelar
+          </button>
+          <button
+            type="submit"
+            id="modal-submit-btn"
+            class="px-5 py-2 rounded-xl bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-500 text-white font-semibold shadow-md shadow-cyan-600/20"
+          >
+            Emitir Licença
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <script src="/static/app.js"></script>
+</body>
+</html>

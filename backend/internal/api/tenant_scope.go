@@ -22,6 +22,12 @@ var (
 func ResolveTenantScope(r *http.Request) string {
 	claims := GetAuthUser(r)
 	if claims == nil {
+		if q := strings.TrimSpace(r.URL.Query().Get("tenant_id")); q != "" && q != "all" {
+			return q
+		}
+		if h := strings.TrimSpace(r.Header.Get("X-Tenant-ID")); h != "" && h != "all" {
+			return h
+		}
 		return ""
 	}
 

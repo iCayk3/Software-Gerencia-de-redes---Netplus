@@ -8,6 +8,8 @@
 *.out
 backend/bin/
 backend/dist/
+master-server/bin/
+master-server/data/
 
 # Node & Frontend
 node_modules/

@@ -7,6 +7,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"testing"
+	"time"
 
 	"network-software/internal/models"
 	"network-software/internal/storage"
@@ -26,6 +27,24 @@ func TestMultiTenantManagement(t *testing.T) {
 
 	tenantCtrl := NewTenantController(tenantStore, auditStore)
 	authCtrl := NewAuthController(userStore, tenantStore, auditStore)
+
+	// Seed client tenant and user specifically for this isolation test
+	_, _ = tenantStore.Create(models.Tenant{
+		ID:        "tenant-alpha",
+		Name:      "Alpha Fibra Internet (Cliente Teste)",
+		Slug:      "alpha-fibra",
+		Status:    "active",
+		CreatedAt: time.Now(),
+	})
+	_, _ = userStore.CreateUser(models.User{
+		ID:           "usr-client-admin",
+		TenantID:     "tenant-alpha",
+		Name:         "Admin Alpha Fibra",
+		Email:        "admin@alphafibra.com.br",
+		Role:         models.RoleAdmin,
+		IsSuperAdmin: false,
+		Status:       "active",
+	})
 
 	// 1. SuperAdmin Login
 	superUser, _ := userStore.GetByEmail("admin@netpulse.com")

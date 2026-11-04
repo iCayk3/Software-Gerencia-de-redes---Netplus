@@ -218,3 +218,8 @@ func (e *Engine) GetBMPServer() *bmp.Server {
 func (e *Engine) GetOverview() models.TelemetryOverview {
 	return e.collector.GetOverview()
 }
+
+// GetOverviewForTenant returns aggregate stats filtered by tenant.
+func (e *Engine) GetOverviewForTenant(tenantID string) models.TelemetryOverview {
+	return e.collector.GetOverviewForTenant(tenantID)
+}

@@ -79,11 +79,12 @@ func seedUsers(ctx context.Context, db *sql.DB) {
 		}
 
 		query := `
-			INSERT INTO users (id, tenant_id, name, email, password_hash, role, status, created_at)
-			VALUES ($1, 'default-tenant', $2, $3, $4, $5, 'active', NOW())
+			INSERT INTO users (id, tenant_id, name, email, password_hash, role, is_superadmin, status, created_at)
+			VALUES ($1, 'default-tenant', $2, $3, $4, $5, $6, 'active', NOW())
 			ON CONFLICT (email) DO NOTHING
 		`
-		if _, err := db.ExecContext(ctx, query, u.ID, u.Name, u.Email, string(hash), string(u.Role)); err != nil {
+		isSuper := (u.Role == models.RoleAdmin)
+		if _, err := db.ExecContext(ctx, query, u.ID, u.Name, u.Email, string(hash), string(u.Role), isSuper); err != nil {
 			log.Printf("[Migrator] Erro ao cadastrar usuario inicial %s: %v", u.Email, err)
 		} else {
 			log.Printf("[Migrator] ✅ Usuário criado: %s (%s)", u.Email, u.Role)
@@ -92,7 +93,13 @@ func seedUsers(ctx context.Context, db *sql.DB) {
 }
 
 func importDevices(ctx context.Context, db *sql.DB) {
-	paths := []string{"data/devices.json", "backend/data/devices.json", "../data/devices.json"}
+	paths := []string{
+		"/app/data/devices.json",
+		"/app/data-default/devices.json",
+		"data/devices.json",
+		"backend/data/devices.json",
+		"../data/devices.json",
+	}
 	var data []byte
 	for _, p := range paths {
 		if c, err := os.ReadFile(p); err == nil {
@@ -140,7 +147,13 @@ func importDevices(ctx context.Context, db *sql.DB) {
 }
 
 func importASMetadata(ctx context.Context, db *sql.DB) {
-	paths := []string{"data/as_metadata.json", "backend/data/as_metadata.json", "../data/as_metadata.json"}
+	paths := []string{
+		"/app/data/as_metadata.json",
+		"/app/data-default/as_metadata.json",
+		"data/as_metadata.json",
+		"backend/data/as_metadata.json",
+		"../data/as_metadata.json",
+	}
 	var data []byte
 	for _, p := range paths {
 		if c, err := os.ReadFile(p); err == nil {

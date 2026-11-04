@@ -16,7 +16,9 @@ import {
   Building2,
   Users,
   X,
-  CornerDownLeft
+  CornerDownLeft,
+  Layers,
+  KeyRound
 } from 'lucide-react'
 import type { MainSectionType } from './Sidebar'
 import type { Device } from '../services/api'
@@ -80,56 +82,110 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({
     const items: CommandItem[] = []
 
     // 1. Navigation items
+    // 1. Navigation items: Protocolo BGP
     items.push(
       {
         id: 'nav-download',
-        title: 'Download (AS-Path Prepending)',
-        subtitle: 'Engenharia de tráfego de entrada, prepends 0P a 3P e bloqueio por AS',
+        title: 'BGP: Download (AS-Path Prepending)',
+        subtitle: 'Engenharia de tráfego de entrada, prepends 0P a 3P e anúncio por AS',
         category: 'Navegação',
         icon: Download,
-        badge: 'Tráfego',
+        badge: 'BGP',
         badgeColor: 'bg-cyan-500/10 text-cyan-400 border-cyan-500/30',
         onSelect: () => {
-          onNavigate('traffic', 'download')
+          onNavigate('bgp', 'download')
           onClose()
         },
       },
       {
         id: 'nav-upload',
-        title: 'Upload (Local-Preference & Rotas)',
+        title: 'BGP: Upload (Local-Preference & Rotas)',
         subtitle: 'Engenharia de tráfego de saída, preferência local e rotas estáticas',
         category: 'Navegação',
         icon: Upload,
-        badge: 'Tráfego',
+        badge: 'BGP',
         badgeColor: 'bg-cyan-500/10 text-cyan-400 border-cyan-500/30',
         onSelect: () => {
-          onNavigate('traffic', 'upload')
+          onNavigate('bgp', 'upload')
           onClose()
         },
       },
       {
         id: 'nav-bgp',
-        title: 'Sessões BGP em Tempo Real',
-        subtitle: 'Status de peers, uptime, rotas recebidas e exportadas',
+        title: 'BGP: Sessões & RFC 7854 BMP',
+        subtitle: 'Status de peers em tempo real, uptime, rotas recebidas e monitoramento BMP',
         category: 'Navegação',
         icon: Activity,
         badge: 'BGP',
         badgeColor: 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30',
         onSelect: () => {
-          onNavigate('traffic', 'bgp')
+          onNavigate('bgp', 'sessions')
           onClose()
         },
       },
       {
-        id: 'nav-ospf',
-        title: 'Vizinhos OSPF',
-        subtitle: 'Topologia IGP interna, estados Full/2-Way e métricas',
+        id: 'nav-churn',
+        title: 'BGP: Estabilidade & Ranking de Churn',
+        subtitle: 'Monitoramento de oscilações de rotas, flaps e prefixos instáveis',
         category: 'Navegação',
-        icon: Network,
-        badge: 'IGP',
+        icon: Activity,
+        badge: 'BGP',
+        badgeColor: 'bg-amber-500/10 text-amber-400 border-amber-500/30',
+        onSelect: () => {
+          onNavigate('bgp', 'churn')
+          onClose()
+        },
+      },
+      {
+        id: 'nav-rpki',
+        title: 'BGP: Validador RPKI (ROA)',
+        subtitle: 'Segurança de origem de rota BGP (Valid, Invalid, NotFound)',
+        category: 'Navegação',
+        icon: ShieldCheck,
+        badge: 'RPKI',
         badgeColor: 'bg-indigo-500/10 text-indigo-400 border-indigo-500/30',
         onSelect: () => {
-          onNavigate('traffic', 'ospf')
+          onNavigate('bgp', 'rpki')
+          onClose()
+        },
+      },
+      // Protocolo OSPF
+      {
+        id: 'nav-ospf-neighbors',
+        title: 'OSPF: Vizinhos & Adjacências',
+        subtitle: 'Topologia IGP interna, estados Full/2-Way, DR/BDR e métricas',
+        category: 'Navegação',
+        icon: Network,
+        badge: 'OSPF',
+        badgeColor: 'bg-indigo-500/10 text-indigo-400 border-indigo-500/30',
+        onSelect: () => {
+          onNavigate('ospf', 'neighbors')
+          onClose()
+        },
+      },
+      {
+        id: 'nav-ospf-areas',
+        title: 'OSPF: Áreas & Topologia',
+        subtitle: 'Hierarquia OSPF, Área 0.0.0.0 Backbone, sub-áreas e enlaces',
+        category: 'Navegação',
+        icon: Layers,
+        badge: 'OSPF',
+        badgeColor: 'bg-purple-500/10 text-purple-400 border-purple-500/30',
+        onSelect: () => {
+          onNavigate('ospf', 'areas')
+          onClose()
+        },
+      },
+      {
+        id: 'nav-ospf-diag',
+        title: 'OSPF: Comandos & Diagnósticos CLI',
+        subtitle: 'Comandos CLI Huawei, Datacom, MikroTik e guia de resolução de problemas',
+        category: 'Navegação',
+        icon: Terminal,
+        badge: 'OSPF CLI',
+        badgeColor: 'bg-cyan-500/10 text-cyan-400 border-cyan-500/30',
+        onSelect: () => {
+          onNavigate('ospf', 'diagnostics')
           onClose()
         },
       },
@@ -236,6 +292,19 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({
           onNavigate('users', 'list')
           onClose()
         },
+      },
+      {
+        id: 'nav-license',
+        title: 'Licença & Servidor Master',
+        subtitle: 'Plano contratado, capacidade de roteadores e sincronização',
+        category: 'Navegação',
+        icon: KeyRound,
+        badge: 'Licença',
+        badgeColor: 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30',
+        onSelect: () => {
+          onNavigate('license', 'overview')
+          onClose()
+        },
       }
     )
 
@@ -273,7 +342,7 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({
         badge: link.asn,
         badgeColor: 'bg-cyan-500/10 text-cyan-300 border-cyan-500/30 font-mono',
         onSelect: () => {
-          onNavigate('traffic', 'download')
+          onNavigate('bgp', 'download')
           onClose()
         },
       })

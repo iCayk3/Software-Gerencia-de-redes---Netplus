@@ -387,6 +387,7 @@ export interface RPKISummary {
   recent_invalids: RPKIValidationResult[]
   own_as_protected: boolean
   own_prefixes_count: number
+  own_asn?: string
   last_updated: string
 }
 
@@ -1408,5 +1409,48 @@ export async function deleteUser(id: string): Promise<void> {
     throw new Error(err.error || `Erro ao excluir usuário: HTTP ${res.status}`)
   }
 }
+
+// --- License & Central Master Types & API ---
+
+export interface LicenseInfo {
+  key: string
+  tier: 'trial' | 'starter' | 'pro' | 'enterprise'
+  client_name: string
+  max_devices: number
+  device_usage: number
+  issued_at: string
+  expires_at: string
+  days_remaining: number
+  status: 'active' | 'grace_period' | 'expired' | 'trial' | 'suspended' | 'unlicensed'
+  features: string[]
+  grace_period_days: number
+  last_heartbeat?: string
+  master_connected: boolean
+  master_url: string
+  instance_id: string
+}
+
+export async function fetchLicenseStatus(): Promise<LicenseInfo> {
+  const res = await apiFetch(`${API_BASE}/license/status`)
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}))
+    throw new Error(err.error || `Erro ao consultar status da licença: HTTP ${res.status}`)
+  }
+  return res.json()
+}
+
+export async function activateLicense(key: string): Promise<LicenseInfo> {
+  const res = await apiFetch(`${API_BASE}/license/activate`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ key }),
+  })
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}))
+    throw new Error(err.error || `Erro ao ativar licença: HTTP ${res.status}`)
+  }
+  return res.json()
+}
+
 
 

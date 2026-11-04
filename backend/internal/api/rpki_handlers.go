@@ -5,24 +5,58 @@ import (
 	"strconv"
 
 	"network-software/internal/rpki"
+	"network-software/internal/storage"
 )
 
 // RPKIController handles RPKI ROA validation endpoints.
 type RPKIController struct {
-	validator *rpki.Validator
+	validator   *rpki.Validator
+	tenantStore storage.ITenantStore
+	deviceStore *storage.DeviceStore
 }
 
 // NewRPKIController creates a new RPKI HTTP controller.
-func NewRPKIController(validator *rpki.Validator) *RPKIController {
+func NewRPKIController(validator *rpki.Validator, tenantStore storage.ITenantStore, deviceStore *storage.DeviceStore) *RPKIController {
 	if validator == nil {
 		validator = rpki.NewValidator()
 	}
-	return &RPKIController{validator: validator}
+	return &RPKIController{
+		validator:   validator,
+		tenantStore: tenantStore,
+		deviceStore: deviceStore,
+	}
 }
 
 // GetSummary handles GET /api/rpki/summary
 func (rc *RPKIController) GetSummary(w http.ResponseWriter, r *http.Request) {
 	summary := rc.validator.GetSummary()
+	tenantScope := ResolveTenantScope(r)
+
+	if tenantScope != "" {
+		if rc.tenantStore != nil {
+			if t, err := rc.tenantStore.GetByID(tenantScope); err == nil && t != nil {
+				summary.OwnASN = t.ASN
+				if t.ASN != "" {
+					summary.OwnASProtected = true
+				}
+			}
+		}
+		if rc.deviceStore != nil {
+			devices := rc.deviceStore.GetAllByTenant(tenantScope)
+			if len(devices) == 0 {
+				summary.TotalEvaluated = 0
+				summary.ValidCount = 0
+				summary.InvalidCount = 0
+				summary.NotFoundCount = 0
+				summary.ValidPercentage = 100.0
+				summary.RecentInvalids = make([]rpki.RPKIValidationResult, 0)
+				summary.OwnPrefixesCount = 0
+			}
+		}
+	} else {
+		summary.OwnASN = "Multi-AS"
+	}
+
 	WriteJSON(w, http.StatusOK, summary)
 }
 
@@ -52,5 +86,27 @@ func (rc *RPKIController) GetInvalids(w http.ResponseWriter, r *http.Request) {
 	if invalids == nil {
 		invalids = make([]rpki.RPKIValidationResult, 0)
 	}
+
+	tenantScope := ResolveTenantScope(r)
+	if tenantScope != "" && rc.deviceStore != nil {
+		devices := rc.deviceStore.GetAllByTenant(tenantScope)
+		if len(devices) == 0 {
+			WriteJSON(w, http.StatusOK, []rpki.RPKIValidationResult{})
+			return
+		}
+		allowedIPs := make(map[string]bool, len(devices))
+		for _, d := range devices {
+			allowedIPs[d.Host] = true
+		}
+		filtered := make([]rpki.RPKIValidationResult, 0)
+		for _, inv := range invalids {
+			if allowedIPs[inv.PeerIP] {
+				filtered = append(filtered, inv)
+			}
+		}
+		WriteJSON(w, http.StatusOK, filtered)
+		return
+	}
+
 	WriteJSON(w, http.StatusOK, invalids)
 }

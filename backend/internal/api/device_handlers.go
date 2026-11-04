@@ -8,18 +8,24 @@ import (
 	"time"
 
 	"network-software/internal/drivers"
+	"network-software/internal/license"
 	"network-software/internal/models"
 	"network-software/internal/storage"
 	"network-software/internal/telemetry"
 )
 
 type DeviceController struct {
-	store  *storage.DeviceStore
-	engine *telemetry.Engine
+	store      *storage.DeviceStore
+	engine     *telemetry.Engine
+	licenseMgr *license.LicenseManager
 }
 
 func NewDeviceController(store *storage.DeviceStore, engine *telemetry.Engine) *DeviceController {
 	return &DeviceController{store: store, engine: engine}
+}
+
+func (c *DeviceController) SetLicenseManager(lm *license.LicenseManager) {
+	c.licenseMgr = lm
 }
 
 // ListDevices handles GET /api/devices
@@ -49,6 +55,15 @@ func (c *DeviceController) CreateDevice(w http.ResponseWriter, r *http.Request) 
 		d.TenantID = claims.TenantID
 	} else if d.TenantID == "" {
 		d.TenantID = "default-tenant"
+	}
+
+	// License check: enforce max device capacity
+	if c.licenseMgr != nil {
+		allDevs := c.store.GetAll()
+		if err := c.licenseMgr.CanAddDevice(len(allDevs)); err != nil {
+			WriteError(w, http.StatusForbidden, err.Error())
+			return
+		}
 	}
 
 	created, err := c.store.Create(d)
@@ -347,12 +362,15 @@ func (c *DeviceController) GetAllBGP(w http.ResponseWriter, r *http.Request) {
 	var wg sync.WaitGroup
 	var mu sync.Mutex
 	allSessions := make([]models.BGPSession, 0)
+	sem := make(chan struct{}, 6) // Limit concurrent SSH queries to max 6 devices simultaneously
 
 	for _, d := range devices {
 		dev := d
 		wg.Add(1)
+		sem <- struct{}{}
 		go func() {
 			defer wg.Done()
+			defer func() { <-sem }()
 
 			// Checa telemetria BMP em tempo real
 			if c.engine != nil && c.engine.GetBMPServer() != nil && c.engine.GetBMPServer().HasActiveSession(dev.Host, dev.Name) {
@@ -412,12 +430,16 @@ func (c *DeviceController) GetAllOSPF(w http.ResponseWriter, r *http.Request) {
 	var wg sync.WaitGroup
 	var mu sync.Mutex
 	allNeighbors := make([]models.OSPFNeighbor, 0)
+	sem := make(chan struct{}, 6) // Limit concurrent SSH queries to max 6 devices simultaneously
 
 	for _, d := range devices {
 		dev := d
 		wg.Add(1)
+		sem <- struct{}{}
 		go func() {
 			defer wg.Done()
+			defer func() { <-sem }()
+
 			driver, err := drivers.NewDriver(&dev)
 			if err != nil {
 				return

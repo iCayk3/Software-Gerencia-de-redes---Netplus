@@ -15,12 +15,14 @@ import {
   fetchBGPChurnRanking,
   type ChurnRankingResponse
 } from '../../services/api'
+import { useAuth } from '../../context/AuthContext'
 
 interface BGPChurnViewProps {
   density?: 'comfortable' | 'compact'
 }
 
 export const BGPChurnView: React.FC<BGPChurnViewProps> = () => {
+  const { activeTenantId, currentTenant } = useAuth()
   const [churnData, setChurnData] = useState<ChurnRankingResponse | null>(null)
   const [loading, setLoading] = useState(true)
   const [refreshing, setRefreshing] = useState(false)
@@ -46,8 +48,13 @@ export const BGPChurnView: React.FC<BGPChurnViewProps> = () => {
   useEffect(() => {
     loadChurn()
     const timer = setInterval(() => loadChurn(), 10000)
-    return () => clearInterval(timer)
-  }, [loadChurn])
+    const handleTenantChange = () => loadChurn()
+    window.addEventListener('tenant_changed', handleTenantChange)
+    return () => {
+      clearInterval(timer)
+      window.removeEventListener('tenant_changed', handleTenantChange)
+    }
+  }, [loadChurn, activeTenantId])
 
   const formatRelativeTime = (isoString?: string) => {
     if (!isoString) return 'Sem registro'
@@ -136,8 +143,18 @@ export const BGPChurnView: React.FC<BGPChurnViewProps> = () => {
               <Activity className="h-6 w-6 animate-pulse" />
             </div>
             <div>
-              <div className="flex items-center gap-3">
+              <div className="flex flex-wrap items-center gap-2.5">
                 <h2 className="text-xl font-bold text-white tracking-tight">Ranking de BGP Churn & Instabilidade</h2>
+                {currentTenant ? (
+                  <span className="flex items-center gap-1.5 px-3 py-0.5 rounded-full text-xs font-semibold bg-cyan-950 text-cyan-300 border border-cyan-700/80 shadow-xs">
+                    <Server className="h-3 w-3 text-cyan-400" />
+                    <span>Empresa: <strong>{currentTenant.name}</strong></span>
+                  </span>
+                ) : (
+                  <span className="flex items-center gap-1.5 px-3 py-0.5 rounded-full text-xs font-semibold bg-slate-800 text-slate-300 border border-slate-700 shadow-xs">
+                    <span>Visão Global Consolidada</span>
+                  </span>
+                )}
                 <span className="flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-medium bg-cyan-950 text-cyan-400 border border-cyan-800">
                   <span className="h-1.5 w-1.5 rounded-full bg-cyan-400 animate-ping"></span>
                   BMP RFC 7854 Stream

@@ -3,9 +3,11 @@ package api
 import (
 	"context"
 	"encoding/json"
+	"log"
 	"net/http"
 	"os"
 	"strings"
+	"sync"
 	"time"
 
 	"network-software/internal/models"
@@ -17,13 +19,22 @@ type contextKey string
 
 const userContextKey = contextKey("authUser")
 
-var jwtSecret = []byte(getEnv("JWT_SECRET", "netpulse_super_secret_jwt_key_2026_enterprise"))
+var (
+	jwtSecret []byte
+	onceJWT   sync.Once
+)
 
-func getEnv(key, fallback string) string {
-	if v := os.Getenv(key); v != "" {
-		return v
-	}
-	return fallback
+// GetJWTSecret returns the secret key used for signing and validating JWT tokens.
+func GetJWTSecret() []byte {
+	onceJWT.Do(func() {
+		secret := os.Getenv("JWT_SECRET")
+		if secret == "" {
+			log.Printf("[Security Warning] ⚠️  JWT_SECRET não configurado no ambiente. Usando chave padrão de desenvolvimento.")
+			secret = "netpulse_super_secret_jwt_key_2026_enterprise"
+		}
+		jwtSecret = []byte(secret)
+	})
+	return jwtSecret
 }
 
 // GenerateJWT creates a signed token for an authenticated user with 24h validity.
@@ -44,7 +55,7 @@ func GenerateJWT(u *models.User) (string, time.Time, error) {
 	}
 
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
-	tokenStr, err := token.SignedString(jwtSecret)
+	tokenStr, err := token.SignedString(GetJWTSecret())
 	return tokenStr, exp, err
 }
 
@@ -63,7 +74,7 @@ func AuthMiddleware(next http.Handler) http.Handler {
 		if tokenStr != "" {
 			claims := &models.UserClaims{}
 			token, err := jwt.ParseWithClaims(tokenStr, claims, func(t *jwt.Token) (interface{}, error) {
-				return jwtSecret, nil
+				return GetJWTSecret(), nil
 			})
 
 			if err == nil && token.Valid {

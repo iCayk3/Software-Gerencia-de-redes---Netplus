@@ -52,6 +52,7 @@ import {
 import { MetricCardSkeleton } from './common/Skeleton'
 import { BGPChurnView } from './telemetry/BGPChurnView'
 import { RPKIValidatorView } from './telemetry/RPKIValidatorView'
+import { useAuth } from '../context/AuthContext'
 
 export interface TelemetryViewProps {
   onAlertsUpdated?: (count: number) => void
@@ -60,6 +61,7 @@ export interface TelemetryViewProps {
 }
 
 export const TelemetryView: React.FC<TelemetryViewProps> = ({ onAlertsUpdated, activeSubTab, onSelectSubTab }) => {
+  const { activeTenantId, currentTenant } = useAuth()
   const [overview, setOverview] = useState<TelemetryOverview | null>(null)
   const [status, setStatus] = useState<TelemetryStatus | null>(null)
   const [alerts, setAlerts] = useState<Alert[]>([])
@@ -142,8 +144,15 @@ export const TelemetryView: React.FC<TelemetryViewProps> = ({ onAlertsUpdated, a
     loadData()
     // Periodic refresh every 10 seconds
     const interval = setInterval(loadData, 10000)
-    return () => clearInterval(interval)
-  }, [loadData])
+    const handleTenantChange = () => {
+      loadData()
+    }
+    window.addEventListener('tenant_changed', handleTenantChange)
+    return () => {
+      clearInterval(interval)
+      window.removeEventListener('tenant_changed', handleTenantChange)
+    }
+  }, [loadData, activeTenantId])
 
   const handleTriggerCollect = async () => {
     setCollecting(true)
@@ -245,8 +254,27 @@ export const TelemetryView: React.FC<TelemetryViewProps> = ({ onAlertsUpdated, a
               <Radio className={`h-6 w-6 ${collecting ? 'animate-spin' : 'animate-pulse'}`} />
             </div>
             <div>
-              <div className="flex items-center gap-3">
+              <div className="flex flex-wrap items-center gap-2.5">
                 <h2 className="text-xl font-bold text-white tracking-tight">Telemetria & Detecção de Anomalias</h2>
+
+                {/* Badge Contextual da Empresa ou Visão Global */}
+                {currentTenant ? (
+                  <span className="flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-cyan-950/90 text-cyan-300 border border-cyan-700/80 shadow-xs">
+                    <Server className="h-3 w-3 text-cyan-400" />
+                    <span>Empresa: <strong>{currentTenant.name}</strong></span>
+                    {currentTenant.asn && (
+                      <span className="font-mono text-[10px] bg-cyan-900/80 px-1.5 py-0.5 rounded text-cyan-200">
+                        AS{currentTenant.asn}
+                      </span>
+                    )}
+                  </span>
+                ) : (
+                  <span className="flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-slate-800 text-slate-300 border border-slate-700 shadow-xs">
+                    <Network className="h-3 w-3 text-cyan-400" />
+                    <span>Visão Global Consolidada (Todas as Empresas)</span>
+                  </span>
+                )}
+
                 <span className="flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-medium bg-emerald-950 text-emerald-400 border border-emerald-800/80">
                   <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 animate-ping"></span>
                   Motor Ativo ({status?.poll_interval_seconds || 45}s)
@@ -258,13 +286,19 @@ export const TelemetryView: React.FC<TelemetryViewProps> = ({ onAlertsUpdated, a
                   </span>
                 )}
               </div>
-              <p className="text-xs text-slate-400 mt-1 flex items-center gap-2">
+              <p className="text-xs text-slate-400 mt-1 flex flex-wrap items-center gap-2">
                 <Clock className="h-3.5 w-3.5 text-slate-500" />
                 <span>
                   Última leitura: {overview?.last_updated ? new Date(overview.last_updated).toLocaleTimeString() : 'Aguardando...'}
                 </span>
                 <span>&bull;</span>
                 <span>Ciclos executados: {status?.total_cycles || 0}</span>
+                <span>&bull;</span>
+                <span className="text-slate-500">
+                  {currentTenant
+                    ? `Filtro estrito ativo para ${currentTenant.name}`
+                    : 'Nenhuma empresa selecionada — agregando dados reais de todos os roteadores'}
+                </span>
               </p>
             </div>
           </div>
@@ -287,6 +321,23 @@ export const TelemetryView: React.FC<TelemetryViewProps> = ({ onAlertsUpdated, a
             </button>
           </div>
         </div>
+
+        {/* Informative Banner when Selected Company has 0 Devices */}
+        {currentTenant && overview?.total_devices === 0 && (
+          <div className="mt-4 p-4 rounded-xl bg-slate-950/70 border border-slate-800 flex items-start gap-3.5 text-xs">
+            <div className="p-2 rounded-lg bg-cyan-500/10 text-cyan-400 shrink-0">
+              <Server className="h-4 w-4" />
+            </div>
+            <div>
+              <p className="font-semibold text-slate-200">
+                Nenhum roteador cadastrado para {currentTenant.name}
+              </p>
+              <p className="text-slate-400 mt-0.5">
+                Esta empresa cliente ainda não possui roteadores associados no inventário. As métricas estão zeradas de forma fidedigna. Para visualizar telemetria, BMP e sessões BGP em tempo real, cadastre os equipamentos desta empresa no módulo de Equipamentos.
+              </p>
+            </div>
+          </div>
+        )}
 
         {actionMessage && (
           <div className="mt-4 p-3 rounded-lg bg-cyan-950/60 border border-cyan-800/80 text-cyan-300 text-xs flex items-center gap-2">
@@ -491,7 +542,11 @@ export const TelemetryView: React.FC<TelemetryViewProps> = ({ onAlertsUpdated, a
                 ))}
               </div>
             ) : (
-              <p className="text-[11px] text-slate-500 mt-2">Aguardando conexão dos roteadores...</p>
+              <p className="text-[11px] text-slate-500 mt-2">
+                {currentTenant
+                  ? `Aguardando conexão BMP dos roteadores de ${currentTenant.name}...`
+                  : 'Aguardando conexão dos roteadores...'}
+              </p>
             )}
           </div>
 
@@ -649,7 +704,11 @@ export const TelemetryView: React.FC<TelemetryViewProps> = ({ onAlertsUpdated, a
                   </div>
                 </div>
                 <span className="text-xs font-mono font-bold text-cyan-400 bg-cyan-950 px-2.5 py-1 rounded-full border border-cyan-800">
-                  AS 267943 Protegido
+                  {currentTenant?.asn
+                    ? `AS ${currentTenant.asn} Protegido`
+                    : rpkiSummary?.own_asn && rpkiSummary.own_asn !== 'Multi-AS'
+                    ? `AS ${rpkiSummary.own_asn} Protegido`
+                    : 'Multi-AS Protegido'}
                 </span>
               </div>
 

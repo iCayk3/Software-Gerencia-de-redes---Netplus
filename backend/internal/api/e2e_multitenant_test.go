@@ -62,7 +62,7 @@ func setupE2EEnvironment(t *testing.T) (http.Handler, *storage.DeviceStore, stor
 
 	// 2. Seed Users with known passwords
 	hashAdmin, _ := bcrypt.GenerateFromPassword([]byte("admin123"), bcrypt.DefaultCost)
-	hashAlpha, _ := bcrypt.GenerateFromPassword([]byte("alpha123"), bcrypt.DefaultCost)
+	hashAlpha, _ := bcrypt.GenerateFromPassword([]byte("operador123"), bcrypt.DefaultCost)
 	hashBeta, _ := bcrypt.GenerateFromPassword([]byte("beta123"), bcrypt.DefaultCost)
 
 	userSuperAdmin := models.User{

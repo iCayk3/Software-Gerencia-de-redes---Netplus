@@ -122,6 +122,5 @@ CREATE INDEX IF NOT EXISTS idx_alerts_tenant_time ON alerts(tenant_id, timestamp
 -- ============================================================================
 INSERT INTO tenants (id, name, slug, asn, plan, status)
 VALUES 
-    ('default-tenant', 'Netpulse Telecom (NOC Central)', 'netplus', '267943', 'enterprise', 'active'),
-    ('tenant-alpha', 'Alpha Fibra Internet (Cliente)', 'alpha-fibra', '53001', 'enterprise', 'active')
+    ('default-tenant', 'Netpulse Telecom (NOC Central)', 'netplus', '267943', 'enterprise', 'active')
 ON CONFLICT (id) DO NOTHING;

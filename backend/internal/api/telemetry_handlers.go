@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"net/http"
 	"strconv"
+	"strings"
 
 	"network-software/internal/models"
 	"network-software/internal/storage"
@@ -12,12 +13,13 @@ import (
 )
 
 type TelemetryController struct {
-	engine *telemetry.Engine
-	store  *storage.DeviceStore
+	engine      *telemetry.Engine
+	store       *storage.DeviceStore
+	tenantStore storage.ITenantStore
 }
 
-func NewTelemetryController(engine *telemetry.Engine, store *storage.DeviceStore) *TelemetryController {
-	return &TelemetryController{engine: engine, store: store}
+func NewTelemetryController(engine *telemetry.Engine, store *storage.DeviceStore, tenantStore storage.ITenantStore) *TelemetryController {
+	return &TelemetryController{engine: engine, store: store, tenantStore: tenantStore}
 }
 
 // GetStatus handles GET /api/telemetry/status
@@ -28,35 +30,8 @@ func (c *TelemetryController) GetStatus(w http.ResponseWriter, r *http.Request) 
 
 // GetOverview handles GET /api/telemetry/overview
 func (c *TelemetryController) GetOverview(w http.ResponseWriter, r *http.Request) {
-	overview := c.engine.GetOverview()
 	tenantScope := ResolveTenantScope(r)
-
-	if tenantScope != "" && c.store != nil {
-		devices := c.store.GetAllByTenant(tenantScope)
-		allowedMap := make(map[string]bool, len(devices))
-		onlineCount := 0
-		for _, d := range devices {
-			allowedMap[d.ID] = true
-			if d.Status == "online" {
-				onlineCount++
-			}
-		}
-
-		overview.TotalDevices = len(devices)
-		overview.OnlineDevices = onlineCount
-		overview.OfflineDevices = len(devices) - onlineCount
-
-		if overview.RecentSnapshots != nil {
-			filteredSnapshots := make([]models.TelemetrySnapshot, 0)
-			for _, snap := range overview.RecentSnapshots {
-				if allowedMap[snap.DeviceID] {
-					filteredSnapshots = append(filteredSnapshots, snap)
-				}
-			}
-			overview.RecentSnapshots = filteredSnapshots
-		}
-	}
-
+	overview := c.engine.GetOverviewForTenant(tenantScope)
 	WriteJSON(w, http.StatusOK, overview)
 }
 
@@ -162,7 +137,52 @@ func (c *TelemetryController) GetBMPStatus(w http.ResponseWriter, r *http.Reques
 		WriteError(w, http.StatusServiceUnavailable, "BMP Collector não inicializado")
 		return
 	}
-	WriteJSON(w, http.StatusOK, bmpServer.GetStatus())
+
+	status := bmpServer.GetStatus()
+	tenantScope := ResolveTenantScope(r)
+	if tenantScope != "" && c.store != nil {
+		devices := c.store.GetAllByTenant(tenantScope)
+		allowedDevIDs := make(map[string]bool, len(devices))
+		allowedIPs := make(map[string]bool, len(devices))
+		for _, d := range devices {
+			allowedDevIDs[d.ID] = true
+			allowedIPs[d.Host] = true
+		}
+
+		filteredClients := make([]bmp.BMPClientInfo, 0)
+		for _, client := range status.Clients {
+			if allowedDevIDs[client.DeviceID] || allowedIPs[client.RouterIP] {
+				filteredClients = append(filteredClients, client)
+			}
+		}
+
+		allPeers := bmpServer.GetPeers()
+		estCount := 0
+		downCount := 0
+		totalPeers := 0
+		for _, p := range allPeers {
+			if allowedIPs[p.RouterIP] {
+				totalPeers++
+				if strings.EqualFold(p.State, "Established") {
+					estCount++
+				} else {
+					downCount++
+				}
+			}
+		}
+
+		status.ConnectedRouters = len(filteredClients)
+		status.TotalPeersMonitored = totalPeers
+		status.EstablishedPeers = estCount
+		status.DownPeers = downCount
+		status.Clients = filteredClients
+		if len(filteredClients) == 0 {
+			status.TotalMessagesParsed = 0
+			status.TotalRoutesReceived = 0
+		}
+	}
+
+	WriteJSON(w, http.StatusOK, status)
 }
 
 // GetBMPPeers handles GET /api/bmp/peers
@@ -172,7 +192,26 @@ func (c *TelemetryController) GetBMPPeers(w http.ResponseWriter, r *http.Request
 		WriteError(w, http.StatusServiceUnavailable, "BMP Collector não inicializado")
 		return
 	}
-	WriteJSON(w, http.StatusOK, bmpServer.GetPeers())
+
+	peers := bmpServer.GetPeers()
+	tenantScope := ResolveTenantScope(r)
+	if tenantScope != "" && c.store != nil {
+		devices := c.store.GetAllByTenant(tenantScope)
+		allowedIPs := make(map[string]bool, len(devices))
+		for _, d := range devices {
+			allowedIPs[d.Host] = true
+		}
+		filtered := make([]bmp.BMPPeerState, 0)
+		for _, p := range peers {
+			if allowedIPs[p.RouterIP] {
+				filtered = append(filtered, p)
+			}
+		}
+		WriteJSON(w, http.StatusOK, filtered)
+		return
+	}
+
+	WriteJSON(w, http.StatusOK, peers)
 }
 
 // GetBMPEvents handles GET /api/bmp/events
@@ -191,7 +230,27 @@ func (c *TelemetryController) GetBMPEvents(w http.ResponseWriter, r *http.Reques
 		}
 	}
 
-	WriteJSON(w, http.StatusOK, bmpServer.GetRecentEvents(limit))
+	events := bmpServer.GetRecentEvents(limit)
+	tenantScope := ResolveTenantScope(r)
+	if tenantScope != "" && c.store != nil {
+		devices := c.store.GetAllByTenant(tenantScope)
+		allowedDevIDs := make(map[string]bool, len(devices))
+		allowedIPs := make(map[string]bool, len(devices))
+		for _, d := range devices {
+			allowedDevIDs[d.ID] = true
+			allowedIPs[d.Host] = true
+		}
+		filtered := make([]bmp.BMPEvent, 0)
+		for _, ev := range events {
+			if allowedDevIDs[ev.DeviceID] || allowedIPs[ev.RouterIP] {
+				filtered = append(filtered, ev)
+			}
+		}
+		WriteJSON(w, http.StatusOK, filtered)
+		return
+	}
+
+	WriteJSON(w, http.StatusOK, events)
 }
 
 // GetBMPConfigGuide handles GET /api/bmp/config-guide
@@ -280,5 +339,30 @@ func (tc *TelemetryController) GetBMPChurnRanking(w http.ResponseWriter, r *http
 		return
 	}
 	ranking := tc.engine.GetBMPServer().GetChurnRanking()
+	tenantScope := ResolveTenantScope(r)
+	if tenantScope != "" && tc.store != nil {
+		devices := tc.store.GetAllByTenant(tenantScope)
+		allowedIPs := make(map[string]bool, len(devices))
+		for _, d := range devices {
+			allowedIPs[d.Host] = true
+		}
+		filteredChurners := make([]bmp.PeerChurnMetrics, 0)
+		withdrawn1h := 0
+		announced1h := 0
+		for _, churner := range ranking.TopChurners {
+			if allowedIPs[churner.RouterIP] {
+				filteredChurners = append(filteredChurners, churner)
+				withdrawn1h += churner.Withdrawn1h
+				announced1h += churner.Announced1h
+			}
+		}
+		ranking.TopChurners = filteredChurners
+		ranking.TotalWithdrawn1h = withdrawn1h
+		ranking.TotalAnnounced1h = announced1h
+		if len(devices) == 0 {
+			ranking.AverageStability = 100.0
+			ranking.TimelineAggregate = make([]bmp.ChurnBucket, 0)
+		}
+	}
 	WriteJSON(w, http.StatusOK, ranking)
 }

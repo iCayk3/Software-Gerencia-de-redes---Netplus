@@ -19,12 +19,14 @@ import {
   type RPKISummary,
   type RPKIValidationResult
 } from '../../services/api'
+import { useAuth } from '../../context/AuthContext'
 
 interface RPKIValidatorViewProps {
   density?: 'comfortable' | 'compact'
 }
 
 export const RPKIValidatorView: React.FC<RPKIValidatorViewProps> = () => {
+  const { activeTenantId, currentTenant } = useAuth()
   const [summary, setSummary] = useState<RPKISummary | null>(null)
   const [invalids, setInvalids] = useState<RPKIValidationResult[]>([])
   const [loading, setLoading] = useState(true)
@@ -33,7 +35,7 @@ export const RPKIValidatorView: React.FC<RPKIValidatorViewProps> = () => {
 
   // Interactive Validation State
   const [testPrefix, setTestPrefix] = useState('45.166.28.0/22')
-  const [testASN, setTestASN] = useState('267943')
+  const [testASN, setTestASN] = useState(currentTenant?.asn || '267943')
   const [testing, setTesting] = useState(false)
   const [testResult, setTestResult] = useState<RPKIValidationResult | null>(null)
   const [testError, setTestError] = useState<string | null>(null)
@@ -61,10 +63,21 @@ export const RPKIValidatorView: React.FC<RPKIValidatorViewProps> = () => {
   }, [])
 
   useEffect(() => {
+    if (currentTenant?.asn) {
+      setTestASN(currentTenant.asn)
+    }
+  }, [currentTenant?.asn])
+
+  useEffect(() => {
     loadRPKI()
     const timer = setInterval(() => loadRPKI(), 15000)
-    return () => clearInterval(timer)
-  }, [loadRPKI])
+    const handleTenantChange = () => loadRPKI()
+    window.addEventListener('tenant_changed', handleTenantChange)
+    return () => {
+      clearInterval(timer)
+      window.removeEventListener('tenant_changed', handleTenantChange)
+    }
+  }, [loadRPKI, activeTenantId])
 
   const handleTestValidation = async (e?: React.FormEvent) => {
     if (e) e.preventDefault()
@@ -149,7 +162,11 @@ export const RPKIValidatorView: React.FC<RPKIValidatorViewProps> = () => {
                 </span>
                 {summary?.own_as_protected && (
                   <span className="hidden sm:inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-cyan-950 text-cyan-400 border border-cyan-800">
-                    AS 267943 Protegido ({summary.own_prefixes_count} prefixos)
+                    {currentTenant?.asn
+                      ? `AS ${currentTenant.asn} Protegido`
+                      : summary.own_asn && summary.own_asn !== 'Multi-AS'
+                      ? `AS ${summary.own_asn} Protegido`
+                      : 'Proteção ROA Ativa'} {summary.own_prefixes_count > 0 ? `(${summary.own_prefixes_count} prefixos)` : ''}
                   </span>
                 )}
               </div>

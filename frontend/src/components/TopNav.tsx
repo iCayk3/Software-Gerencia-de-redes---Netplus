@@ -16,7 +16,9 @@ import {
   Search,
   SlidersHorizontal,
   Building2,
-  Users
+  Users,
+  Layers,
+  KeyRound
 } from 'lucide-react'
 import type { MainSectionType } from './Sidebar'
 import type { HealthResponse } from '../services/api'
@@ -58,14 +60,35 @@ export const TopNav: React.FC<TopNavProps> = ({
 
   // Configuração das sub-abas dinâmicas de cada seção
   const sectionSubTabs: Record<MainSectionType, { title: string; subtitle: string; tabs: SubTabItem[] }> = {
-    traffic: {
-      title: 'Engenharia de Tráfego BGP & Roteamento',
-      subtitle: 'Controle de entrada e saída por AS, prepends de download, local-pref e inspeção BGP/OSPF',
+    bgp: {
+      title: 'Protocolo BGP & Engenharia de Tráfego',
+      subtitle: 'Controle de entrada e saída por AS, prepends de download, local-pref, sessões BMP, churn e RPKI',
       tabs: [
         { id: 'download', label: 'Download (AS-Path Prepending)', icon: Download },
         { id: 'upload', label: 'Upload (Local-Preference & Rotas)', icon: Upload },
-        { id: 'bgp', label: 'Sessões BGP', icon: Activity },
-        { id: 'ospf', label: 'Vizinhos OSPF', icon: Network },
+        { id: 'sessions', label: 'Sessões BGP & BMP', icon: Activity },
+        { id: 'churn', label: 'Estabilidade & Churn', icon: Activity },
+        { id: 'rpki', label: 'Validador RPKI (ROA)', icon: ShieldCheck },
+      ],
+    },
+    ospf: {
+      title: 'Protocolo OSPF & Topologia de Rede Interna',
+      subtitle: 'Inspeção de vizinhos OSPF, estados de adjacência, áreas de roteamento e comandos de diagnóstico CLI',
+      tabs: [
+        { id: 'neighbors', label: 'Vizinhos & Adjacências', icon: Network },
+        { id: 'areas', label: 'Áreas & Topologia', icon: Layers },
+        { id: 'diagnostics', label: 'Comandos & Diagnósticos CLI', icon: Terminal },
+      ],
+    },
+    traffic: {
+      title: 'Protocolo BGP & Engenharia de Tráfego',
+      subtitle: 'Controle de entrada e saída por AS, prepends de download, local-pref, sessões BMP, churn e RPKI',
+      tabs: [
+        { id: 'download', label: 'Download (AS-Path Prepending)', icon: Download },
+        { id: 'upload', label: 'Upload (Local-Preference & Rotas)', icon: Upload },
+        { id: 'sessions', label: 'Sessões BGP & BMP', icon: Activity },
+        { id: 'churn', label: 'Estabilidade & Churn', icon: Activity },
+        { id: 'rpki', label: 'Validador RPKI (ROA)', icon: ShieldCheck },
       ],
     },
     devices: {
@@ -78,11 +101,9 @@ export const TopNav: React.FC<TopNavProps> = ({
     },
     telemetry: {
       title: 'NOC & Telemetria em Tempo Real',
-      subtitle: 'Monitoramento BMP, ranking de churn BGP, validação RPKI e detecção de anomalias',
+      subtitle: 'Visão geral do NOC, métricas de ciclo de coleta, integridade de roteadores e alertas Syslog',
       tabs: [
         { id: 'overview', label: 'Visão Geral NOC', icon: Radio },
-        { id: 'churn', label: 'Ranking BGP Churn', icon: Activity },
-        { id: 'rpki', label: 'Segurança RPKI (ROA)', icon: ShieldCheck },
         { id: 'alerts', label: 'Central de Alertas & Syslog', icon: Bell, badge: activeAlertsCount },
       ],
     },
@@ -117,9 +138,16 @@ export const TopNav: React.FC<TopNavProps> = ({
         { id: 'list', label: 'Usuários Cadastrados', icon: Users },
       ],
     },
+    license: {
+      title: 'Licença & Servidor Master Central',
+      subtitle: 'Informações do plano contratado, capacidade de roteadores e sincronização com o master',
+      tabs: [
+        { id: 'overview', label: 'Status da Licença', icon: KeyRound },
+      ],
+    },
   }
 
-  const currentSectionConfig = sectionSubTabs[activeSection] || sectionSubTabs.traffic
+  const currentSectionConfig = sectionSubTabs[activeSection] || sectionSubTabs.bgp
 
   return (
     <header className="border-b border-slate-800 bg-slate-900/90 backdrop-blur sticky top-0 z-20">
@@ -227,8 +255,8 @@ export const TopNav: React.FC<TopNavProps> = ({
               </button>
             )}
 
-            {/* Zero Flap Security Tag (in Traffic section) */}
-            {activeSection === 'traffic' && (
+            {/* Zero Flap Security Tag (in BGP section) */}
+            {(activeSection === 'bgp' || activeSection === 'traffic') && (
               <span className="hidden xl:inline-flex items-center gap-1 text-[11px] font-semibold px-2.5 py-1.5 rounded-xl bg-emerald-950/80 text-emerald-300 border border-emerald-800/80">
                 <ShieldCheck className="h-3.5 w-3.5 text-emerald-400" />
                 <span>Zero Flap</span>

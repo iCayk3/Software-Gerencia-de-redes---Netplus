@@ -1,11 +1,13 @@
 package api
 
 import (
+	"context"
 	"log"
 	"net/http"
 	"os"
 	"path/filepath"
 
+	"network-software/internal/license"
 	"network-software/internal/models"
 	"network-software/internal/rpki"
 	"network-software/internal/storage"
@@ -38,8 +40,20 @@ func NewRouter(
 	profileSvc := traffic.NewProfileService(trafficSvc, profileStore, store)
 	profileCtrl := NewProfileController(profileSvc, auditStore)
 
+	// License & Master Server Manager
+	masterURL := os.Getenv("MASTER_SERVER_URL")
+	licenseMgr := license.NewManager(dataDir, masterURL)
+	if defTenant, err := tenantStore.GetByID("default-tenant"); err == nil && defTenant != nil && defTenant.Name != "" {
+		licenseMgr.SetClientName(defTenant.Name)
+	}
+	licenseMgr.Start(context.Background(), func() int {
+		return len(store.GetAll())
+	})
+	licenseCtrl := NewLicenseController(licenseMgr, store)
+
 	devCtrl := NewDeviceController(store, engine)
-	telCtrl := NewTelemetryController(engine, store)
+	devCtrl.SetLicenseManager(licenseMgr)
+	telCtrl := NewTelemetryController(engine, store, tenantStore)
 	routesCtrl := NewRoutesController(store, trafficSvc, auditStore)
 
 	peerMetaStore, err := storage.NewPeerMetadataStore(dataDir)
@@ -55,10 +69,14 @@ func NewRouter(
 	tenantCtrl := NewTenantController(tenantStore, auditStore)
 	authCtrl := NewAuthController(userStore, tenantStore, auditStore)
 	auditCtrl := NewAuditController(auditStore)
-	rpkiCtrl := NewRPKIController(rpki.NewValidator())
+	rpkiCtrl := NewRPKIController(rpki.NewValidator(), tenantStore, store)
 
 	// Base & Health check
 	mux.HandleFunc("GET /api/health", HandleHealth)
+
+	// License & Master Server Heartbeat Status
+	mux.HandleFunc("GET /api/license/status", licenseCtrl.GetStatus)
+	mux.HandleFunc("POST /api/license/activate", RequireRole(models.RoleAdmin)(licenseCtrl.Activate))
 
 	// Multi-Tenant Company Management
 	mux.HandleFunc("GET /api/tenants", tenantCtrl.ListTenants)
@@ -112,7 +130,7 @@ func NewRouter(
 	mux.HandleFunc("POST /api/traffic/upload/local-pref", RequireRole(models.RoleAdmin, models.RoleNOCOperator)(trafficCtrl.SetLocalPreference))
 	mux.HandleFunc("GET /api/traffic/as-metadata", trafficCtrl.GetASMetadata)
 	mux.HandleFunc("POST /api/traffic/as-metadata", RequireRole(models.RoleAdmin, models.RoleNOCOperator)(trafficCtrl.UpdateASMetadata))
-	mux.HandleFunc("POST /api/traffic/as-metadata/upload-image", RequireRole(models.RoleAdmin)(trafficCtrl.UploadASImage))
+	mux.HandleFunc("POST /api/traffic/as-metadata/upload-image", RequireRole(models.RoleAdmin, models.RoleNOCOperator)(trafficCtrl.UploadASImage))
 	mux.HandleFunc("GET /api/traffic/peer-metadata", trafficCtrl.GetPeerMetadata)
 	mux.HandleFunc("POST /api/traffic/peer-metadata", RequireRole(models.RoleAdmin, models.RoleNOCOperator)(trafficCtrl.UpdatePeerMetadata))
 

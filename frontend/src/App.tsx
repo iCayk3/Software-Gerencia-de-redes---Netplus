@@ -1,27 +1,43 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, Suspense, lazy } from 'react'
 import { Sidebar, type MainSectionType } from './components/Sidebar'
 import { TopNav } from './components/TopNav'
-import { DeviceManager } from './components/DeviceManager'
-import { TelemetryView } from './components/TelemetryView'
-import { BGPManager } from './components/BGPManager'
-import { OSPFManager } from './components/OSPFManager'
-import { TerminalView } from './components/TerminalView'
-import { DiagnosticsView } from './components/DiagnosticsView'
-import { TrafficManager } from './components/TrafficManager'
 import { CommandPalette } from './components/CommandPalette'
 import { LoginPage } from './components/LoginPage'
-import { AuditView } from './components/AuditView'
-import { TenantManager } from './components/TenantManager'
-import { UserManager } from './components/UserManager'
 import { AuthProvider, useAuth } from './context/AuthContext'
 import { fetchHealth, fetchAlerts, fetchDevices, type HealthResponse, type Device } from './services/api'
-import { ShieldCheck, Terminal, Network } from 'lucide-react'
+import { ShieldCheck, Terminal, Network, Loader2 } from 'lucide-react'
+
+// Dynamic Code-Splitting via React.lazy:
+const TrafficManager = lazy(() => import('./components/TrafficManager').then(m => ({ default: m.TrafficManager })))
+const DeviceManager = lazy(() => import('./components/DeviceManager').then(m => ({ default: m.DeviceManager })))
+const TelemetryView = lazy(() => import('./components/TelemetryView').then(m => ({ default: m.TelemetryView })))
+const BGPManager = lazy(() => import('./components/BGPManager').then(m => ({ default: m.BGPManager })))
+const BGPChurnView = lazy(() => import('./components/telemetry/BGPChurnView').then(m => ({ default: m.BGPChurnView })))
+const RPKIValidatorView = lazy(() => import('./components/telemetry/RPKIValidatorView').then(m => ({ default: m.RPKIValidatorView })))
+const OSPFManager = lazy(() => import('./components/OSPFManager').then(m => ({ default: m.OSPFManager })))
+const TerminalView = lazy(() => import('./components/TerminalView').then(m => ({ default: m.TerminalView })))
+const DiagnosticsView = lazy(() => import('./components/DiagnosticsView').then(m => ({ default: m.DiagnosticsView })))
+const AuditView = lazy(() => import('./components/AuditView').then(m => ({ default: m.AuditView })))
+const TenantManager = lazy(() => import('./components/TenantManager').then(m => ({ default: m.TenantManager })))
+const UserManager = lazy(() => import('./components/UserManager').then(m => ({ default: m.UserManager })))
+const LicenseView = lazy(() => import('./components/LicenseView').then(m => ({ default: m.LicenseView })))
+
+function ViewLoader() {
+  return (
+    <div className="flex flex-col items-center justify-center min-h-[350px] text-slate-400 space-y-3 animate-in fade-in duration-150">
+      <div className="w-10 h-10 rounded-2xl bg-cyan-500/10 border border-cyan-500/30 flex items-center justify-center">
+        <Loader2 className="w-5 h-5 text-cyan-400 animate-spin" />
+      </div>
+      <p className="text-xs text-slate-400 font-mono tracking-wide">Carregando módulo NetPulse...</p>
+    </div>
+  )
+}
 
 function AppContent() {
   const { user, token, activeTenantId, loading: authLoading } = useAuth()
 
   // Navigation State: Seção Lateral e Sub-Aba Superior
-  const [activeSection, setActiveSection] = useState<MainSectionType>('traffic')
+  const [activeSection, setActiveSection] = useState<MainSectionType>('bgp')
   const [activeSubTab, setActiveSubTab] = useState<string>('download')
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState<boolean>(false)
   const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState<boolean>(false)
@@ -92,8 +108,12 @@ function AppContent() {
       return
     }
     switch (section) {
+      case 'bgp':
       case 'traffic':
         setActiveSubTab('download')
+        break
+      case 'ospf':
+        setActiveSubTab('neighbors')
         break
       case 'devices':
         setActiveSubTab('inventory')
@@ -124,8 +144,8 @@ function AppContent() {
   }
 
   const handleSelectDeviceForBGP = () => {
-    setActiveSection('traffic')
-    setActiveSubTab('bgp')
+    setActiveSection('bgp')
+    setActiveSubTab('sessions')
   }
 
   const handleOpenAlerts = () => {
@@ -193,74 +213,91 @@ function AppContent() {
               <div>
                 <p className="font-semibold text-sm">Servidor backend não detectado em http://localhost:8080</p>
                 <p className="text-xs text-amber-200/80 mt-1">
-                  Certifique-se de executar o backend em Go (<code className="bg-slate-900 px-1.5 py-0.5 rounded text-white font-mono">go run ./cmd/api</code>) ou o modo de simulação Node.js (<code className="bg-slate-900 px-1.5 py-0.5 rounded text-white font-mono">node mock-server.cjs</code>).
+                  Certifique-se de executar o backend em Go (<code className="bg-slate-900 px-1.5 py-0.5 rounded text-white font-mono">go run ./cmd/api</code>) ou os contêineres Docker (<code className="bg-slate-900 px-1.5 py-0.5 rounded text-white font-mono">docker compose up -d</code>).
                 </p>
               </div>
             </div>
           )}
 
-          {/* ================= SEÇÃO 1: ENGENHARIA DE TRÁFEGO & BGP ================= */}
-          {activeSection === 'traffic' && (
-            <>
-              {activeSubTab === 'download' && (
-                <TrafficManager activeSubTab="download" hideInternalSubTabs={true} density={density} />
-              )}
-              {activeSubTab === 'upload' && (
-                <TrafficManager activeSubTab="upload" hideInternalSubTabs={true} density={density} />
-              )}
-              {activeSubTab === 'bgp' && <BGPManager />}
-              {activeSubTab === 'ospf' && <OSPFManager />}
-            </>
-          )}
+          <Suspense fallback={<ViewLoader />}>
+            {/* ================= SEÇÃO 1: PROTOCOLO BGP & ENGENHARIA DE TRÁFEGO ================= */}
+            {(activeSection === 'bgp' || activeSection === 'traffic') && (
+              <>
+                {activeSubTab === 'download' && (
+                  <TrafficManager activeSubTab="download" hideInternalSubTabs={true} density={density} />
+                )}
+                {activeSubTab === 'upload' && (
+                  <TrafficManager activeSubTab="upload" hideInternalSubTabs={true} density={density} />
+                )}
+                {(activeSubTab === 'sessions' || activeSubTab === 'bgp') && <BGPManager />}
+                {activeSubTab === 'churn' && <BGPChurnView density={density} />}
+                {activeSubTab === 'rpki' && <RPKIValidatorView density={density} />}
+              </>
+            )}
 
-          {/* ================= SEÇÃO 2: EQUIPAMENTOS & INFRAESTRUTURA ================= */}
-          {activeSection === 'devices' && (
-            <>
-              {activeSubTab === 'inventory' && (
-                <DeviceManager
-                  onSelectDeviceForTerminal={handleSelectDeviceForTerminal}
-                  onSelectDeviceForBGP={handleSelectDeviceForBGP}
-                  density={density}
-                />
-              )}
-              {activeSubTab === 'terminal' && (
-                <TerminalView initialDevice={targetTerminalDevice} />
-              )}
-            </>
-          )}
+            {/* ================= SEÇÃO 2: PROTOCOLO OSPF & TOPOLOGIA INTERNA ================= */}
+            {activeSection === 'ospf' && (
+              <OSPFManager
+                activeSubTab={activeSubTab as any}
+                onSelectSubTab={(tab) => setActiveSubTab(tab)}
+                density={density}
+              />
+            )}
 
-          {/* ================= SEÇÃO 3: NOC & TELEMETRIA ================= */}
-          {activeSection === 'telemetry' && (
-            <TelemetryView
-              onAlertsUpdated={(cnt) => setActiveAlertsCount(cnt)}
-              activeSubTab={activeSubTab as 'overview' | 'alerts' | 'churn' | 'rpki'}
-              onSelectSubTab={(tab) => setActiveSubTab(tab)}
-            />
-          )}
+            {/* ================= SEÇÃO 2: EQUIPAMENTOS & INFRAESTRUTURA ================= */}
+            {activeSection === 'devices' && (
+              <>
+                {activeSubTab === 'inventory' && (
+                  <DeviceManager
+                    onSelectDeviceForTerminal={handleSelectDeviceForTerminal}
+                    onSelectDeviceForBGP={handleSelectDeviceForBGP}
+                    density={density}
+                  />
+                )}
+                {activeSubTab === 'terminal' && (
+                  <TerminalView initialDevice={targetTerminalDevice} />
+                )}
+              </>
+            )}
 
-          {/* ================= SEÇÃO 4: FERRAMENTAS DE REDE & DIAGNÓSTICOS ================= */}
-          {activeSection === 'diagnostics' && (
-            <DiagnosticsView
-              activeSubTab={activeSubTab as any}
-              onSubTabChange={(t) => setActiveSubTab(t)}
-              hideInternalTabs={true}
-            />
-          )}
+            {/* ================= SEÇÃO 3: NOC & TELEMETRIA ================= */}
+            {activeSection === 'telemetry' && (
+              <TelemetryView
+                onAlertsUpdated={(cnt) => setActiveAlertsCount(cnt)}
+                activeSubTab={activeSubTab as 'overview' | 'alerts' | 'churn' | 'rpki'}
+                onSelectSubTab={(tab) => setActiveSubTab(tab)}
+              />
+            )}
 
-          {/* ================= SEÇÃO 5: TRILHA DE AUDITORIA (AUDIT TRAIL) ================= */}
-          {activeSection === 'audit' && (
-            <AuditView density={density} />
-          )}
+            {/* ================= SEÇÃO 4: FERRAMENTAS DE REDE & DIAGNÓSTICOS ================= */}
+            {activeSection === 'diagnostics' && (
+              <DiagnosticsView
+                activeSubTab={activeSubTab as any}
+                onSubTabChange={(t) => setActiveSubTab(t)}
+                hideInternalTabs={true}
+              />
+            )}
 
-          {/* ================= SEÇÃO 6: EMPRESAS CLIENTES (MULTI-TENANCY) ================= */}
-          {activeSection === 'tenants' && (
-            <TenantManager />
-          )}
+            {/* ================= SEÇÃO 5: TRILHA DE AUDITORIA (AUDIT TRAIL) ================= */}
+            {activeSection === 'audit' && (
+              <AuditView density={density} />
+            )}
 
-          {/* ================= SEÇÃO 7: GESTÃO DE USUÁRIOS (RBAC) ================= */}
-          {activeSection === 'users' && (
-            <UserManager />
-          )}
+            {/* ================= SEÇÃO 6: EMPRESAS CLIENTES (MULTI-TENANCY) ================= */}
+            {activeSection === 'tenants' && (
+              <TenantManager />
+            )}
+
+            {/* ================= SEÇÃO 7: GESTÃO DE USUÁRIOS (RBAC) ================= */}
+            {activeSection === 'users' && (
+              <UserManager />
+            )}
+
+            {/* ================= SEÇÃO 8: LICENÇA & SERVIDOR MASTER ================= */}
+            {activeSection === 'license' && (
+              <LicenseView />
+            )}
+          </Suspense>
         </main>
 
         {/* Rodapé Compacto */}

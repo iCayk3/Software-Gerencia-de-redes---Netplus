@@ -303,14 +303,27 @@ func (c *Collector) GetAllCachedOSPF() []models.OSPFNeighbor {
 
 // GetOverview computes an aggregate summary of the entire network.
 func (c *Collector) GetOverview() models.TelemetryOverview {
+	return c.GetOverviewForTenant("")
+}
+
+// GetOverviewForTenant computes an aggregate summary filtered by tenant.
+func (c *Collector) GetOverviewForTenant(tenantID string) models.TelemetryOverview {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
 
-	devices := c.store.GetAll()
+	var devices []models.Device
+	if tenantID == "" {
+		devices = c.store.GetAll()
+	} else {
+		devices = c.store.GetAllByTenant(tenantID)
+	}
+
 	onlineDevs := 0
 	offlineDevs := 0
+	allowedDevIDs := make(map[string]bool, len(devices))
 
 	for _, d := range devices {
+		allowedDevIDs[d.ID] = true
 		if d.Status == "online" {
 			onlineDevs++
 		} else {
@@ -323,7 +336,10 @@ func (c *Collector) GetOverview() models.TelemetryOverview {
 	downBGP := 0
 	totalPfx := 0
 
-	for _, sessions := range c.cachedBGP {
+	for devID, sessions := range c.cachedBGP {
+		if !allowedDevIDs[devID] {
+			continue
+		}
 		for _, s := range sessions {
 			totalBGP++
 			if strings.EqualFold(s.State, "Established") {
@@ -339,7 +355,10 @@ func (c *Collector) GetOverview() models.TelemetryOverview {
 	fullOSPF := 0
 	downOSPF := 0
 
-	for _, neighbors := range c.cachedOSPF {
+	for devID, neighbors := range c.cachedOSPF {
+		if !allowedDevIDs[devID] {
+			continue
+		}
 		for _, n := range neighbors {
 			totalOSPF++
 			if strings.EqualFold(n.State, "Full") || strings.EqualFold(n.State, "2-Way") {
@@ -350,11 +369,24 @@ func (c *Collector) GetOverview() models.TelemetryOverview {
 		}
 	}
 
-	activeAlerts := len(c.alertStore.GetActiveAlerts())
+	activeAlerts := 0
+	for _, a := range c.alertStore.GetActiveAlerts() {
+		if allowedDevIDs[a.DeviceID] {
+			activeAlerts++
+		}
+	}
 
 	lastUp := time.Now()
 	if c.lastCycleTime != nil {
 		lastUp = *c.lastCycleTime
+	}
+
+	allSnapshots := c.alertStore.GetSnapshots(30)
+	filteredSnapshots := make([]models.TelemetrySnapshot, 0, len(allSnapshots))
+	for _, snap := range allSnapshots {
+		if allowedDevIDs[snap.DeviceID] {
+			filteredSnapshots = append(filteredSnapshots, snap)
+		}
 	}
 
 	return models.TelemetryOverview{
@@ -370,7 +402,7 @@ func (c *Collector) GetOverview() models.TelemetryOverview {
 		DownOSPF:           downOSPF,
 		ActiveAlertsCount:  activeAlerts,
 		LastUpdated:        lastUp,
-		RecentSnapshots:    c.alertStore.GetSnapshots(30),
+		RecentSnapshots:    filteredSnapshots,
 	}
 }
 

@@ -43,7 +43,7 @@ func (tc *TrafficController) SetPeerMetadataStore(p *storage.PeerMetadataStore) 
 // GetUploadOverview handles GET /api/traffic/upload/overview
 func (tc *TrafficController) GetUploadOverview(w http.ResponseWriter, r *http.Request) {
 	deviceID := r.URL.Query().Get("device_id")
-	if deviceID != "" {
+	if deviceID != "" && deviceID != "all" {
 		if _, err := CheckDeviceTenantAccess(r, tc.store, deviceID); err != nil {
 			if errors.Is(err, ErrAccessDeniedToDevice) {
 				WriteError(w, http.StatusForbidden, err.Error())
