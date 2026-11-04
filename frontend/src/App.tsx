@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, Suspense, lazy } from 'react'
 import { Sidebar, type MainSectionType } from './components/Sidebar'
 import { TopNav } from './components/TopNav'
+import { NetPulseDock } from './components/NetPulseDock'
 import { CommandPalette } from './components/CommandPalette'
 import { LoginPage } from './components/LoginPage'
 import { AuthProvider, useAuth } from './context/AuthContext'
@@ -230,7 +231,7 @@ function AppContent() {
         />
 
         {/* Conteúdo Dinâmico */}
-        <main className="flex-1 overflow-y-auto px-4 sm:px-6 lg:px-8 py-6">
+        <main className="flex-1 overflow-y-auto px-4 sm:px-6 lg:px-8 py-6 pb-28">
           {/* Offline Warning Banner */}
           {!loadingHealth && !health && (
             <div className="mb-6 p-4 rounded-xl bg-[#1C202C] border border-amber-800/40 text-amber-200/90 flex items-start gap-3 shadow-md animate-in fade-in">
@@ -344,7 +345,15 @@ function AppContent() {
         </footer>
       </div>
 
-      {/* 3. Command Palette Global (Ctrl + K) */}
+      {/* 3. Dock Principal de Navegação (Estilo Apple Dock / NetPulse) */}
+      <NetPulseDock
+        activeSection={activeSection}
+        onSelectSection={handleSectionChange}
+        activeAlertsCount={activeAlertsCount}
+        onOpenSearch={() => setIsCommandPaletteOpen(true)}
+      />
+
+      {/* 4. Command Palette Global (Ctrl + K) */}
       {isCommandPaletteOpen && (
         <CommandPalette
           isOpen={isCommandPaletteOpen}
