@@ -82,10 +82,15 @@ function AppContent() {
         fetchAlerts('active').catch(() => []),
         fetchDevices().catch(() => [])
       ])
-      setHealth(healthData)
-      setActiveAlertsCount(alertsData.length)
+      setHealth((prev) => (prev?.status === healthData.status && prev?.uptime === healthData.uptime ? prev : healthData))
+      setActiveAlertsCount((prev) => (prev === alertsData.length ? prev : alertsData.length))
       if (devicesData && devicesData.length > 0) {
-        setDevicesList(devicesData)
+        setDevicesList((prev) => {
+          if (prev.length === devicesData.length && prev.every((d, i) => d.id === devicesData[i]?.id && d.status === devicesData[i]?.status)) {
+            return prev
+          }
+          return devicesData
+        })
       }
     } catch {
       setHealth(null)
@@ -95,10 +100,11 @@ function AppContent() {
   }, [])
 
   useEffect(() => {
+    if (!token) return
     checkHealthAndAlerts()
-    const timer = setInterval(checkHealthAndAlerts, 10000)
+    const timer = setInterval(checkHealthAndAlerts, 15000)
     return () => clearInterval(timer)
-  }, [checkHealthAndAlerts, activeTenantId])
+  }, [checkHealthAndAlerts, activeTenantId, token])
 
   // Troca de Seção Lateral com definição inteligente da sub-aba padrão
   const handleSectionChange = (section: MainSectionType, subTab?: string) => {
@@ -320,15 +326,17 @@ function AppContent() {
       </div>
 
       {/* 3. Command Palette Global (Ctrl + K) */}
-      <CommandPalette
-        isOpen={isCommandPaletteOpen}
-        onClose={() => setIsCommandPaletteOpen(false)}
-        onNavigate={handleSectionChange}
-        onSelectDeviceForTerminal={handleSelectDeviceForTerminal}
-        devices={devicesList}
-        currentDensity={density}
-        onToggleDensity={handleToggleDensity}
-      />
+      {isCommandPaletteOpen && (
+        <CommandPalette
+          isOpen={isCommandPaletteOpen}
+          onClose={() => setIsCommandPaletteOpen(false)}
+          onNavigate={handleSectionChange}
+          onSelectDeviceForTerminal={handleSelectDeviceForTerminal}
+          devices={devicesList}
+          currentDensity={density}
+          onToggleDensity={handleToggleDensity}
+        />
+      )}
     </div>
   )
 }

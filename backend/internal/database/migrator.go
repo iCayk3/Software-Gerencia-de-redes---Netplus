@@ -18,29 +18,35 @@ func AutoMigrateFromJSON(db *sql.DB) error {
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
 
+	seedSampleData := os.Getenv("SEED_SAMPLE_DEVICES") != "false" && os.Getenv("PRODUCTION_MODE") != "true"
+
 	// 1. Seed Users if table is empty
 	var userCount int
 	if err := db.QueryRowContext(ctx, "SELECT COUNT(*) FROM users").Scan(&userCount); err == nil && userCount == 0 {
-		log.Println("[Migrator] 👤 Inicializando usuários padrão de demonstração...")
-		seedUsers(ctx, db)
+		log.Println("[Migrator] 👤 Inicializando usuário administrador inicial...")
+		seedUsers(ctx, db, seedSampleData)
 	}
 
-	// 2. Import Devices from JSON if table is empty
-	var deviceCount int
-	if err := db.QueryRowContext(ctx, "SELECT COUNT(*) FROM devices").Scan(&deviceCount); err == nil && deviceCount == 0 {
-		importDevices(ctx, db)
-	}
+	// 2. Import Devices from JSON if table is empty and sample data enabled
+	if seedSampleData {
+		var deviceCount int
+		if err := db.QueryRowContext(ctx, "SELECT COUNT(*) FROM devices").Scan(&deviceCount); err == nil && deviceCount == 0 {
+			importDevices(ctx, db)
+		}
 
-	// 3. Import AS Metadata from JSON if table is empty
-	var asCount int
-	if err := db.QueryRowContext(ctx, "SELECT COUNT(*) FROM as_metadata").Scan(&asCount); err == nil && asCount == 0 {
-		importASMetadata(ctx, db)
+		// 3. Import AS Metadata from JSON if table is empty
+		var asCount int
+		if err := db.QueryRowContext(ctx, "SELECT COUNT(*) FROM as_metadata").Scan(&asCount); err == nil && asCount == 0 {
+			importASMetadata(ctx, db)
+		}
+	} else {
+		log.Println("[Migrator] 🚀 Modo Produção Limpo: Roteadores de desenvolvimento não foram importados. Base pronta para seus equipamentos.")
 	}
 
 	return nil
 }
 
-func seedUsers(ctx context.Context, db *sql.DB) {
+func seedUsers(ctx context.Context, db *sql.DB, seedAll bool) {
 	defaultUsers := []struct {
 		ID       string
 		Name     string
@@ -55,20 +61,37 @@ func seedUsers(ctx context.Context, db *sql.DB) {
 			Password: "admin123",
 			Role:     models.RoleAdmin,
 		},
-		{
-			ID:       "usr-noc-01",
-			Name:     "Operador NOC",
-			Email:    "operador@netpulse.com",
-			Password: "operador123",
-			Role:     models.RoleNOCOperator,
-		},
-		{
-			ID:       "usr-viewer-01",
-			Name:     "Diretoria / Visualizador",
-			Email:    "diretoria@netpulse.com",
-			Password: "diretoria123",
-			Role:     models.RoleViewer,
-		},
+	}
+
+	if seedAll {
+		defaultUsers = append(defaultUsers,
+			struct {
+				ID       string
+				Name     string
+				Email    string
+				Password string
+				Role     models.UserRole
+			}{
+				ID:       "usr-noc-01",
+				Name:     "Operador NOC",
+				Email:    "operador@netpulse.com",
+				Password: "operador123",
+				Role:     models.RoleNOCOperator,
+			},
+			struct {
+				ID       string
+				Name     string
+				Email    string
+				Password string
+				Role     models.UserRole
+			}{
+				ID:       "usr-viewer-01",
+				Name:     "Diretoria / Visualizador",
+				Email:    "diretoria@netpulse.com",
+				Password: "diretoria123",
+				Role:     models.RoleViewer,
+			},
+		)
 	}
 
 	for _, u := range defaultUsers {
