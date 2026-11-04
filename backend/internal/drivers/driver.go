@@ -20,6 +20,7 @@ type NetworkDriver interface {
 	GetBGPImportPolicy(peerIP string) (policyName string, node int, localPref int, err error)
 	GetAllBGPImportPolicies() (map[string]models.BGPImportPolicyInfo, error)
 	RunCommand(cmd string) (string, error)
+	AuditCompliance() (*models.DeviceComplianceAudit, error)
 }
 
 // NewDriver instantiates the appropriate vendor driver for a device.

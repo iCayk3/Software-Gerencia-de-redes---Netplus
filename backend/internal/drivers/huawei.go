@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	"network-software/internal/compliance"
 	"network-software/internal/models"
 	"network-software/internal/sshclient"
 )
@@ -23,6 +24,11 @@ type HuaweiDriver struct {
 
 func NewHuaweiDriver(device *models.Device, client *sshclient.SSHClient) *HuaweiDriver {
 	return &HuaweiDriver{device: device, client: client}
+}
+
+func (d *HuaweiDriver) AuditCompliance() (*models.DeviceComplianceAudit, error) {
+	ins := compliance.NewInspector()
+	return ins.AuditDevice(d.device, d)
 }
 
 func (d *HuaweiDriver) TestConnection() (models.SSHTestResult, error) {

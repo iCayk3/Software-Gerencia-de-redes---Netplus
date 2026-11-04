@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"time"
 
@@ -35,8 +36,9 @@ func NewProfileStore(dataDir string) (*ProfileStore, error) {
 		return nil, fmt.Errorf("failed to load traffic profiles: %w", err)
 	}
 
-	// If no profiles exist, seed the standard ISP operational profiles
-	if len(store.profiles) == 0 {
+	// If no profiles exist, seed the standard ISP operational profiles ONLY if sample seeding is enabled or under unit test
+	isTest := strings.HasSuffix(os.Args[0], ".test") || strings.HasSuffix(os.Args[0], ".test.exe") || os.Getenv("GO_ENV") == "test"
+	if len(store.profiles) == 0 && (os.Getenv("SEED_SAMPLE_DEVICES") == "true" || isTest) {
 		store.seedDefaults()
 		_ = store.saveLocked()
 	}

@@ -18,7 +18,7 @@ func AutoMigrateFromJSON(db *sql.DB) error {
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
 
-	seedSampleData := os.Getenv("SEED_SAMPLE_DEVICES") != "false" && os.Getenv("PRODUCTION_MODE") != "true"
+	seedSampleData := os.Getenv("SEED_SAMPLE_DEVICES") == "true"
 
 	// 1. Seed Users if table is empty
 	var userCount int

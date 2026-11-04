@@ -120,6 +120,40 @@ export interface SSHTestResult {
   error?: string
 }
 
+export type ComplianceStatus = 'passed' | 'warning' | 'failed'
+
+export interface ComplianceCheckItem {
+  id: string
+  category: 'connectivity' | 'bgp_core' | 'traffic_engineering' | 'telemetry'
+  title: string
+  description: string
+  status: ComplianceStatus
+  message: string
+  found_value?: string
+  remediation?: string
+}
+
+export interface DeviceComplianceAudit {
+  device_id: string
+  device_name: string
+  vendor: VendorType
+  host: string
+  audited_at: string
+  is_manageable: boolean
+  overall_status: ComplianceStatus
+  overall_score: number
+  summary: string
+  local_asn?: string
+  router_id?: string
+  active_sessions: number
+  total_sessions: number
+  has_origin_tagging: boolean
+  has_export_policy: boolean
+  has_telemetry: boolean
+  items: ComplianceCheckItem[]
+  remediation_script?: string
+}
+
 export interface CommandExecResponse {
   device_id: string
   device_name: string
@@ -628,6 +662,27 @@ export async function testDeviceSSH(id: string): Promise<SSHTestResult> {
   if (!res.ok) {
     const err = await res.json().catch(() => ({}))
     throw new Error(err.error || `Erro ao testar SSH: HTTP ${res.status}`)
+  }
+  return res.json()
+}
+
+export async function auditDeviceCompliance(id: string): Promise<DeviceComplianceAudit> {
+  const res = await apiFetch(`${API_BASE}/devices/${encodeURIComponent(id)}/compliance`, {
+    method: 'POST',
+  })
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}))
+    throw new Error(err.error || `Erro ao auditar configuração do equipamento: HTTP ${res.status}`)
+  }
+  return res.json()
+}
+
+export async function fetchDeviceCompliance(id: string, fresh = false): Promise<DeviceComplianceAudit> {
+  const url = `${API_BASE}/devices/${encodeURIComponent(id)}/compliance${fresh ? '?fresh=true' : ''}`
+  const res = await apiFetch(url)
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}))
+    throw new Error(err.error || `Erro ao consultar conformidade: HTTP ${res.status}`)
   }
   return res.json()
 }

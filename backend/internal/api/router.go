@@ -109,6 +109,8 @@ func NewRouter(
 	mux.HandleFunc("PUT /api/devices/{id}", RequireRole(models.RoleAdmin)(devCtrl.UpdateDevice))
 	mux.HandleFunc("DELETE /api/devices/{id}", RequireRole(models.RoleAdmin)(devCtrl.DeleteDevice))
 	mux.HandleFunc("POST /api/devices/{id}/test", devCtrl.TestDevice)
+	mux.HandleFunc("POST /api/devices/{id}/compliance", devCtrl.AuditDeviceCompliance)
+	mux.HandleFunc("GET /api/devices/{id}/compliance", devCtrl.GetDeviceCompliance)
 
 	// Routing inspection per device
 	mux.HandleFunc("GET /api/devices/{id}/bgp", devCtrl.GetDeviceBGP)

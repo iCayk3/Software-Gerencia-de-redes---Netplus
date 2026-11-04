@@ -7,6 +7,7 @@ import (
 	"strconv"
 	"strings"
 
+	"network-software/internal/compliance"
 	"network-software/internal/models"
 	"network-software/internal/sshclient"
 )
@@ -23,6 +24,11 @@ func NewMikrotikV6Driver(device *models.Device, client *sshclient.SSHClient) *Mi
 
 func NewMikrotikV7Driver(device *models.Device, client *sshclient.SSHClient) *MikrotikDriver {
 	return &MikrotikDriver{device: device, client: client, version: 7}
+}
+
+func (d *MikrotikDriver) AuditCompliance() (*models.DeviceComplianceAudit, error) {
+	ins := compliance.NewInspector()
+	return ins.AuditDevice(d.device, d)
 }
 
 func (d *MikrotikDriver) TestConnection() (models.SSHTestResult, error) {

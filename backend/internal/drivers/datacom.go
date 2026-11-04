@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	"network-software/internal/compliance"
 	"network-software/internal/models"
 	"network-software/internal/sshclient"
 )
@@ -19,6 +20,11 @@ type DatacomDriver struct {
 
 func NewDatacomDriver(device *models.Device, client *sshclient.SSHClient) *DatacomDriver {
 	return &DatacomDriver{device: device, client: client}
+}
+
+func (d *DatacomDriver) AuditCompliance() (*models.DeviceComplianceAudit, error) {
+	ins := compliance.NewInspector()
+	return ins.AuditDevice(d.device, d)
 }
 
 func (d *DatacomDriver) TestConnection() (models.SSHTestResult, error) {

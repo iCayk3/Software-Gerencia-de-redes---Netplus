@@ -12,7 +12,8 @@ import {
   AlertCircle,
   Network,
   Activity,
-  Building2
+  Building2,
+  Layers
 } from 'lucide-react'
 import {
   fetchDevices,
@@ -20,12 +21,15 @@ import {
   updateDevice,
   deleteDevice,
   testDeviceSSH,
+  auditDeviceCompliance,
   type Device,
   type VendorType,
-  type SSHTestResult
+  type SSHTestResult,
+  type DeviceComplianceAudit
 } from '../services/api'
 import { useAuth } from '../context/AuthContext'
 import { DeviceCardSkeleton } from './common/Skeleton'
+import { DeviceComplianceModal } from './DeviceComplianceModal'
 
 interface DeviceManagerProps {
   onSelectDeviceForTerminal?: (device: Device) => void
@@ -67,6 +71,29 @@ export const DeviceManager: React.FC<DeviceManagerProps> = ({
   // Testing SSH state per device
   const [testingId, setTestingId] = useState<string | null>(null)
   const [testResults, setTestResults] = useState<Record<string, SSHTestResult>>({})
+
+  // Configuration Compliance Inspection state
+  const [auditingId, setAuditingId] = useState<string | null>(null)
+  const [selectedAudit, setSelectedAudit] = useState<DeviceComplianceAudit | null>(null)
+  const [isAuditModalOpen, setIsAuditModalOpen] = useState(false)
+  const [auditResults, setAuditResults] = useState<Record<string, DeviceComplianceAudit>>({})
+
+  const handleAuditDevice = async (deviceId: string) => {
+    setAuditingId(deviceId)
+    try {
+      const audit = await auditDeviceCompliance(deviceId)
+      setAuditResults((prev) => ({ ...prev, [deviceId]: audit }))
+      setSelectedAudit(audit)
+      setIsAuditModalOpen(true)
+      setDevices((prev) =>
+        prev.map((d) => (d.id === deviceId ? { ...d, status: audit.overall_status === 'failed' ? 'offline' : 'online' } : d))
+      )
+    } catch (err: any) {
+      setError(err.message || 'Erro ao auditar configuração do equipamento')
+    } finally {
+      setAuditingId(null)
+    }
+  }
 
   const loadDevices = async () => {
     setLoading(true)
@@ -324,6 +351,24 @@ export const DeviceManager: React.FC<DeviceManagerProps> = ({
                         <span className="text-[11px] text-slate-500">Não testado</span>
                       )}
                     </div>
+                    {auditResults[dev.id] && (
+                      <div className="flex items-center justify-between pt-1 border-t border-slate-800/60">
+                        <span className="text-slate-500">Padrão NetPulse:</span>
+                        {auditResults[dev.id].is_manageable ? (
+                          <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-emerald-400">
+                            <CheckCircle2 className="h-3 w-3" /> Conforme ({auditResults[dev.id].overall_score}%)
+                          </span>
+                        ) : auditResults[dev.id].overall_status === 'failed' ? (
+                          <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-rose-400">
+                            <XCircle className="h-3 w-3" /> Falha ({auditResults[dev.id].overall_score}%)
+                          </span>
+                        ) : (
+                          <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-amber-400">
+                            <AlertCircle className="h-3 w-3" /> Requer Ajuste ({auditResults[dev.id].overall_score}%)
+                          </span>
+                        )}
+                      </div>
+                    )}
                   </div>
 
                   {/* Test Feedback banner if available */}
@@ -357,7 +402,7 @@ export const DeviceManager: React.FC<DeviceManagerProps> = ({
 
                 {/* Footer Actions */}
                 <div className="pt-3 border-t border-slate-800/80 flex items-center justify-between gap-2">
-                  <div className="flex items-center gap-1.5">
+                  <div className="flex items-center gap-1.5 flex-wrap">
                     <button
                       onClick={() => handleTestSSH(dev)}
                       disabled={isTesting}
@@ -366,6 +411,16 @@ export const DeviceManager: React.FC<DeviceManagerProps> = ({
                     >
                       <ShieldCheck className={`h-3.5 w-3.5 ${isTesting ? 'animate-spin text-cyan-400' : 'text-cyan-400'}`} />
                       <span>{isTesting ? 'Testando...' : 'Testar SSH'}</span>
+                    </button>
+
+                    <button
+                      onClick={() => handleAuditDevice(dev.id)}
+                      disabled={auditingId === dev.id}
+                      className="flex items-center gap-1 px-2.5 py-1.5 bg-cyan-950/40 hover:bg-cyan-900/50 text-cyan-300 hover:text-cyan-200 text-xs rounded font-medium border border-cyan-800/60 cursor-pointer disabled:opacity-50 transition-colors"
+                      title="Auditar e verificar se a configuração do equipamento está no padrão pré-definido"
+                    >
+                      <Layers className={`h-3.5 w-3.5 ${auditingId === dev.id ? 'animate-spin text-cyan-400' : 'text-cyan-400'}`} />
+                      <span>{auditingId === dev.id ? 'Auditando...' : 'Auditar Padrão'}</span>
                     </button>
 
                     {onSelectDeviceForTerminal && (
@@ -603,6 +658,15 @@ export const DeviceManager: React.FC<DeviceManagerProps> = ({
           </div>
         </div>
       )}
+
+      {/* Configuration Compliance Audit Modal */}
+      <DeviceComplianceModal
+        audit={selectedAudit}
+        isOpen={isAuditModalOpen}
+        onClose={() => setIsAuditModalOpen(false)}
+        onReAudit={handleAuditDevice}
+        isReAuditing={auditingId === selectedAudit?.device_id}
+      />
     </div>
   )
 }

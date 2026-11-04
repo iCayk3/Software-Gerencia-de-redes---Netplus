@@ -58,10 +58,17 @@ func TestSyslogHuaweiPeerStateChg(t *testing.T) {
 		t.Fatalf("expected 2 alerts, got %d", len(alerts))
 	}
 
-	downAlert := alerts[0]
-	if downAlert.Target != "Peer 45.68.79.254" {
-		t.Errorf("expected Target 'Peer 45.68.79.254', got '%s'", downAlert.Target)
+	var downAlert *models.Alert
+	for _, a := range alerts {
+		if a.Target == "Peer 45.68.79.254" {
+			downAlert = &a
+			break
+		}
 	}
+	if downAlert == nil {
+		t.Fatalf("expected alert with Target 'Peer 45.68.79.254' not found")
+	}
+
 	if downAlert.Severity != models.SeverityCritical {
 		t.Errorf("expected SeverityCritical for IDLE drop, got %s", downAlert.Severity)
 	}

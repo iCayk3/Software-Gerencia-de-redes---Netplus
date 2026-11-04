@@ -18,10 +18,16 @@ type DeviceController struct {
 	store      *storage.DeviceStore
 	engine     *telemetry.Engine
 	licenseMgr *license.LicenseManager
+	auditCache map[string]*models.DeviceComplianceAudit
+	auditMu    sync.RWMutex
 }
 
 func NewDeviceController(store *storage.DeviceStore, engine *telemetry.Engine) *DeviceController {
-	return &DeviceController{store: store, engine: engine}
+	return &DeviceController{
+		store:      store,
+		engine:     engine,
+		auditCache: make(map[string]*models.DeviceComplianceAudit),
+	}
 }
 
 func (c *DeviceController) SetLicenseManager(lm *license.LicenseManager) {
@@ -196,6 +202,91 @@ func (c *DeviceController) TestDevice(w http.ResponseWriter, r *http.Request) {
 	}
 
 	WriteJSON(w, http.StatusOK, result)
+}
+
+// AuditDeviceCompliance handles POST /api/devices/{id}/compliance
+func (c *DeviceController) AuditDeviceCompliance(w http.ResponseWriter, r *http.Request) {
+	id := r.PathValue("id")
+	device, err := CheckDeviceTenantAccess(r, c.store, id)
+	if err != nil {
+		if errors.Is(err, ErrAccessDeniedToDevice) {
+			WriteError(w, http.StatusForbidden, err.Error())
+			return
+		}
+		WriteError(w, http.StatusNotFound, "Equipamento não encontrado")
+		return
+	}
+
+	driver, err := drivers.NewDriver(device)
+	if err != nil {
+		WriteError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+
+	audit, err := driver.AuditCompliance()
+	if err != nil {
+		WriteError(w, http.StatusInternalServerError, "Erro ao inspecionar configuração do equipamento: "+err.Error())
+		return
+	}
+
+	if audit.OverallStatus == models.ComplianceFailed {
+		c.store.UpdateStatus(device.ID, "offline")
+	} else {
+		c.store.UpdateStatus(device.ID, "online")
+	}
+
+	c.auditMu.Lock()
+	c.auditCache[id] = audit
+	c.auditMu.Unlock()
+
+	WriteJSON(w, http.StatusOK, audit)
+}
+
+// GetDeviceCompliance handles GET /api/devices/{id}/compliance
+func (c *DeviceController) GetDeviceCompliance(w http.ResponseWriter, r *http.Request) {
+	id := r.PathValue("id")
+	device, err := CheckDeviceTenantAccess(r, c.store, id)
+	if err != nil {
+		if errors.Is(err, ErrAccessDeniedToDevice) {
+			WriteError(w, http.StatusForbidden, err.Error())
+			return
+		}
+		WriteError(w, http.StatusNotFound, "Equipamento não encontrado")
+		return
+	}
+
+	c.auditMu.RLock()
+	cached, found := c.auditCache[id]
+	c.auditMu.RUnlock()
+
+	if found && cached != nil && r.URL.Query().Get("fresh") != "true" {
+		WriteJSON(w, http.StatusOK, cached)
+		return
+	}
+
+	driver, err := drivers.NewDriver(device)
+	if err != nil {
+		WriteError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+
+	audit, err := driver.AuditCompliance()
+	if err != nil {
+		WriteError(w, http.StatusInternalServerError, "Erro ao inspecionar configuração do equipamento: "+err.Error())
+		return
+	}
+
+	if audit.OverallStatus == models.ComplianceFailed {
+		c.store.UpdateStatus(device.ID, "offline")
+	} else {
+		c.store.UpdateStatus(device.ID, "online")
+	}
+
+	c.auditMu.Lock()
+	c.auditCache[id] = audit
+	c.auditMu.Unlock()
+
+	WriteJSON(w, http.StatusOK, audit)
 }
 
 // GetDeviceBGP handles GET /api/devices/{id}/bgp
