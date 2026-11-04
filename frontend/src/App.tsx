@@ -75,6 +75,25 @@ function AppContent() {
     return () => window.removeEventListener('keydown', handleKeyDown)
   }, [])
 
+  // Sincroniza o título da aba do navegador com a seção ativa
+  useEffect(() => {
+    const sectionNames: Record<string, string> = {
+      bgp: 'BGP & Engenharia de Tráfego',
+      ospf: 'Protocolo OSPF',
+      devices: 'Equipamentos & Borda',
+      telemetry: 'NOC & Telemetria',
+      diagnostics: 'Ferramentas de Rede',
+      audit: 'Trilha de Auditoria',
+      tenants: 'Configurações da Empresa',
+      users: 'Usuários & Permissões',
+      license: 'Licença & Sistema',
+      traffic: 'Engenharia de Tráfego',
+    }
+    const label = sectionNames[activeSection] || 'Plataforma'
+    const alertPrefix = activeAlertsCount > 0 ? `(${activeAlertsCount}) ` : ''
+    document.title = `${alertPrefix}NetPulse • ${label}`
+  }, [activeSection, activeAlertsCount])
+
   const checkHealthAndAlerts = useCallback(async () => {
     try {
       const [healthData, alertsData, devicesData] = await Promise.all([
