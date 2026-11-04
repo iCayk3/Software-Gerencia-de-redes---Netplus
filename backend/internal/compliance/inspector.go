@@ -142,7 +142,7 @@ func (ins *Inspector) inspectHuawei(audit *models.DeviceComplianceAudit, runner 
 	syslogCfg, _ := runner.RunCommand("display current-configuration | include info-center")
 
 	// 1. BGP Process & ASN
-	asnRe := regexp.MustCompile(`(?m)^bgp\s+(\d+)`)
+	asnRe := regexp.MustCompile(`(?m)^\s*bgp\s+(\d+)`)
 	asnMatch := asnRe.FindStringSubmatch(bgpCfg)
 	ridRe := regexp.MustCompile(`(?m)router-id\s+([0-9\.]+)`)
 	ridMatch := ridRe.FindStringSubmatch(bgpCfg)
@@ -152,6 +152,24 @@ func (ins *Inspector) inspectHuawei(audit *models.DeviceComplianceAudit, runner 
 		if len(ridMatch) > 1 {
 			audit.RouterID = ridMatch[1]
 		}
+	}
+
+	// Fallback inteligente: se display current-configuration configuration bgp não retornou ASN
+	// (por exemplo, usuário SSH sem permissão de ver configuration completa), tenta display bgp peer
+	bgpPeerOutput := ""
+	if audit.LocalASN == "" {
+		bgpPeerOutput, _ = runner.RunCommand("display bgp peer")
+		asFallback := regexp.MustCompile(`(?i)Local\s+AS\s+number\s*:\s*(\d+)`).FindStringSubmatch(bgpPeerOutput)
+		ridFallback := regexp.MustCompile(`(?i)BGP\s+local\s+router\s+ID\s*:\s*([0-9\.]+)`).FindStringSubmatch(bgpPeerOutput)
+		if len(asFallback) > 1 {
+			audit.LocalASN = asFallback[1]
+		}
+		if len(ridFallback) > 1 {
+			audit.RouterID = ridFallback[1]
+		}
+	}
+
+	if audit.LocalASN != "" {
 		audit.Items = append(audit.Items, models.ComplianceCheckItem{
 			ID:          "chk-bgp-process",
 			Category:    "bgp_core",
@@ -168,8 +186,8 @@ func (ins *Inspector) inspectHuawei(audit *models.DeviceComplianceAudit, runner 
 			Title:       "Processo BGP & AS Local",
 			Description: "Identificação do processo de roteamento BGP ativo e Autonomous System Number (ASN).",
 			Status:      models.ComplianceFailed,
-			Message:     "Nenhum bloco 'bgp <ASN>' localizado na configuração ativa.",
-			Remediation: "Habilite o BGP com 'system-view' e 'bgp <seu_asn>'.",
+			Message:     "Nenhum processo BGP ativo ou bloco 'bgp <ASN>' localizado na configuração ativa.",
+			Remediation: "Habilite o BGP com 'system-view' e 'bgp <seu_asn>', ou verifique se o usuário SSH possui nível de privilégio suficiente para executar 'display current-configuration'.",
 		})
 		return
 	}
@@ -178,6 +196,18 @@ func (ins *Inspector) inspectHuawei(audit *models.DeviceComplianceAudit, runner 
 	peerRe := regexp.MustCompile(`(?m)peer\s+([0-9\.]+)\s+as-number\s+(\d+)`)
 	peerMatches := peerRe.FindAllStringSubmatch(bgpCfg, -1)
 	audit.TotalSessions = len(peerMatches)
+
+	// Fallback para contagem de peers via display bgp peer se o bloco de config não continha peers
+	if audit.TotalSessions == 0 {
+		if bgpPeerOutput == "" {
+			bgpPeerOutput, _ = runner.RunCommand("display bgp peer")
+		}
+		peerTableRe := regexp.MustCompile(`(?m)^\s*([0-9a-fA-F\.\:]+)\s+[46]\s+(\d+)`)
+		peerTableMatches := peerTableRe.FindAllStringSubmatch(bgpPeerOutput, -1)
+		if len(peerTableMatches) > 0 {
+			audit.TotalSessions = len(peerTableMatches)
+		}
+	}
 
 	// Count export policies
 	exportPolRe := regexp.MustCompile(`(?m)peer\s+[0-9\.]+\s+route-policy\s+(\S+)\s+export`)

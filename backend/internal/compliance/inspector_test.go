@@ -147,3 +147,46 @@ func TestAuditDevice_HuaweiMissingOriginTagging(t *testing.T) {
 		t.Errorf("expected remediation script with RP-TAG-V4-ORIGIN")
 	}
 }
+
+func TestAuditDevice_HuaweiFallbackBgpPeer(t *testing.T) {
+	ins := NewInspector()
+	dev := &models.Device{
+		ID:     "dev-huawei-fallback",
+		Name:   "BGP-RT.01",
+		Vendor: models.VendorHuawei,
+		Host:   "45.166.28.254",
+	}
+
+	runner := &mockRunner{
+		runCmdFunc: func(cmd string) (string, error) {
+			switch {
+			case strings.Contains(cmd, "configuration bgp"):
+				// Simula retorno vazio ou sem permissão de display current-configuration
+				return "Error: You do not have permission to run this command.", nil
+			case strings.Contains(cmd, "display bgp peer"):
+				return `BGP local router ID : 45.166.28.254,   Local AS number : 267943
+Total number of peers : 1        Peers in established state : 1
+
+Peer            V    AS  MsgRcvd  MsgSent  OutQ  Up/Down       State  PrefRcv
+170.82.183.217  4 266445   12345    12340     0 04:12:30 Established     500`, nil
+			default:
+				return "", nil
+			}
+		},
+	}
+
+	audit, err := ins.AuditDevice(dev, runner)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if audit.LocalASN != "267943" {
+		t.Errorf("expected LocalASN 267943 from fallback, got '%s'", audit.LocalASN)
+	}
+	if audit.RouterID != "45.166.28.254" {
+		t.Errorf("expected RouterID 45.166.28.254 from fallback, got '%s'", audit.RouterID)
+	}
+	if audit.TotalSessions != 1 {
+		t.Errorf("expected 1 session from fallback, got %d", audit.TotalSessions)
+	}
+}
