@@ -16,10 +16,12 @@ import {
   Building2,
   Users,
   Layers,
-  KeyRound
+  KeyRound,
+  UserCog,
 } from 'lucide-react'
 import type { MainSectionType } from './Sidebar'
 import type { HealthResponse } from '../services/api'
+import { useAuth } from '../context/AuthContext'
 
 export interface SubTabItem {
   id: string
@@ -37,6 +39,7 @@ interface TopNavProps {
   onOpenMobileSidebar: () => void
   onOpenAlerts: () => void
   onOpenSearch: () => void
+  onOpenProfile?: () => void
   density?: 'comfortable' | 'compact'
   onToggleDensity?: () => void
 }
@@ -49,7 +52,9 @@ export const TopNav: React.FC<TopNavProps> = ({
   onOpenMobileSidebar,
   onOpenAlerts,
   onOpenSearch,
+  onOpenProfile,
 }) => {
+  const { user } = useAuth()
 
   // Configuração das sub-abas dinâmicas de cada seção
   const sectionSubTabs: Record<MainSectionType, { title: string; subtitle: string; tabs: SubTabItem[] }> = {
@@ -187,6 +192,20 @@ export const TopNav: React.FC<TopNavProps> = ({
               >
                 <Bell className="h-3.5 w-3.5 text-rose-400" />
                 <span>{activeAlertsCount} Alerta{activeAlertsCount > 1 ? 's' : ''}</span>
+              </button>
+            )}
+
+            {/* User Profile & Preferences */}
+            {onOpenProfile && (
+              <button
+                onClick={onOpenProfile}
+                className="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-[#1C202C] hover:bg-[#252A3A] text-slate-300 hover:text-white border border-[#2D3345] text-xs transition shadow-xs cursor-pointer"
+                title="Configurações e Perfil do Usuário"
+              >
+                <UserCog className="h-3.5 w-3.5 text-[#4A72B2]" />
+                <span className="hidden sm:inline text-slate-200 text-xs font-medium">
+                  {user?.name || 'Perfil'}
+                </span>
               </button>
             )}
           </div>

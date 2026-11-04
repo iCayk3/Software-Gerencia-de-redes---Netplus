@@ -13,7 +13,8 @@ import {
   Crown,
   RefreshCw,
   Eye,
-  EyeOff
+  EyeOff,
+  UserCog,
 } from 'lucide-react'
 import {
   fetchUsers,
@@ -284,7 +285,11 @@ const UserModal: React.FC<UserModalProps> = ({
   )
 }
 
-export const UserManager: React.FC = () => {
+interface UserManagerProps {
+  onOpenProfile?: () => void
+}
+
+export const UserManager: React.FC<UserManagerProps> = ({ onOpenProfile }) => {
   const { user: currentUser, isSuperAdmin } = useAuth()
 
   const [users, setUsers] = useState<UserProfile[]>([])
@@ -379,6 +384,17 @@ export const UserManager: React.FC = () => {
         </div>
 
         <div className="flex items-center gap-2">
+          {onOpenProfile && (
+            <button
+              onClick={onOpenProfile}
+              className="flex items-center gap-2 px-3.5 py-2 rounded-xl bg-[#1C202C] hover:bg-[#252C3D] text-slate-200 border border-[#242836] font-medium text-xs transition cursor-pointer"
+              title="Configurações de Navegação, Estilo de Menu e Senha"
+            >
+              <UserCog className="h-4 w-4 text-[#4A72B2]" />
+              <span>Meu Perfil & Preferências</span>
+            </button>
+          )}
+
           <button
             onClick={loadData}
             disabled={loading}

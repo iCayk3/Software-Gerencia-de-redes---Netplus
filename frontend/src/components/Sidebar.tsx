@@ -14,7 +14,8 @@ import {
   Building2,
   Users,
   KeyRound,
-  X
+  X,
+  UserCog,
 } from 'lucide-react'
 import type { HealthResponse } from '../services/api'
 import { useAuth } from '../context/AuthContext'
@@ -41,6 +42,7 @@ interface SidebarProps {
   onCloseMobile: () => void
   health: HealthResponse | null
   loadingHealth: boolean
+  onOpenProfile?: () => void
 }
 
 export const Sidebar: React.FC<SidebarProps> = ({
@@ -53,6 +55,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
   onCloseMobile,
   health,
   loadingHealth,
+  onOpenProfile,
 }) => {
   const { user, isSuperAdmin, logout } = useAuth()
 
@@ -271,13 +274,24 @@ export const Sidebar: React.FC<SidebarProps> = ({
               )}
             </div>
             {!isCollapsed && (
-              <button
-                onClick={logout}
-                className="p-1.5 text-slate-400 hover:text-rose-400 hover:bg-[#1C202C] rounded-lg transition cursor-pointer"
-                title="Encerrar Sessão (Logout)"
-              >
-                <LogOut className="h-3.5 w-3.5" />
-              </button>
+              <div className="flex items-center gap-1">
+                {onOpenProfile && (
+                  <button
+                    onClick={onOpenProfile}
+                    className="p-1.5 text-slate-400 hover:text-white hover:bg-[#1C202C] rounded-lg transition cursor-pointer"
+                    title="Configurações & Perfil"
+                  >
+                    <UserCog className="h-3.5 w-3.5" />
+                  </button>
+                )}
+                <button
+                  onClick={logout}
+                  className="p-1.5 text-slate-400 hover:text-rose-400 hover:bg-[#1C202C] rounded-lg transition cursor-pointer"
+                  title="Encerrar Sessão (Logout)"
+                >
+                  <LogOut className="h-3.5 w-3.5" />
+                </button>
+              </div>
             )}
           </div>
         )}

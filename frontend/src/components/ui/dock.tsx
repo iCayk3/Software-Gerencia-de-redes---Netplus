@@ -15,7 +15,6 @@ import {
   createContext,
   useContext,
   useEffect,
-  useMemo,
   useRef,
   useState,
   type ReactElement,
@@ -23,10 +22,9 @@ import {
 } from 'react';
 import { cn } from '@/lib/utils';
 
-const DOCK_HEIGHT = 128;
-const DEFAULT_MAGNIFICATION = 72;
+const DEFAULT_MAGNIFICATION = 84;
 const DEFAULT_DISTANCE = 140;
-const DEFAULT_PANEL_HEIGHT = 60;
+const DEFAULT_PANEL_HEIGHT = 68;
 
 type DockProps = {
   children: ReactNode;
@@ -82,7 +80,7 @@ function useDock() {
 function Dock({
   children,
   className,
-  spring = { mass: 0.1, stiffness: 150, damping: 12 },
+  spring = { mass: 0.05, stiffness: 360, damping: 22 },
   magnification = DEFAULT_MAGNIFICATION,
   distance = DEFAULT_DISTANCE,
   panelHeight = DEFAULT_PANEL_HEIGHT,
@@ -90,20 +88,10 @@ function Dock({
   const mouseX = useMotionValue(Infinity);
   const isHovered = useMotionValue(0);
 
-  const maxHeight = useMemo(() => {
-    return Math.max(DOCK_HEIGHT, magnification + magnification / 2 + 4);
-  }, [magnification]);
-
-  const heightRow = useTransform(isHovered, [0, 1], [panelHeight, maxHeight]);
-  const height = useSpring(heightRow, spring);
-
   return (
-    <motion.div
-      style={{
-        height: height,
-        scrollbarWidth: 'none',
-      }}
-      className="mx-2 flex max-w-full items-end overflow-x-auto"
+    <div
+      style={{ scrollbarWidth: 'none' }}
+      className="mx-2 flex max-w-full items-end justify-center overflow-visible"
     >
       <motion.div
         onMouseMove={({ pageX }) => {
@@ -115,7 +103,7 @@ function Dock({
           mouseX.set(Infinity);
         }}
         className={cn(
-          'mx-auto flex w-fit items-center gap-3 rounded-2xl bg-[#13151D]/90 px-3.5 border border-[#242836] shadow-2xl backdrop-blur-md',
+          'mx-auto flex w-fit items-center gap-3.5 rounded-2xl bg-[#13151D]/92 px-4 py-2 border border-[#242836] shadow-2xl backdrop-blur-xl',
           className
         )}
         style={{ height: panelHeight }}
@@ -126,7 +114,7 @@ function Dock({
           {children}
         </DockProvider>
       </motion.div>
-    </motion.div>
+    </div>
   );
 }
 
@@ -143,7 +131,7 @@ function DockItem({ children, className, onClick }: DockItemProps) {
   const widthTransform = useTransform(
     mouseDistance,
     [-distance, 0, distance],
-    [42, magnification, 42]
+    [52, magnification, 52]
   );
 
   const width = useSpring(widthTransform, spring);
@@ -158,7 +146,7 @@ function DockItem({ children, className, onClick }: DockItemProps) {
       onBlur={() => isHovered.set(0)}
       onClick={onClick}
       className={cn(
-        'relative inline-flex items-center justify-center cursor-pointer select-none transition-colors duration-150',
+        'relative inline-flex items-center justify-center cursor-pointer select-none origin-bottom',
         className
       )}
       tabIndex={0}
@@ -195,11 +183,11 @@ function DockLabel({ children, className, ...rest }: DockLabelProps) {
       {isVisible && (
         <motion.div
           initial={{ opacity: 0, y: 0 }}
-          animate={{ opacity: 1, y: -12 }}
+          animate={{ opacity: 1, y: -14 }}
           exit={{ opacity: 0, y: 0 }}
-          transition={{ duration: 0.15 }}
+          transition={{ duration: 0.12 }}
           className={cn(
-            'pointer-events-none absolute -top-7 left-1/2 w-fit whitespace-pre rounded-md bg-[#1C202C] px-2.5 py-1 text-[11px] font-medium tracking-wide text-[#E2E5EC] shadow-xl z-50 border border-[#242836]',
+            'pointer-events-none absolute -top-8 left-1/2 w-fit whitespace-pre rounded-lg bg-[#1C202C] px-3 py-1.5 text-xs font-semibold tracking-wide text-[#E2E5EC] shadow-2xl z-50 border border-[#242836]',
             className
           )}
           role="tooltip"
@@ -214,14 +202,16 @@ function DockLabel({ children, className, ...rest }: DockLabelProps) {
 
 function DockIcon({ children, className, ...rest }: DockIconProps) {
   const restProps = rest as Record<string, unknown>;
-  const fallbackWidth = useMotionValue(40);
+  const fallbackWidth = useMotionValue(52);
   const width = (restProps['width'] as MotionValue<number> | undefined) ?? fallbackWidth;
 
-  const widthTransform = useTransform(width, (val: number) => val / 2);
+  const sizeTransform = useTransform(width, (val: number) => {
+    return Math.max(22, Math.round(val * 0.52));
+  });
 
   return (
     <motion.div
-      style={{ width: widthTransform }}
+      style={{ width: sizeTransform, height: sizeTransform }}
       className={cn('flex items-center justify-center pointer-events-none', className)}
     >
       {children}

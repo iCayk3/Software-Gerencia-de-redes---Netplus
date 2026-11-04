@@ -3,6 +3,7 @@ import { Sidebar, type MainSectionType } from './components/Sidebar'
 import { TopNav } from './components/TopNav'
 import { NetPulseDock } from './components/NetPulseDock'
 import { CommandPalette } from './components/CommandPalette'
+import { UserProfileModal, type NavStyleType } from './components/UserProfileModal'
 import { LoginPage } from './components/LoginPage'
 import { AuthProvider, useAuth } from './context/AuthContext'
 import { fetchHealth, fetchAlerts, fetchDevices, type HealthResponse, type Device } from './services/api'
@@ -50,6 +51,17 @@ function AppContent() {
   const [activeAlertsCount, setActiveAlertsCount] = useState<number>(0)
   const [devicesList, setDevicesList] = useState<Device[]>([])
   const [isCommandPaletteOpen, setIsCommandPaletteOpen] = useState(false)
+  const [isProfileModalOpen, setIsProfileModalOpen] = useState(false)
+
+  // Estilo de Navegação: 'dock' | 'sidebar' | 'both'
+  const [navStyle, setNavStyle] = useState<NavStyleType>(() => {
+    return (localStorage.getItem('netpulse_nav_style') as NavStyleType) || 'both'
+  })
+
+  const handleNavStyleChange = (style: NavStyleType) => {
+    setNavStyle(style)
+    localStorage.setItem('netpulse_nav_style', style)
+  }
 
   // Densidade de interface persistida no LocalStorage
   const [density, setDensity] = useState<'comfortable' | 'compact'>(() => {
@@ -201,18 +213,21 @@ function AppContent() {
 
   return (
     <div className="min-h-screen bg-[#161922] text-[#E2E5EC] flex font-sans selection:bg-[#3B5B8C] selection:text-white">
-      {/* 1. Menu Lateral (Sidebar) */}
-      <Sidebar
-        activeSection={activeSection}
-        onSelectSection={handleSectionChange}
-        activeAlertsCount={activeAlertsCount}
-        isCollapsed={isSidebarCollapsed}
-        onToggleCollapse={() => setIsSidebarCollapsed(!isSidebarCollapsed)}
-        isMobileOpen={isMobileSidebarOpen}
-        onCloseMobile={() => setIsMobileSidebarOpen(false)}
-        health={health}
-        loadingHealth={loadingHealth}
-      />
+      {/* 1. Menu Lateral (Sidebar) - Condicional com base no Estilo de Navegação do Usuário */}
+      {(navStyle === 'sidebar' || navStyle === 'both' || isMobileSidebarOpen) && (
+        <Sidebar
+          activeSection={activeSection}
+          onSelectSection={handleSectionChange}
+          activeAlertsCount={activeAlertsCount}
+          isCollapsed={isSidebarCollapsed}
+          onToggleCollapse={() => setIsSidebarCollapsed(!isSidebarCollapsed)}
+          isMobileOpen={isMobileSidebarOpen}
+          onCloseMobile={() => setIsMobileSidebarOpen(false)}
+          health={health}
+          loadingHealth={loadingHealth}
+          onOpenProfile={() => setIsProfileModalOpen(true)}
+        />
+      )}
 
       {/* 2. Área Principal de Trabalho */}
       <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
@@ -226,12 +241,13 @@ function AppContent() {
           onOpenMobileSidebar={() => setIsMobileSidebarOpen(true)}
           onOpenAlerts={handleOpenAlerts}
           onOpenSearch={() => setIsCommandPaletteOpen(true)}
+          onOpenProfile={() => setIsProfileModalOpen(true)}
           density={density}
           onToggleDensity={handleToggleDensity}
         />
 
         {/* Conteúdo Dinâmico */}
-        <main className="flex-1 overflow-y-auto px-4 sm:px-6 lg:px-8 py-6 pb-28">
+        <main className={`flex-1 overflow-y-auto px-4 sm:px-6 lg:px-8 py-6 ${navStyle === 'dock' || navStyle === 'both' ? 'pb-32' : 'pb-8'}`}>
           {/* Offline Warning Banner */}
           {!loadingHealth && !health && (
             <div className="mb-6 p-4 rounded-xl bg-[#1C202C] border border-amber-800/40 text-amber-200/90 flex items-start gap-3 shadow-md animate-in fade-in">
@@ -316,7 +332,7 @@ function AppContent() {
 
             {/* ================= SEÇÃO 7: GESTÃO DE USUÁRIOS (RBAC) ================= */}
             {activeSection === 'users' && (
-              <UserManager />
+              <UserManager onOpenProfile={() => setIsProfileModalOpen(true)} />
             )}
 
             {/* ================= SEÇÃO 8: LICENÇA & SERVIDOR MASTER ================= */}
@@ -346,12 +362,15 @@ function AppContent() {
       </div>
 
       {/* 3. Dock Principal de Navegação (Estilo Apple Dock / NetPulse) */}
-      <NetPulseDock
-        activeSection={activeSection}
-        onSelectSection={handleSectionChange}
-        activeAlertsCount={activeAlertsCount}
-        onOpenSearch={() => setIsCommandPaletteOpen(true)}
-      />
+      {(navStyle === 'dock' || navStyle === 'both') && (
+        <NetPulseDock
+          activeSection={activeSection}
+          onSelectSection={handleSectionChange}
+          activeAlertsCount={activeAlertsCount}
+          onOpenSearch={() => setIsCommandPaletteOpen(true)}
+          onOpenProfile={() => setIsProfileModalOpen(true)}
+        />
+      )}
 
       {/* 4. Command Palette Global (Ctrl + K) */}
       {isCommandPaletteOpen && (
@@ -365,6 +384,16 @@ function AppContent() {
           onToggleDensity={handleToggleDensity}
         />
       )}
+
+      {/* 5. Modal de Perfil & Preferências de Interface do Usuário */}
+      <UserProfileModal
+        isOpen={isProfileModalOpen}
+        onClose={() => setIsProfileModalOpen(false)}
+        navStyle={navStyle}
+        onNavStyleChange={handleNavStyleChange}
+        density={density}
+        onToggleDensity={handleToggleDensity}
+      />
     </div>
   )
 }
