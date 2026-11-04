@@ -419,13 +419,13 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({
       onClick={onClose}
     >
       <div
-        className="w-full max-w-2xl bg-slate-900 border border-slate-800 rounded-2xl shadow-2xl overflow-hidden flex flex-col max-h-[75vh] animate-in zoom-in-95 duration-150"
+        className="w-full max-w-2xl bg-[#1C202C] border border-[#242836] rounded-2xl shadow-2xl overflow-hidden flex flex-col max-h-[75vh] animate-in zoom-in-95 duration-150"
         onClick={(e) => e.stopPropagation()}
         onKeyDown={handleKeyDown}
       >
         {/* Search Input Bar */}
-        <div className="relative flex items-center px-4 py-3.5 border-b border-slate-800 bg-slate-950/60">
-          <Search className="h-5 w-5 text-cyan-400 shrink-0 mr-3" />
+        <div className="relative flex items-center px-4 py-3.5 border-b border-[#242836] bg-[#161922]">
+          <Search className="h-5 w-5 text-[#4A72B2] shrink-0 mr-3" />
           <input
             ref={inputRef}
             type="text"
@@ -443,12 +443,12 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({
                 setQuery('')
                 inputRef.current?.focus()
               }}
-              className="p-1 rounded-lg hover:bg-slate-800 text-slate-400 hover:text-white"
+              className="p-1 rounded-lg hover:bg-[#1E2330] text-slate-400 hover:text-white"
             >
               <X className="h-4 w-4" />
             </button>
           ) : (
-            <kbd className="hidden sm:inline-flex items-center gap-1 px-2 py-0.5 text-[11px] font-mono font-medium text-slate-400 bg-slate-800 rounded border border-slate-700">
+            <kbd className="hidden sm:inline-flex items-center gap-1 px-2 py-0.5 text-[11px] font-mono font-medium text-slate-400 bg-[#13151D] rounded border border-[#2D3345]">
               ESC
             </kbd>
           )}
@@ -478,16 +478,16 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({
                   onMouseEnter={() => setSelectedIndex(idx)}
                   className={`flex items-center justify-between gap-3 px-3.5 py-2.5 rounded-xl cursor-pointer transition-all ${
                     isSelected
-                      ? 'bg-gradient-to-r from-cyan-600/20 via-blue-600/20 to-slate-800/80 border border-cyan-500/40 text-white'
-                      : 'hover:bg-slate-800/60 text-slate-300 border border-transparent'
+                      ? 'bg-[#222A3D] border border-[#3B5B8C]/40 text-white'
+                      : 'hover:bg-[#1E2330] text-slate-300 border border-transparent'
                   }`}
                 >
                   <div className="flex items-center gap-3 min-w-0">
                     <div
                       className={`p-2 rounded-lg shrink-0 ${
                         isSelected
-                          ? 'bg-cyan-500 text-slate-950 font-bold shadow-md shadow-cyan-500/30'
-                          : 'bg-slate-800 text-slate-400'
+                          ? 'bg-[#2D3852] text-[#93B4E6]'
+                          : 'bg-[#161922] text-slate-400'
                       }`}
                     >
                       <Icon className="h-4 w-4" />
@@ -496,11 +496,7 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({
                       <div className="flex items-center gap-2">
                         <span className="text-sm font-semibold truncate text-white">{item.title}</span>
                         {item.badge && (
-                          <span
-                            className={`text-[10px] px-2 py-0.2 rounded-full border shrink-0 ${
-                              item.badgeColor || 'bg-slate-800 text-slate-400 border-slate-700'
-                            }`}
-                          >
+                          <span className="text-[11px] font-medium text-slate-400 shrink-0">
                             {item.badge}
                           </span>
                         )}

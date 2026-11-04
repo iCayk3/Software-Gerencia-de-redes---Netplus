@@ -361,18 +361,18 @@ export const TelemetryView: React.FC<TelemetryViewProps> = ({ onAlertsUpdated, a
           ) : (
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         {/* Roteadores */}
-        <div className="bg-slate-900/70 border border-slate-800 rounded-xl p-4 shadow-sm">
+        <div className="bg-[#1C202C] border border-[#242836] rounded-xl p-4 shadow-xs">
           <div className="flex items-center justify-between">
             <span className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Roteadores</span>
-            <Server className="h-4 w-4 text-cyan-400" />
+            <Server className="h-4 w-4 text-[#4A72B2]" />
           </div>
           <div className="mt-2 flex items-baseline gap-2">
             <span className="text-2xl font-bold text-white">{overview?.online_devices ?? 0}</span>
             <span className="text-xs text-slate-500">/ {overview?.total_devices ?? 0} online</span>
           </div>
-          <div className="mt-3 w-full bg-slate-800 rounded-full h-1.5 overflow-hidden">
+          <div className="mt-3 w-full bg-[#161922] rounded-full h-1.5 overflow-hidden">
             <div
-              className="bg-emerald-500 h-1.5 rounded-full transition-all duration-500"
+              className="bg-[#2E9E6B] h-1.5 rounded-full transition-all duration-500"
               style={{
                 width: `${overview?.total_devices ? (overview.online_devices / overview.total_devices) * 100 : 0}%`
               }}
@@ -381,18 +381,19 @@ export const TelemetryView: React.FC<TelemetryViewProps> = ({ onAlertsUpdated, a
         </div>
 
         {/* BGP Peers */}
-        <div className="bg-slate-900/70 border border-slate-800 rounded-xl p-4 shadow-sm">
+        <div className="bg-[#1C202C] border border-[#242836] rounded-xl p-4 shadow-xs">
           <div className="flex items-center justify-between">
             <span className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Sessões BGP</span>
-            <Activity className="h-4 w-4 text-blue-400" />
+            <Activity className="h-4 w-4 text-[#4A72B2]" />
           </div>
           <div className="mt-2 flex items-baseline justify-between">
             <div>
-              <span className="text-2xl font-bold text-emerald-400">{overview?.established_bgp ?? 0}</span>
+              <span className="text-2xl font-bold text-[#2E9E6B]">{overview?.established_bgp ?? 0}</span>
               <span className="text-xs text-slate-500 ml-1.5">Up</span>
             </div>
             {(overview?.down_bgp ?? 0) > 0 && (
-              <span className="px-2 py-0.5 rounded text-xs font-semibold bg-rose-950 text-rose-400 border border-rose-800">
+              <span className="text-xs font-semibold text-[#D9534F] flex items-center gap-1.5">
+                <span className="w-1.5 h-1.5 rounded-full bg-[#D9534F]"></span>
                 {overview?.down_bgp} Down
               </span>
             )}
@@ -403,18 +404,19 @@ export const TelemetryView: React.FC<TelemetryViewProps> = ({ onAlertsUpdated, a
         </div>
 
         {/* OSPF Neighbors */}
-        <div className="bg-slate-900/70 border border-slate-800 rounded-xl p-4 shadow-sm">
+        <div className="bg-[#1C202C] border border-[#242836] rounded-xl p-4 shadow-xs">
           <div className="flex items-center justify-between">
             <span className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Vizinhos OSPF</span>
-            <Network className="h-4 w-4 text-indigo-400" />
+            <Network className="h-4 w-4 text-[#4A72B2]" />
           </div>
           <div className="mt-2 flex items-baseline justify-between">
             <div>
-              <span className="text-2xl font-bold text-indigo-400">{overview?.full_ospf ?? 0}</span>
+              <span className="text-2xl font-bold text-[#93B4E6]">{overview?.full_ospf ?? 0}</span>
               <span className="text-xs text-slate-500 ml-1.5">Full</span>
             </div>
             {(overview?.down_ospf ?? 0) > 0 && (
-              <span className="px-2 py-0.5 rounded text-xs font-semibold bg-amber-950 text-amber-400 border border-amber-800">
+              <span className="text-xs font-semibold text-[#D99B26] flex items-center gap-1.5">
+                <span className="w-1.5 h-1.5 rounded-full bg-[#D99B26]"></span>
                 {overview?.down_ospf} Alerta
               </span>
             )}
@@ -425,7 +427,7 @@ export const TelemetryView: React.FC<TelemetryViewProps> = ({ onAlertsUpdated, a
         </div>
 
         {/* Total Prefixos */}
-        <div className="bg-slate-900/70 border border-slate-800 rounded-xl p-4 shadow-sm">
+        <div className="bg-[#1C202C] border border-[#242836] rounded-xl p-4 shadow-xs">
           <div className="flex items-center justify-between">
             <span className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Prefixos na Rede</span>
             <Layers className="h-4 w-4 text-cyan-400" />
@@ -642,11 +644,11 @@ export const TelemetryView: React.FC<TelemetryViewProps> = ({ onAlertsUpdated, a
         {/* ================= RESUMO DE BGP CHURN & RPKI ROA ================= */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           {/* Card Resumo BGP Churn */}
-          <div className="bg-slate-900/90 border border-slate-800 rounded-2xl p-5 shadow-xl flex flex-col justify-between">
+          <div className="bg-[#1C202C] border border-[#242836] rounded-2xl p-5 shadow-sm flex flex-col justify-between">
             <div>
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2.5">
-                  <div className="h-9 w-9 rounded-xl bg-orange-500/10 border border-orange-500/30 flex items-center justify-center text-orange-400">
+                  <div className="h-9 w-9 rounded-xl bg-[#25334D] border border-[#3B5B8C]/30 flex items-center justify-center text-[#D99B26]">
                     <Activity className="h-5 w-5" />
                   </div>
                   <div>
@@ -654,25 +656,26 @@ export const TelemetryView: React.FC<TelemetryViewProps> = ({ onAlertsUpdated, a
                     <p className="text-[11px] text-slate-400">Estabilidade e oscilações de rotas (withdrawns/h)</p>
                   </div>
                 </div>
-                <span className="text-xs font-mono font-bold text-emerald-400 bg-emerald-950 px-2.5 py-1 rounded-full border border-emerald-800">
+                <span className="text-xs font-mono font-semibold text-[#2E9E6B] flex items-center gap-1.5">
+                  <span className="w-1.5 h-1.5 rounded-full bg-[#2E9E6B]"></span>
                   {churnSummary ? `${churnSummary.average_stability.toFixed(1)}% Estável` : '98.5% Estável'}
                 </span>
               </div>
 
               <div className="grid grid-cols-3 gap-2 mt-4 text-center">
-                <div className="bg-slate-950/60 p-2.5 rounded-xl border border-slate-800/80">
+                <div className="bg-[#161922] p-2.5 rounded-xl border border-[#242836]">
                   <span className="text-[10px] uppercase font-semibold text-slate-400">Withdrawns 1h</span>
-                  <div className="text-lg font-bold font-mono text-rose-400 mt-0.5">
+                  <div className="text-lg font-bold font-mono text-[#D9534F] mt-0.5">
                     {churnSummary?.total_withdrawn_1h ?? 0}
                   </div>
                 </div>
-                <div className="bg-slate-950/60 p-2.5 rounded-xl border border-slate-800/80">
+                <div className="bg-[#161922] p-2.5 rounded-xl border border-[#242836]">
                   <span className="text-[10px] uppercase font-semibold text-slate-400">Anúncios 1h</span>
-                  <div className="text-lg font-bold font-mono text-cyan-400 mt-0.5">
+                  <div className="text-lg font-bold font-mono text-[#93B4E6] mt-0.5">
                     {churnSummary?.total_announced_1h ?? 0}
                   </div>
                 </div>
-                <div className="bg-slate-950/60 p-2.5 rounded-xl border border-slate-800/80">
+                <div className="bg-[#161922] p-2.5 rounded-xl border border-[#242836]">
                   <span className="text-[10px] uppercase font-semibold text-slate-400">Top Flapping</span>
                   <div className="text-xs font-bold text-slate-200 mt-1 truncate">
                     {churnSummary?.top_churners?.[0]?.peer_name || churnSummary?.top_churners?.[0]?.peer_ip || 'Nenhum'}
@@ -683,7 +686,7 @@ export const TelemetryView: React.FC<TelemetryViewProps> = ({ onAlertsUpdated, a
 
             <button
               onClick={() => onSelectSubTab && onSelectSubTab('churn')}
-              className="mt-4 w-full flex items-center justify-center gap-1.5 py-2 px-3 rounded-xl bg-orange-950/40 hover:bg-orange-900/60 text-orange-300 border border-orange-800/60 text-xs font-semibold transition cursor-pointer"
+              className="mt-4 w-full flex items-center justify-center gap-1.5 py-2 px-3 rounded-xl bg-[#25334D] hover:bg-[#2F4163] text-orange-200 border border-[#3B5B8C]/40 text-xs font-medium transition cursor-pointer"
             >
               <span>Ver Gráficos & Ranking Completo de Churn</span>
               <ArrowRight className="h-3.5 w-3.5" />
@@ -691,11 +694,11 @@ export const TelemetryView: React.FC<TelemetryViewProps> = ({ onAlertsUpdated, a
           </div>
 
           {/* Card Resumo RPKI Security */}
-          <div className="bg-slate-900/90 border border-slate-800 rounded-2xl p-5 shadow-xl flex flex-col justify-between">
+          <div className="bg-[#1C202C] border border-[#242836] rounded-2xl p-5 shadow-sm flex flex-col justify-between">
             <div>
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2.5">
-                  <div className="h-9 w-9 rounded-xl bg-emerald-500/10 border border-emerald-500/30 flex items-center justify-center text-emerald-400">
+                  <div className="h-9 w-9 rounded-xl bg-[#25334D] border border-[#3B5B8C]/30 flex items-center justify-center text-[#2E9E6B]">
                     <ShieldCheck className="h-5 w-5" />
                   </div>
                   <div>
@@ -703,7 +706,8 @@ export const TelemetryView: React.FC<TelemetryViewProps> = ({ onAlertsUpdated, a
                     <p className="text-[11px] text-slate-400">Validação criptográfica de origem e proteção anti-hijack</p>
                   </div>
                 </div>
-                <span className="text-xs font-mono font-bold text-cyan-400 bg-cyan-950 px-2.5 py-1 rounded-full border border-cyan-800">
+                <span className="text-xs font-mono font-semibold text-[#93B4E6] flex items-center gap-1.5">
+                  <span className="w-1.5 h-1.5 rounded-full bg-[#4A72B2]"></span>
                   {currentTenant?.asn
                     ? `AS ${currentTenant.asn} Protegido`
                     : rpkiSummary?.own_asn && rpkiSummary.own_asn !== 'Multi-AS'
@@ -713,19 +717,19 @@ export const TelemetryView: React.FC<TelemetryViewProps> = ({ onAlertsUpdated, a
               </div>
 
               <div className="grid grid-cols-3 gap-2 mt-4 text-center">
-                <div className="bg-slate-950/60 p-2.5 rounded-xl border border-slate-800/80">
+                <div className="bg-[#161922] p-2.5 rounded-xl border border-[#242836]">
                   <span className="text-[10px] uppercase font-semibold text-slate-400">Válidas (ROA OK)</span>
-                  <div className="text-lg font-bold font-mono text-emerald-400 mt-0.5">
+                  <div className="text-lg font-bold font-mono text-[#2E9E6B] mt-0.5">
                     {rpkiSummary ? `${rpkiSummary.valid_percentage.toFixed(1)}%` : '98.5%'}
                   </div>
                 </div>
-                <div className="bg-slate-950/60 p-2.5 rounded-xl border border-slate-800/80">
+                <div className="bg-[#161922] p-2.5 rounded-xl border border-[#242836]">
                   <span className="text-[10px] uppercase font-semibold text-slate-400">Rotas Inválidas</span>
-                  <div className={`text-lg font-bold font-mono mt-0.5 ${(rpkiSummary?.invalid_count ?? 0) > 0 ? 'text-rose-400' : 'text-slate-400'}`}>
+                  <div className={`text-lg font-bold font-mono mt-0.5 ${(rpkiSummary?.invalid_count ?? 0) > 0 ? 'text-[#D9534F]' : 'text-slate-400'}`}>
                     {rpkiSummary?.invalid_count ?? 0}
                   </div>
                 </div>
-                <div className="bg-slate-950/60 p-2.5 rounded-xl border border-slate-800/80">
+                <div className="bg-[#161922] p-2.5 rounded-xl border border-[#242836]">
                   <span className="text-[10px] uppercase font-semibold text-slate-400">Inspecionadas</span>
                   <div className="text-xs font-bold text-slate-200 mt-1 font-mono">
                     {(rpkiSummary?.total_evaluated ?? 0).toLocaleString()}
@@ -736,7 +740,7 @@ export const TelemetryView: React.FC<TelemetryViewProps> = ({ onAlertsUpdated, a
 
             <button
               onClick={() => onSelectSubTab && onSelectSubTab('rpki')}
-              className="mt-4 w-full flex items-center justify-center gap-1.5 py-2 px-3 rounded-xl bg-emerald-950/40 hover:bg-emerald-900/60 text-emerald-300 border border-emerald-800/60 text-xs font-semibold transition cursor-pointer"
+              className="mt-4 w-full flex items-center justify-center gap-1.5 py-2 px-3 rounded-xl bg-[#25334D] hover:bg-[#2F4163] text-emerald-200 border border-[#3B5B8C]/40 text-xs font-medium transition cursor-pointer"
             >
               <span>Abrir Validador RPKI & Rotas Inválidas</span>
               <ArrowRight className="h-3.5 w-3.5" />
@@ -910,20 +914,21 @@ export const TelemetryView: React.FC<TelemetryViewProps> = ({ onAlertsUpdated, a
                     <div className="space-y-1">
                       <div className="flex flex-wrap items-center gap-2">
                         <span
-                          className={`text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded ${
+                          className={`text-[11px] font-semibold uppercase tracking-wider flex items-center gap-1.5 ${
                             isCrit
-                              ? 'bg-rose-950 text-rose-400 border border-rose-800'
+                              ? 'text-[#D9534F]'
                               : isWarn
-                              ? 'bg-amber-950 text-amber-400 border border-amber-800'
-                              : 'bg-blue-950 text-blue-400 border border-blue-800'
+                              ? 'text-[#D99B26]'
+                              : 'text-[#4A72B2]'
                           }`}
                         >
+                          <span className={`w-1.5 h-1.5 rounded-full ${isCrit ? 'bg-[#D9534F]' : isWarn ? 'bg-[#D99B26]' : 'bg-[#4A72B2]'}`} />
                           {alert.severity}
                         </span>
 
                         <span className="font-semibold text-sm text-white">{alert.device_name}</span>
                         <span className="text-slate-500">&bull;</span>
-                        <span className="text-xs font-mono text-cyan-400">{alert.target}</span>
+                        <span className="text-xs font-mono text-slate-300">{alert.target}</span>
 
                         <span className="text-xs text-slate-500 ml-auto sm:ml-0">
                           {formatRelativeTime(alert.started_at)}
@@ -933,7 +938,7 @@ export const TelemetryView: React.FC<TelemetryViewProps> = ({ onAlertsUpdated, a
                       <p className="text-xs text-slate-300 whitespace-pre-line leading-relaxed">{alert.message}</p>
 
                       {alert.resolved_at && (
-                        <p className="text-[11px] text-emerald-400/90 flex items-center gap-1">
+                        <p className="text-[11px] text-[#2E9E6B] flex items-center gap-1">
                           <Check className="h-3 w-3" />
                           <span>Resolvido às {new Date(alert.resolved_at).toLocaleTimeString()}</span>
                         </p>
@@ -946,19 +951,19 @@ export const TelemetryView: React.FC<TelemetryViewProps> = ({ onAlertsUpdated, a
                     {alert.status === 'active' && (
                       <button
                         onClick={() => handleAcknowledge(alert.id)}
-                        className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 transition cursor-pointer"
+                        className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-[#1E2330] hover:bg-[#252C3D] text-slate-200 border border-[#2D3345] transition cursor-pointer"
                       >
-                        <Check className="h-3.5 w-3.5 text-cyan-400" />
+                        <Check className="h-3.5 w-3.5 text-[#4A72B2]" />
                         <span>Reconhecer</span>
                       </button>
                     )}
                     {alert.status === 'acknowledged' && (
-                      <span className="text-xs text-amber-400/80 italic font-medium px-2 py-1 bg-amber-950/40 rounded border border-amber-900/60">
+                      <span className="text-xs text-[#D99B26] italic font-medium">
                         Reconhecido pelo NOC
                       </span>
                     )}
                     {alert.status === 'resolved' && (
-                      <span className="text-xs text-emerald-400/80 italic font-medium px-2 py-1 bg-emerald-950/40 rounded border border-emerald-900/60">
+                      <span className="text-xs text-[#2E9E6B] italic font-medium">
                         Resolvido
                       </span>
                     )}

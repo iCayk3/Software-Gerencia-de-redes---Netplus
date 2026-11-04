@@ -107,29 +107,29 @@ export const AuditView: React.FC<AuditViewProps> = ({ density = 'comfortable' })
     switch (action) {
       case 'ADD_STATIC_ROUTE':
         return (
-          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-semibold bg-emerald-500/10 text-emerald-400 border border-emerald-500/30">
-            <Route className="h-3 w-3" />
+          <span className="inline-flex items-center gap-1.5 text-xs font-medium text-[#2E9E6B]">
+            <Route className="h-3.5 w-3.5 text-[#2E9E6B]" />
             + Rota Estática
           </span>
         )
       case 'DELETE_STATIC_ROUTE':
         return (
-          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-semibold bg-rose-500/10 text-rose-400 border border-rose-500/30">
-            <Route className="h-3 w-3" />
+          <span className="inline-flex items-center gap-1.5 text-xs font-medium text-[#D9534F]">
+            <Route className="h-3.5 w-3.5 text-[#D9534F]" />
             - Rota Estática
           </span>
         )
       case 'APPLY_BGP_PREPEND':
         return (
-          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-semibold bg-cyan-500/10 text-cyan-400 border border-cyan-500/30">
-            <Zap className="h-3 w-3" />
+          <span className="inline-flex items-center gap-1.5 text-xs font-medium text-[#4A72B2]">
+            <Zap className="h-3.5 w-3.5 text-[#4A72B2]" />
             BGP Prepend
           </span>
         )
       case 'USER_LOGIN':
         return (
-          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-semibold bg-purple-500/10 text-purple-400 border border-purple-500/30">
-            <Lock className="h-3 w-3" />
+          <span className="inline-flex items-center gap-1.5 text-xs font-medium text-[#93B4E6]">
+            <Lock className="h-3.5 w-3.5 text-[#93B4E6]" />
             Login
           </span>
         )
@@ -137,14 +137,14 @@ export const AuditView: React.FC<AuditViewProps> = ({ density = 'comfortable' })
       case 'UPDATE_DEVICE':
       case 'DELETE_DEVICE':
         return (
-          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-semibold bg-blue-500/10 text-blue-400 border border-blue-500/30">
-            <Terminal className="h-3 w-3" />
+          <span className="inline-flex items-center gap-1.5 text-xs font-medium text-slate-300">
+            <Terminal className="h-3.5 w-3.5 text-slate-400" />
             Equipamento
           </span>
         )
       default:
         return (
-          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-semibold bg-slate-800 text-slate-300 border border-slate-700">
+          <span className="text-xs font-medium text-slate-400">
             {action}
           </span>
         )
@@ -156,28 +156,28 @@ export const AuditView: React.FC<AuditViewProps> = ({ density = 'comfortable' })
     switch (status) {
       case 'SUCCESS':
         return (
-          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-semibold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
-            <CheckCircle2 className="h-3 w-3" />
+          <span className="inline-flex items-center gap-1.5 text-xs font-medium text-[#2E9E6B]">
+            <span className="w-1.5 h-1.5 rounded-full bg-[#2E9E6B]" />
             Sucesso
           </span>
         )
       case 'MANUAL_DISPATCH':
         return (
-          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-semibold bg-amber-500/10 text-amber-400 border border-amber-500/20">
-            <ShieldCheck className="h-3 w-3" />
+          <span className="inline-flex items-center gap-1.5 text-xs font-medium text-[#D99B26]">
+            <span className="w-1.5 h-1.5 rounded-full bg-[#D99B26]" />
             Modo Manual
           </span>
         )
       case 'FAILED':
         return (
-          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-semibold bg-rose-500/10 text-rose-400 border border-rose-500/20">
-            <AlertCircle className="h-3 w-3" />
+          <span className="inline-flex items-center gap-1.5 text-xs font-medium text-[#D9534F]">
+            <span className="w-1.5 h-1.5 rounded-full bg-[#D9534F]" />
             Falha
           </span>
         )
       default:
         return (
-          <span className="text-[11px] text-slate-400 px-2 py-0.5 rounded bg-slate-800">
+          <span className="text-xs font-medium text-slate-400">
             {status}
           </span>
         )
@@ -190,12 +190,12 @@ export const AuditView: React.FC<AuditViewProps> = ({ density = 'comfortable' })
     <div className="space-y-6">
       {/* Top Banner / Summary Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        <div className="bg-slate-900/80 border border-slate-800 rounded-2xl p-4 shadow-sm">
+        <div className="bg-[#1C202C] border border-[#242836] rounded-2xl p-4 shadow-xs">
           <div className="flex items-center justify-between">
             <span className="text-xs font-semibold text-slate-400 uppercase tracking-wider">
               Total de Ações Auditadas
             </span>
-            <div className="p-2 rounded-xl bg-cyan-500/10 text-cyan-400 border border-cyan-500/20">
+            <div className="p-2 rounded-xl bg-[#25334D] text-[#93B4E6] border border-[#3B5B8C]/30">
               <ShieldCheck className="h-4 w-4" />
             </div>
           </div>
@@ -203,51 +203,51 @@ export const AuditView: React.FC<AuditViewProps> = ({ density = 'comfortable' })
           <p className="mt-1 text-[11px] text-slate-500">Registros gravados no banco de dados</p>
         </div>
 
-        <div className="bg-slate-900/80 border border-slate-800 rounded-2xl p-4 shadow-sm">
+        <div className="bg-[#1C202C] border border-[#242836] rounded-2xl p-4 shadow-xs">
           <div className="flex items-center justify-between">
             <span className="text-xs font-semibold text-slate-400 uppercase tracking-wider">
               Segurança Operacional
             </span>
-            <div className="p-2 rounded-xl bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
+            <div className="p-2 rounded-xl bg-[#25334D] text-[#2E9E6B] border border-[#2E9E6B]/30">
               <CheckCircle2 className="h-4 w-4" />
             </div>
           </div>
-          <div className="mt-2 text-2xl font-bold text-emerald-400">100% Imutável</div>
+          <div className="mt-2 text-2xl font-bold text-[#2E9E6B]">100% Imutável</div>
           <p className="mt-1 text-[11px] text-slate-500">Auditoria B2B conforme checklist SOC2</p>
         </div>
 
-        <div className="bg-slate-900/80 border border-slate-800 rounded-2xl p-4 shadow-sm">
+        <div className="bg-[#1C202C] border border-[#242836] rounded-2xl p-4 shadow-xs">
           <div className="flex items-center justify-between">
             <span className="text-xs font-semibold text-slate-400 uppercase tracking-wider">
               Rastreamento de Origem
             </span>
-            <div className="p-2 rounded-xl bg-blue-500/10 text-blue-400 border border-blue-500/20">
+            <div className="p-2 rounded-xl bg-[#25334D] text-[#4A72B2] border border-[#3B5B8C]/30">
               <Globe className="h-4 w-4" />
             </div>
           </div>
-          <div className="mt-2 text-2xl font-bold text-blue-400">IP & Usuário</div>
+          <div className="mt-2 text-2xl font-bold text-[#4A72B2]">IP & Usuário</div>
           <p className="mt-1 text-[11px] text-slate-500">Identificação ponta a ponta por operador</p>
         </div>
 
-        <div className="bg-slate-900/80 border border-slate-800 rounded-2xl p-4 shadow-sm">
+        <div className="bg-[#1C202C] border border-[#242836] rounded-2xl p-4 shadow-xs">
           <div className="flex items-center justify-between">
             <span className="text-xs font-semibold text-slate-400 uppercase tracking-wider">
               Políticas de Acesso
             </span>
-            <div className="p-2 rounded-xl bg-purple-500/10 text-purple-400 border border-purple-500/20">
+            <div className="p-2 rounded-xl bg-[#25334D] text-[#93B4E6] border border-[#3B5B8C]/30">
               <Lock className="h-4 w-4" />
             </div>
           </div>
-          <div className="mt-2 text-2xl font-bold text-purple-400">RBAC Ativo</div>
+          <div className="mt-2 text-2xl font-bold text-[#93B4E6]">RBAC Ativo</div>
           <p className="mt-1 text-[11px] text-slate-500">Admin &bull; Operador NOC &bull; Diretoria</p>
         </div>
       </div>
 
       {/* Filter and Search Bar */}
-      <div className="bg-slate-900/80 border border-slate-800 rounded-2xl p-4 flex flex-col md:flex-row items-stretch md:items-center justify-between gap-3">
+      <div className="bg-[#1C202C] border border-[#242836] rounded-2xl p-4 flex flex-col md:flex-row items-stretch md:items-center justify-between gap-3">
         <div className="flex flex-wrap items-center gap-3">
           {/* Action Filter */}
-          <div className="flex items-center gap-2 bg-slate-950 border border-slate-700/80 rounded-xl px-3 py-2 text-xs">
+          <div className="flex items-center gap-2 bg-[#161922] border border-[#2D3345] rounded-xl px-3 py-2 text-xs">
             <Filter className="h-3.5 w-3.5 text-slate-400" />
             <select
               value={actionFilter}
@@ -284,9 +284,9 @@ export const AuditView: React.FC<AuditViewProps> = ({ density = 'comfortable' })
           <button
             onClick={loadAuditLogs}
             disabled={loading}
-            className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold border border-slate-700 transition cursor-pointer disabled:opacity-50"
+            className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-[#1E2330] hover:bg-[#252C3D] text-[#E2E5EC] text-xs font-semibold border border-[#2D3345] transition cursor-pointer disabled:opacity-50"
           >
-            <RefreshCw className={`h-3.5 w-3.5 ${loading ? 'animate-spin text-cyan-400' : ''}`} />
+            <RefreshCw className={`h-3.5 w-3.5 ${loading ? 'animate-spin text-[#4A72B2]' : ''}`} />
             <span>Atualizar</span>
           </button>
         </div>
@@ -294,18 +294,18 @@ export const AuditView: React.FC<AuditViewProps> = ({ density = 'comfortable' })
 
       {/* Error state */}
       {error && (
-        <div className="p-4 rounded-xl bg-rose-950/40 border border-rose-800 text-rose-300 text-xs flex items-center gap-2">
-          <AlertCircle className="h-4 w-4 text-rose-400 shrink-0" />
+        <div className="p-4 rounded-xl bg-[#1C202C] border border-[#D9534F]/40 text-[#D9534F] text-xs flex items-center gap-2">
+          <AlertCircle className="h-4 w-4 text-[#D9534F] shrink-0" />
           <span>{error}</span>
         </div>
       )}
 
       {/* Logs Table */}
-      <div className="bg-slate-900/80 border border-slate-800 rounded-2xl overflow-hidden shadow-xl">
+      <div className="bg-[#1C202C] border border-[#242836] rounded-2xl overflow-hidden shadow-xs">
         <div className="overflow-x-auto">
           <table className="w-full text-left border-collapse">
             <thead>
-              <tr className="border-b border-slate-800 bg-slate-950/60 text-[11px] font-bold text-slate-400 uppercase tracking-wider">
+              <tr className="border-b border-[#242836] bg-[#161922] text-[11px] font-bold text-slate-400 uppercase tracking-wider">
                 <th className="py-3 px-4">Data / Horário</th>
                 <th className="py-3 px-4">Operador</th>
                 <th className="py-3 px-4">Ação</th>
@@ -315,12 +315,12 @@ export const AuditView: React.FC<AuditViewProps> = ({ density = 'comfortable' })
                 <th className="py-3 px-4 text-right">Status</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-slate-800/60 text-xs text-slate-300">
+            <tbody className="divide-y divide-[#242836] text-xs text-slate-300">
               {loading && logs.length === 0 ? (
                 <tr>
                   <td colSpan={7} className="py-12 text-center text-slate-500">
                     <div className="flex flex-col items-center justify-center gap-2">
-                      <div className="h-6 w-6 border-2 border-cyan-500/30 border-t-cyan-500 rounded-full animate-spin" />
+                      <div className="h-6 w-6 border-2 border-[#3B5B8C]/30 border-t-[#4A72B2] rounded-full animate-spin" />
                       <span>Carregando trilha de auditoria...</span>
                     </div>
                   </td>
@@ -339,7 +339,7 @@ export const AuditView: React.FC<AuditViewProps> = ({ density = 'comfortable' })
                 filteredLogs.map((log) => (
                   <tr
                     key={log.id}
-                    className="hover:bg-slate-800/40 transition-colors duration-150"
+                    className="hover:bg-[#1E2330]/50 transition-colors duration-150"
                   >
                     {/* Timestamp */}
                     <td className={`${cellPadding} whitespace-nowrap text-slate-400 font-mono text-[11px]`}>
@@ -352,7 +352,7 @@ export const AuditView: React.FC<AuditViewProps> = ({ density = 'comfortable' })
                     {/* Operator */}
                     <td className={`${cellPadding} whitespace-nowrap`}>
                       <div className="flex items-center gap-2">
-                        <div className="h-6 w-6 rounded-full bg-slate-800 border border-slate-700 flex items-center justify-center text-[10px] font-bold text-cyan-400">
+                        <div className="h-6 w-6 rounded-full bg-[#25334D] border border-[#3B5B8C]/30 flex items-center justify-center text-[10px] font-bold text-[#93B4E6]">
                           {log.user_name ? log.user_name.slice(0, 2).toUpperCase() : 'OP'}
                         </div>
                         <div>
@@ -377,16 +377,16 @@ export const AuditView: React.FC<AuditViewProps> = ({ density = 'comfortable' })
                     {/* Command Executed */}
                     <td className={`${cellPadding} max-w-xs md:max-w-md`}>
                       <div className="flex items-center gap-2 group">
-                        <code className="text-[11px] font-mono bg-slate-950 px-2 py-1 rounded border border-slate-800 text-cyan-300 truncate max-w-[280px] sm:max-w-[400px]">
+                        <code className="text-[11px] font-mono text-slate-200 truncate max-w-[280px] sm:max-w-[400px]">
                           {log.command_executed}
                         </code>
                         <button
                           onClick={() => handleCopyCommand(log.command_executed, log.id)}
-                          className="opacity-0 group-hover:opacity-100 p-1 text-slate-400 hover:text-white rounded hover:bg-slate-800 transition"
+                          className="opacity-0 group-hover:opacity-100 p-1 text-slate-400 hover:text-white rounded hover:bg-[#1E2330] transition"
                           title="Copiar comando"
                         >
                           {copiedId === log.id ? (
-                            <Check className="h-3 w-3 text-emerald-400" />
+                            <Check className="h-3 w-3 text-[#2E9E6B]" />
                           ) : (
                             <Copy className="h-3 w-3" />
                           )}
@@ -411,7 +411,7 @@ export const AuditView: React.FC<AuditViewProps> = ({ density = 'comfortable' })
         </div>
 
         {/* Table Footer with Pagination */}
-        <div className="p-3 border-t border-slate-800 bg-slate-950/60 flex items-center justify-between text-xs text-slate-400">
+        <div className="p-3 border-t border-[#242836] bg-[#161922] flex items-center justify-between text-xs text-slate-400">
           <div>
             Mostrando <span className="font-semibold text-slate-200">{filteredLogs.length}</span> de{' '}
             <span className="font-semibold text-slate-200">{total}</span> registros
@@ -421,18 +421,18 @@ export const AuditView: React.FC<AuditViewProps> = ({ density = 'comfortable' })
             <button
               onClick={() => setPage((p) => Math.max(1, p - 1))}
               disabled={page <= 1 || loading}
-              className="p-1.5 rounded-lg border border-slate-800 hover:bg-slate-800 text-slate-300 disabled:opacity-30 disabled:pointer-events-none transition cursor-pointer"
+              className="p-1.5 rounded-lg border border-[#2D3345] hover:bg-[#1E2330] text-slate-300 disabled:opacity-30 disabled:pointer-events-none transition cursor-pointer"
               title="Página Anterior"
             >
               <ChevronLeft className="h-4 w-4" />
             </button>
-            <span className="text-[11px] font-mono px-2 py-1 rounded bg-slate-900 border border-slate-800">
+            <span className="text-[11px] font-mono text-slate-300">
               {page} / {totalPages}
             </span>
             <button
               onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
               disabled={page >= totalPages || loading}
-              className="p-1.5 rounded-lg border border-slate-800 hover:bg-slate-800 text-slate-300 disabled:opacity-30 disabled:pointer-events-none transition cursor-pointer"
+              className="p-1.5 rounded-lg border border-[#2D3345] hover:bg-[#1E2330] text-slate-300 disabled:opacity-30 disabled:pointer-events-none transition cursor-pointer"
               title="Próxima Página"
             >
               <ChevronRight className="h-4 w-4" />

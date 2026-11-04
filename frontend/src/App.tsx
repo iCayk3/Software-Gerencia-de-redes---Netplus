@@ -5,7 +5,7 @@ import { CommandPalette } from './components/CommandPalette'
 import { LoginPage } from './components/LoginPage'
 import { AuthProvider, useAuth } from './context/AuthContext'
 import { fetchHealth, fetchAlerts, fetchDevices, type HealthResponse, type Device } from './services/api'
-import { ShieldCheck, Terminal, Network, Loader2 } from 'lucide-react'
+import { Terminal, Network, Loader2 } from 'lucide-react'
 
 // Dynamic Code-Splitting via React.lazy:
 const TrafficManager = lazy(() => import('./components/TrafficManager').then(m => ({ default: m.TrafficManager })))
@@ -25,8 +25,8 @@ const LicenseView = lazy(() => import('./components/LicenseView').then(m => ({ d
 function ViewLoader() {
   return (
     <div className="flex flex-col items-center justify-center min-h-[350px] text-slate-400 space-y-3 animate-in fade-in duration-150">
-      <div className="w-10 h-10 rounded-2xl bg-cyan-500/10 border border-cyan-500/30 flex items-center justify-center">
-        <Loader2 className="w-5 h-5 text-cyan-400 animate-spin" />
+      <div className="w-10 h-10 rounded-2xl bg-[#25334D]/60 border border-[#3B5B8C]/30 flex items-center justify-center">
+        <Loader2 className="w-5 h-5 text-[#4A72B2] animate-spin" />
       </div>
       <p className="text-xs text-slate-400 font-mono tracking-wide">Carregando módulo NetPulse...</p>
     </div>
@@ -181,12 +181,12 @@ function AppContent() {
   // Se estiver carregando verificação de autenticação
   if (authLoading) {
     return (
-      <div className="min-h-screen bg-slate-950 flex flex-col items-center justify-center text-slate-400 gap-3 selection:bg-cyan-500 selection:text-white">
-        <div className="h-12 w-12 rounded-2xl bg-gradient-to-tr from-cyan-500 via-blue-600 to-indigo-600 flex items-center justify-center text-white shadow-xl shadow-cyan-500/20 animate-pulse">
+      <div className="min-h-screen bg-[#161922] flex flex-col items-center justify-center text-slate-400 gap-3 selection:bg-[#3B5B8C] selection:text-white">
+        <div className="h-12 w-12 rounded-2xl bg-[#25334D] border border-[#3B5B8C]/40 flex items-center justify-center text-[#93B4E6] shadow-lg animate-pulse">
           <Network className="h-6 w-6" />
         </div>
         <div className="flex items-center gap-2 text-xs font-medium text-slate-300">
-          <div className="h-3.5 w-3.5 border-2 border-cyan-500/30 border-t-cyan-500 rounded-full animate-spin" />
+          <div className="h-3.5 w-3.5 border-2 border-[#3B5B8C]/30 border-t-[#4A72B2] rounded-full animate-spin" />
           <span>Verificando sessão corporativa...</span>
         </div>
       </div>
@@ -199,7 +199,7 @@ function AppContent() {
   }
 
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-100 flex font-sans selection:bg-cyan-500 selection:text-white">
+    <div className="min-h-screen bg-[#161922] text-[#E2E5EC] flex font-sans selection:bg-[#3B5B8C] selection:text-white">
       {/* 1. Menu Lateral (Sidebar) */}
       <Sidebar
         activeSection={activeSection}
@@ -233,12 +233,12 @@ function AppContent() {
         <main className="flex-1 overflow-y-auto px-4 sm:px-6 lg:px-8 py-6">
           {/* Offline Warning Banner */}
           {!loadingHealth && !health && (
-            <div className="mb-6 p-4 rounded-xl bg-amber-950/40 border border-amber-800/80 text-amber-300 flex items-start gap-3 shadow-lg animate-in fade-in">
+            <div className="mb-6 p-4 rounded-xl bg-[#1C202C] border border-amber-800/40 text-amber-200/90 flex items-start gap-3 shadow-md animate-in fade-in">
               <Terminal className="h-5 w-5 text-amber-400 mt-0.5 shrink-0" />
               <div>
                 <p className="font-semibold text-sm">Servidor backend não detectado em http://localhost:8080</p>
                 <p className="text-xs text-amber-200/80 mt-1">
-                  Certifique-se de executar o backend em Go (<code className="bg-slate-900 px-1.5 py-0.5 rounded text-white font-mono">go run ./cmd/api</code>) ou os contêineres Docker (<code className="bg-slate-900 px-1.5 py-0.5 rounded text-white font-mono">docker compose up -d</code>).
+                  Certifique-se de executar o backend em Go (<code className="bg-[#13151D] px-1.5 py-0.5 rounded text-white font-mono">go run ./cmd/api</code>) ou os contêineres Docker (<code className="bg-[#13151D] px-1.5 py-0.5 rounded text-white font-mono">docker compose up -d</code>).
                 </p>
               </div>
             </div>
@@ -326,15 +326,15 @@ function AppContent() {
         </main>
 
         {/* Rodapé Compacto */}
-        <footer className="border-t border-slate-900 bg-slate-950/90 py-4 px-4 sm:px-6 lg:px-8 text-xs text-slate-500 shrink-0">
+        <footer className="border-t border-[#242836] bg-[#13151D]/90 py-4 px-4 sm:px-6 lg:px-8 text-xs text-slate-500 shrink-0">
           <div className="flex flex-col sm:flex-row items-center justify-between gap-3">
             <div className="flex items-center gap-2">
-              <Network className="h-4 w-4 text-cyan-500" />
-              <span>NetPulse Enterprise &bull; Plataforma de Tráfego, BGP & OSPF</span>
+              <Network className="h-4 w-4 text-[#4A72B2]" />
+              <span className="text-slate-400">NetPulse Enterprise &bull; Plataforma de Tráfego, BGP & OSPF</span>
             </div>
-            <div className="flex items-center gap-3 text-slate-400 text-[11px]">
-              <span className="flex items-center gap-1">
-                <ShieldCheck className="h-3.5 w-3.5 text-emerald-400" />
+            <div className="flex items-center gap-3 text-slate-500 text-[11px]">
+              <span className="flex items-center gap-1.5">
+                <span className="w-1.5 h-1.5 rounded-full bg-[#2E9E6B]"></span>
                 Modo Manual Seguro Ativo (Zero Commits Automáticos)
               </span>
               <span>&bull;</span>

@@ -133,20 +133,20 @@ export const Sidebar: React.FC<SidebarProps> = ({
   ]
 
   const sidebarContent = (
-    <div className="flex flex-col h-full bg-slate-900/95 border-r border-slate-800 text-slate-200 select-none">
+    <div className="flex flex-col h-full bg-[#13151D] border-r border-[#242836] text-[#E2E5EC] select-none">
       {/* Branding Header */}
-      <div className={`flex items-center gap-3 p-4 border-b border-slate-800/80 transition-all ${
+      <div className={`flex items-center gap-3 p-4 border-b border-[#242836] transition-all ${
         isCollapsed ? 'justify-center px-2' : 'justify-between'
       }`}>
         <div className="flex items-center gap-3 overflow-hidden">
-          <div className="h-10 w-10 rounded-xl bg-gradient-to-tr from-cyan-500 via-blue-600 to-indigo-600 flex items-center justify-center shrink-0 shadow-lg shadow-cyan-500/20">
-            <Network className="h-5 w-5 text-white" />
+          <div className="h-10 w-10 rounded-xl bg-[#25334D] border border-[#3B5B8C]/40 flex items-center justify-center shrink-0 shadow-md text-[#93B4E6]">
+            <Network className="h-5 w-5" />
           </div>
           {!isCollapsed && (
             <div className="min-w-0">
-              <div className="flex items-center gap-1.5">
-                <span className="font-bold text-base text-white tracking-tight">NetPulse</span>
-                <span className="text-[10px] font-bold px-1.5 py-0.2 rounded-full bg-cyan-950 text-cyan-400 border border-cyan-800">
+              <div className="flex items-center gap-2">
+                <span className="font-bold text-base text-slate-100 tracking-tight">NetPulse</span>
+                <span className="text-[11px] font-mono text-slate-400">
                   v2.0
                 </span>
               </div>
@@ -158,14 +158,14 @@ export const Sidebar: React.FC<SidebarProps> = ({
         {/* Mobile close button */}
         <button
           onClick={onCloseMobile}
-          className="md:hidden p-1.5 text-slate-400 hover:text-white rounded-lg hover:bg-slate-800"
+          className="md:hidden p-1.5 text-slate-400 hover:text-white rounded-lg hover:bg-[#1C202C]"
         >
           <X className="h-5 w-5" />
         </button>
       </div>
 
       {/* Navigation Sections */}
-      <div className="flex-1 px-3 py-4 space-y-1.5 overflow-y-auto">
+      <div className="flex-1 px-3 py-4 space-y-1 overflow-y-auto">
         {!isCollapsed && (
           <div className="px-3 pb-2 text-[10px] font-bold uppercase tracking-wider text-slate-500">
             Navegação Principal
@@ -185,22 +185,22 @@ export const Sidebar: React.FC<SidebarProps> = ({
                 onCloseMobile()
               }}
               title={isCollapsed ? item.label : undefined}
-              className={`w-full flex items-center gap-3 px-3 py-3 rounded-xl text-left transition-all duration-150 cursor-pointer relative group ${
+              className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-left transition-all duration-150 cursor-pointer relative group ${
                 isActive
-                  ? 'bg-gradient-to-r from-cyan-600/20 to-blue-600/10 text-white border border-cyan-500/40 shadow-md shadow-cyan-950/40'
-                  : 'text-slate-400 hover:text-slate-100 hover:bg-slate-800/60 border border-transparent'
+                  ? 'bg-[#222A3D] text-[#E2E5EC] border border-[#3B5B8C]/40 shadow-xs'
+                  : 'text-slate-400 hover:text-slate-200 hover:bg-[#1C202C] border border-transparent'
               } ${isCollapsed ? 'justify-center px-0' : ''}`}
             >
               {/* Active Indicator Bar */}
               {isActive && (
-                <span className="absolute left-0 top-2 bottom-2 w-1 bg-cyan-400 rounded-r-full" />
+                <span className="absolute left-0 top-2 bottom-2 w-1 bg-[#4A72B2] rounded-r-full" />
               )}
 
               <div
-                className={`h-9 w-9 rounded-lg flex items-center justify-center shrink-0 transition-colors ${
+                className={`h-8 w-8 rounded-lg flex items-center justify-center shrink-0 transition-colors ${
                   isActive
-                    ? 'bg-cyan-500/20 text-cyan-400 border border-cyan-500/30'
-                    : 'bg-slate-800/60 text-slate-400 group-hover:text-slate-200 group-hover:bg-slate-800'
+                    ? 'bg-[#2D3852] text-[#93B4E6] border border-[#3B5B8C]/30'
+                    : 'bg-[#1C202C] text-slate-400 group-hover:text-slate-200 group-hover:bg-[#222736]'
                 }`}
               >
                 <Icon className="h-4 w-4" />
@@ -224,7 +224,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
               {/* Collapsed badge indicator */}
               {isCollapsed && hasBadge && (
-                <span className="absolute top-1.5 right-1.5 h-2 w-2 rounded-full bg-rose-500 ring-2 ring-slate-900" />
+                <span className="absolute top-1.5 right-1.5 h-2 w-2 rounded-full bg-rose-500 ring-2 ring-[#13151D]" />
               )}
             </button>
           )
@@ -232,22 +232,22 @@ export const Sidebar: React.FC<SidebarProps> = ({
       </div>
 
       {/* Backend Status & Collapse Toggle */}
-      <div className="p-3 border-t border-slate-800/80 space-y-2 bg-slate-950/40">
+      <div className="p-3 border-t border-[#242836] space-y-2 bg-[#10121A]">
         {/* Current Authenticated User Profile Pill */}
         {user && (
-          <div className={`p-2 rounded-xl bg-slate-950/80 border border-slate-800/80 flex items-center gap-2 ${
+          <div className={`p-2.5 rounded-xl bg-[#161922] border border-[#242836] flex items-center gap-2 ${
             isCollapsed ? 'justify-center' : 'justify-between'
           }`}>
-            <div className="flex items-center gap-2 min-w-0">
+            <div className="flex items-center gap-2.5 min-w-0">
               <div
                 className={`h-7 w-7 rounded-lg flex items-center justify-center text-[10px] font-bold shrink-0 ${
                   isSuperAdmin
-                    ? 'bg-amber-500/20 text-amber-300 border border-amber-500/30'
+                    ? 'bg-[#25334D] text-amber-300 border border-amber-500/20'
                     : user.role === 'admin'
-                    ? 'bg-red-500/20 text-red-400 border border-red-500/30'
+                    ? 'bg-[#25334D] text-rose-300 border border-rose-500/20'
                     : user.role === 'noc_operator'
-                    ? 'bg-cyan-500/20 text-cyan-400 border border-cyan-500/30'
-                    : 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30'
+                    ? 'bg-[#25334D] text-[#93B4E6] border border-[#3B5B8C]/30'
+                    : 'bg-[#25334D] text-emerald-300 border border-emerald-500/20'
                 }`}
                 title={`${user.name} (${user.email})`}
               >
@@ -255,19 +255,9 @@ export const Sidebar: React.FC<SidebarProps> = ({
               </div>
               {!isCollapsed && (
                 <div className="min-w-0 flex-1">
-                  <div className="text-xs font-semibold text-white truncate">{user.name}</div>
+                  <div className="text-xs font-semibold text-slate-200 truncate">{user.name}</div>
                   <div className="flex items-center gap-1 mt-0.5">
-                    <span
-                      className={`text-[9px] font-bold px-1.5 py-0.2 rounded-full ${
-                        isSuperAdmin
-                          ? 'bg-amber-950 text-amber-300 border border-amber-800'
-                          : user.role === 'admin'
-                          ? 'bg-red-950 text-red-300 border border-red-800'
-                          : user.role === 'noc_operator'
-                          ? 'bg-cyan-950 text-cyan-300 border border-cyan-800'
-                          : 'bg-emerald-950 text-emerald-300 border border-emerald-800'
-                      }`}
-                    >
+                    <span className="text-[11px] font-medium text-slate-400">
                       {isSuperAdmin
                         ? 'SuperAdmin'
                         : user.role === 'admin'
@@ -283,7 +273,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
             {!isCollapsed && (
               <button
                 onClick={logout}
-                className="p-1.5 text-slate-400 hover:text-rose-400 hover:bg-slate-800 rounded-lg transition cursor-pointer"
+                className="p-1.5 text-slate-400 hover:text-rose-400 hover:bg-[#1C202C] rounded-lg transition cursor-pointer"
                 title="Encerrar Sessão (Logout)"
               >
                 <LogOut className="h-3.5 w-3.5" />
@@ -294,7 +284,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
         {/* Backend Connectivity Status */}
         {!isCollapsed ? (
-          <div className="p-2.5 rounded-xl bg-slate-950/80 border border-slate-800/80 text-[11px] flex items-center justify-between">
+          <div className="p-2.5 rounded-xl bg-[#161922] border border-[#242836] text-[11px] flex items-center justify-between">
             <div className="flex items-center gap-2">
               <Wifi className="h-3.5 w-3.5 text-slate-400" />
               <span className="text-slate-400">Backend:</span>
@@ -302,12 +292,12 @@ export const Sidebar: React.FC<SidebarProps> = ({
             {loadingHealth ? (
               <span className="text-slate-500 animate-pulse">Conectando...</span>
             ) : health?.status === 'online' || health?.status?.includes('ok') ? (
-              <span className="inline-flex items-center gap-1 font-semibold text-emerald-400">
-                <span className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse" />
+              <span className="inline-flex items-center gap-1.5 font-medium text-[#2E9E6B]">
+                <span className="h-1.5 w-1.5 rounded-full bg-[#2E9E6B] animate-pulse" />
                 Online
               </span>
             ) : (
-              <span className="inline-flex items-center gap-1 font-semibold text-rose-400">
+              <span className="inline-flex items-center gap-1.5 font-medium text-[#D9534F]">
                 <ShieldAlert className="h-3.5 w-3.5" />
                 Offline
               </span>
@@ -318,8 +308,8 @@ export const Sidebar: React.FC<SidebarProps> = ({
             <span
               className={`h-2.5 w-2.5 rounded-full ${
                 health?.status === 'online' || health?.status?.includes('ok')
-                  ? 'bg-emerald-500 ring-2 ring-emerald-500/20 animate-pulse'
-                  : 'bg-rose-500'
+                  ? 'bg-[#2E9E6B] ring-2 ring-[#2E9E6B]/20 animate-pulse'
+                  : 'bg-[#D9534F]'
               }`}
               title={health?.status === 'online' || health?.status?.includes('ok') ? 'Backend Online' : 'Backend Offline'}
             />
@@ -330,7 +320,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
         <button
           onClick={onToggleCollapse}
           title={isCollapsed ? 'Expandir Menu' : 'Recolher Menu'}
-          className="hidden md:flex items-center justify-center gap-2 w-full py-2 px-3 text-xs text-slate-400 hover:text-slate-200 hover:bg-slate-800/70 rounded-xl transition cursor-pointer border border-transparent hover:border-slate-800"
+          className="hidden md:flex items-center justify-center gap-2 w-full py-2 px-3 text-xs text-slate-400 hover:text-slate-200 hover:bg-[#1C202C] rounded-xl transition cursor-pointer border border-transparent hover:border-[#242836]"
         >
           {isCollapsed ? (
             <ChevronRight className="h-4 w-4" />

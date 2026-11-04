@@ -208,10 +208,10 @@ export const DeviceManager: React.FC<DeviceManagerProps> = ({
   return (
     <div className="space-y-6">
       {/* Top Banner & Action */}
-      <div className="bg-slate-900/60 border border-slate-800 rounded-xl p-6 shadow-xl flex flex-col md:flex-row items-center justify-between gap-4">
+      <div className="bg-[#1C202C] border border-[#242836] rounded-xl p-6 shadow-md flex flex-col md:flex-row items-center justify-between gap-4">
         <div>
           <h2 className="text-lg font-semibold text-slate-100 flex items-center gap-2">
-            <Server className="h-5 w-5 text-cyan-400" />
+            <Server className="h-5 w-5 text-[#4A72B2]" />
             <span>Inventário de Equipamentos (Bordas, Cores e Switches)</span>
           </h2>
           <p className="text-xs text-slate-400 mt-1">
@@ -223,15 +223,15 @@ export const DeviceManager: React.FC<DeviceManagerProps> = ({
           <button
             onClick={loadDevices}
             disabled={loading}
-            className="flex items-center gap-1.5 px-3 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 rounded-lg text-xs font-medium transition-colors cursor-pointer disabled:opacity-50"
+            className="flex items-center gap-1.5 px-3 py-2 bg-[#1E2330] hover:bg-[#252C3D] text-[#E2E5EC] border border-[#2D3345] rounded-lg text-xs font-medium transition-colors cursor-pointer disabled:opacity-50"
           >
-            <RefreshCw className={`h-3.5 w-3.5 ${loading ? 'animate-spin text-cyan-400' : ''}`} />
+            <RefreshCw className={`h-3.5 w-3.5 ${loading ? 'animate-spin text-[#4A72B2]' : ''}`} />
             <span>Atualizar</span>
           </button>
 
           <button
             onClick={openAddModal}
-            className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-500 hover:to-blue-500 text-white font-medium rounded-lg text-xs shadow-md shadow-cyan-600/20 transition-all cursor-pointer"
+            className="flex items-center gap-2 px-4 py-2 bg-[#3B5B8C] hover:bg-[#4A72B2] text-white font-medium rounded-lg text-xs shadow-xs transition-colors cursor-pointer"
           >
             <Plus className="h-4 w-4" />
             <span>Novo Equipamento</span>
@@ -240,7 +240,7 @@ export const DeviceManager: React.FC<DeviceManagerProps> = ({
       </div>
 
       {error && (
-        <div className="p-4 rounded-xl bg-rose-950/30 border border-rose-800 text-rose-300 text-sm">
+        <div className="p-4 rounded-xl bg-[#1C202C] border border-[#D9534F]/40 text-[#D9534F] text-sm">
           {error}
         </div>
       )}
@@ -253,7 +253,7 @@ export const DeviceManager: React.FC<DeviceManagerProps> = ({
           ))}
         </div>
       ) : devices.length === 0 ? (
-        <div className="bg-slate-900/40 border border-slate-800 rounded-2xl p-12 text-center">
+        <div className="bg-[#1C202C] border border-[#242836] rounded-2xl p-12 text-center">
           <Network className="h-12 w-12 text-slate-600 mx-auto mb-3" />
           <h3 className="text-base font-semibold text-slate-300">Nenhum equipamento cadastrado ainda</h3>
           <p className="text-xs text-slate-500 max-w-md mx-auto mt-1 mb-6">
@@ -261,7 +261,7 @@ export const DeviceManager: React.FC<DeviceManagerProps> = ({
           </p>
           <button
             onClick={openAddModal}
-            className="inline-flex items-center gap-2 px-4 py-2 bg-cyan-600 hover:bg-cyan-500 text-white font-medium rounded-lg text-xs cursor-pointer shadow-md shadow-cyan-600/20"
+            className="inline-flex items-center gap-2 px-4 py-2 bg-[#3B5B8C] hover:bg-[#4A72B2] text-white font-medium rounded-lg text-xs cursor-pointer shadow-xs"
           >
             <Plus className="h-4 w-4" />
             <span>Cadastrar Primeiro Roteador</span>
@@ -280,7 +280,7 @@ export const DeviceManager: React.FC<DeviceManagerProps> = ({
             return (
               <div
                 key={dev.id}
-                className={`bg-slate-900/50 border border-slate-800 hover:border-slate-700 rounded-xl shadow-lg flex flex-col justify-between transition-all ${
+                className={`bg-[#1C202C] border border-[#242836] hover:border-[#2D3345] rounded-xl shadow-md flex flex-col justify-between transition-all ${
                   density === 'compact' ? 'p-3.5' : 'p-5'
                 }`}
               >
@@ -295,30 +295,28 @@ export const DeviceManager: React.FC<DeviceManagerProps> = ({
                         <span className="text-[11px] text-slate-400 font-mono tracking-tight">{dev.model}</span>
                       )}
                     </div>
-                    <div className="flex items-center gap-1.5 flex-wrap justify-end">
+                    <div className="flex items-center gap-2.5 flex-wrap justify-end">
                       {isSuperAdmin && dev.tenant_id && (
                         <span
-                          className="text-[10px] font-medium px-2 py-0.5 rounded-full bg-slate-800 text-cyan-300 border border-slate-700 flex items-center gap-1"
+                          className="text-[11px] text-slate-400 flex items-center gap-1"
                           title={`Empresa: ${tenants.find((t) => t.id === dev.tenant_id)?.name || dev.tenant_name || dev.tenant_id}`}
                         >
-                          <Building2 className="h-3 w-3 text-cyan-400 shrink-0" />
+                          <Building2 className="h-3 w-3 text-slate-500 shrink-0" />
                           <span className="truncate max-w-[100px]">
                             {tenants.find((t) => t.id === dev.tenant_id)?.name || dev.tenant_name || dev.tenant_id}
                           </span>
                         </span>
                       )}
-                      <span
-                        className={`text-[11px] font-semibold px-2 py-0.5 rounded-full border ${vendorInfo.color}`}
-                      >
+                      <span className="text-[11px] font-semibold uppercase tracking-wider text-slate-400">
                         {vendorInfo.badge}
                       </span>
                       {dev.is_bgp ? (
-                        <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-purple-950/80 text-purple-300 border border-purple-800 flex items-center gap-1" title="Roteador BGP / Borda com varredura ativa">
-                          <Network className="h-3 w-3 text-purple-400" />
+                        <span className="text-[11px] font-medium text-slate-400 flex items-center gap-1.5" title="Roteador BGP / Borda com varredura ativa">
+                          <span className="w-1.5 h-1.5 rounded-full bg-[#4A72B2]"></span>
                           BGP
                         </span>
                       ) : (
-                        <span className="text-[10px] font-medium px-2 py-0.5 rounded-full bg-slate-800/80 text-slate-400 border border-slate-700" title="Equipamento interno ou de acesso (sem varredura BGP)">
+                        <span className="text-[11px] font-medium text-slate-500" title="Equipamento interno ou de acesso (sem varredura BGP)">
                           Não-BGP
                         </span>
                       )}
@@ -326,12 +324,12 @@ export const DeviceManager: React.FC<DeviceManagerProps> = ({
                   </div>
 
                   {/* Connection Details */}
-                  <div className={`text-slate-300 bg-slate-950/50 rounded-lg border border-slate-800/80 ${
+                  <div className={`text-slate-300 bg-[#161922] rounded-lg border border-[#242836] ${
                     density === 'compact' ? 'space-y-1 text-[11px] p-2.5 mb-2.5' : 'space-y-1.5 text-xs p-3 mb-4'
                   }`}>
                     <div className="flex items-center justify-between">
                       <span className="text-slate-500">Host / IP:</span>
-                      <span className="font-mono text-cyan-300 tracking-tight">{dev.host}:{dev.port}</span>
+                      <span className="font-mono text-slate-200 tracking-tight">{dev.host}:{dev.port}</span>
                     </div>
                     <div className="flex items-center justify-between">
                       <span className="text-slate-500">Usuário SSH:</span>
@@ -340,30 +338,30 @@ export const DeviceManager: React.FC<DeviceManagerProps> = ({
                     <div className="flex items-center justify-between">
                       <span className="text-slate-500">Status SSH:</span>
                       {dev.status === 'online' ? (
-                        <span className="inline-flex items-center gap-1 text-[11px] font-medium text-emerald-400">
-                          <CheckCircle2 className="h-3 w-3" /> Online
+                        <span className="inline-flex items-center gap-1.5 text-[11px] font-medium text-[#2E9E6B]">
+                          <span className="w-1.5 h-1.5 rounded-full bg-[#2E9E6B]"></span> Online
                         </span>
                       ) : dev.status === 'offline' ? (
-                        <span className="inline-flex items-center gap-1 text-[11px] font-medium text-rose-400">
-                          <XCircle className="h-3 w-3" /> Inacessível
+                        <span className="inline-flex items-center gap-1.5 text-[11px] font-medium text-[#D9534F]">
+                          <span className="w-1.5 h-1.5 rounded-full bg-[#D9534F]"></span> Inacessível
                         </span>
                       ) : (
                         <span className="text-[11px] text-slate-500">Não testado</span>
                       )}
                     </div>
                     {auditResults[dev.id] && (
-                      <div className="flex items-center justify-between pt-1 border-t border-slate-800/60">
+                      <div className="flex items-center justify-between pt-1 border-t border-[#242836]">
                         <span className="text-slate-500">Padrão NetPulse:</span>
                         {auditResults[dev.id].is_manageable ? (
-                          <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-emerald-400">
+                          <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-[#2E9E6B]">
                             <CheckCircle2 className="h-3 w-3" /> Conforme ({auditResults[dev.id].overall_score}%)
                           </span>
                         ) : auditResults[dev.id].overall_status === 'failed' ? (
-                          <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-rose-400">
+                          <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-[#D9534F]">
                             <XCircle className="h-3 w-3" /> Falha ({auditResults[dev.id].overall_score}%)
                           </span>
                         ) : (
-                          <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-amber-400">
+                          <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-[#D99B26]">
                             <AlertCircle className="h-3 w-3" /> Requer Ajuste ({auditResults[dev.id].overall_score}%)
                           </span>
                         )}
@@ -376,8 +374,8 @@ export const DeviceManager: React.FC<DeviceManagerProps> = ({
                     <div
                       className={`mb-4 p-2.5 rounded-lg text-xs border ${
                         testResult.success
-                          ? 'bg-emerald-950/30 border-emerald-800 text-emerald-300'
-                          : 'bg-rose-950/30 border-rose-800 text-rose-300'
+                          ? 'bg-[#161922] border-[#2E9E6B]/40 text-[#2E9E6B]'
+                          : 'bg-[#161922] border-[#D9534F]/40 text-[#D9534F]'
                       }`}
                     >
                       <div className="flex items-center justify-between font-medium">
@@ -387,12 +385,12 @@ export const DeviceManager: React.FC<DeviceManagerProps> = ({
                         )}
                       </div>
                       {testResult.banner && (
-                        <div className="text-[10px] text-emerald-400/80 truncate mt-0.5">
+                        <div className="text-[10px] text-slate-400 truncate mt-0.5">
                           {testResult.banner}
                         </div>
                       )}
                       {testResult.error && (
-                        <div className="text-[11px] text-rose-400 break-words mt-0.5">
+                        <div className="text-[11px] text-[#D9534F] break-words mt-0.5">
                           {testResult.error}
                         </div>
                       )}
@@ -401,32 +399,32 @@ export const DeviceManager: React.FC<DeviceManagerProps> = ({
                 </div>
 
                 {/* Footer Actions */}
-                <div className="pt-3 border-t border-slate-800/80 flex items-center justify-between gap-2">
+                <div className="pt-3 border-t border-[#242836] flex items-center justify-between gap-2">
                   <div className="flex items-center gap-1.5 flex-wrap">
                     <button
                       onClick={() => handleTestSSH(dev)}
                       disabled={isTesting}
-                      className="flex items-center gap-1 px-2.5 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs rounded font-medium border border-slate-700/80 cursor-pointer disabled:opacity-50"
+                      className="flex items-center gap-1.5 px-2.5 py-1.5 bg-[#1E2330] hover:bg-[#282F40] text-slate-200 text-xs rounded-lg font-medium border border-[#2D3345] cursor-pointer disabled:opacity-50"
                       title="Testar Conexão SSH"
                     >
-                      <ShieldCheck className={`h-3.5 w-3.5 ${isTesting ? 'animate-spin text-cyan-400' : 'text-cyan-400'}`} />
+                      <ShieldCheck className={`h-3.5 w-3.5 ${isTesting ? 'animate-spin text-[#4A72B2]' : 'text-slate-400'}`} />
                       <span>{isTesting ? 'Testando...' : 'Testar SSH'}</span>
                     </button>
 
                     <button
                       onClick={() => handleAuditDevice(dev.id)}
                       disabled={auditingId === dev.id}
-                      className="flex items-center gap-1 px-2.5 py-1.5 bg-cyan-950/40 hover:bg-cyan-900/50 text-cyan-300 hover:text-cyan-200 text-xs rounded font-medium border border-cyan-800/60 cursor-pointer disabled:opacity-50 transition-colors"
+                      className="flex items-center gap-1.5 px-2.5 py-1.5 bg-[#25334D] hover:bg-[#2F4163] text-blue-200 text-xs rounded-lg font-medium border border-[#3B5B8C]/40 cursor-pointer disabled:opacity-50 transition-colors"
                       title="Auditar e verificar se a configuração do equipamento está no padrão pré-definido"
                     >
-                      <Layers className={`h-3.5 w-3.5 ${auditingId === dev.id ? 'animate-spin text-cyan-400' : 'text-cyan-400'}`} />
+                      <Layers className={`h-3.5 w-3.5 ${auditingId === dev.id ? 'animate-spin text-[#93B4E6]' : 'text-[#93B4E6]'}`} />
                       <span>{auditingId === dev.id ? 'Auditando...' : 'Auditar Padrão'}</span>
                     </button>
 
                     {onSelectDeviceForTerminal && (
                       <button
                         onClick={() => onSelectDeviceForTerminal(dev)}
-                        className="p-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-cyan-400 text-xs rounded border border-slate-700/80 cursor-pointer"
+                        className="p-1.5 bg-[#1E2330] hover:bg-[#282F40] text-slate-300 hover:text-white text-xs rounded-lg border border-[#2D3345] cursor-pointer"
                         title="Abrir no Terminal SSH"
                       >
                         <Terminal className="h-3.5 w-3.5" />
@@ -436,7 +434,7 @@ export const DeviceManager: React.FC<DeviceManagerProps> = ({
                     {onSelectDeviceForBGP && (
                       <button
                         onClick={() => onSelectDeviceForBGP(dev)}
-                        className="p-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-cyan-400 text-xs rounded border border-slate-700/80 cursor-pointer"
+                        className="p-1.5 bg-[#1E2330] hover:bg-[#282F40] text-slate-300 hover:text-white text-xs rounded-lg border border-[#2D3345] cursor-pointer"
                         title="Ver Sessões BGP"
                       >
                         <Activity className="h-3.5 w-3.5" />
@@ -447,14 +445,14 @@ export const DeviceManager: React.FC<DeviceManagerProps> = ({
                   <div className="flex items-center gap-1">
                     <button
                       onClick={() => openEditModal(dev)}
-                      className="p-1.5 text-slate-400 hover:text-slate-200 cursor-pointer hover:bg-slate-800 rounded transition-colors"
+                      className="p-1.5 text-slate-400 hover:text-slate-200 cursor-pointer hover:bg-[#1E2330] rounded-lg transition-colors"
                       title="Editar"
                     >
                       <Edit2 className="h-3.5 w-3.5" />
                     </button>
                     <button
                       onClick={() => handleDelete(dev.id, dev.name)}
-                      className="p-1.5 text-slate-400 hover:text-rose-400 cursor-pointer hover:bg-slate-800 rounded transition-colors"
+                      className="p-1.5 text-slate-400 hover:text-rose-400 cursor-pointer hover:bg-[#1E2330] rounded-lg transition-colors"
                       title="Excluir"
                     >
                       <Trash2 className="h-3.5 w-3.5" />

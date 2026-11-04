@@ -8,7 +8,6 @@ import {
   HelpCircle,
   RefreshCw,
   ShieldCheck,
-  ShieldAlert,
   X,
   Globe,
   Network,
@@ -16,9 +15,6 @@ import {
   ChevronDown,
   ChevronUp,
   Route as RouteIcon,
-  AlertTriangle,
-  CheckCircle2,
-  Clock,
   SlidersHorizontal,
   Edit3,
 } from 'lucide-react'
@@ -83,14 +79,14 @@ export const TrafficDownloadTab: React.FC<TrafficDownloadTabProps> = ({
   return (
     <div className="space-y-6">
       {/* Controls Bar for Download */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-slate-900/80 border border-slate-800 rounded-2xl p-4 shadow-sm">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-[#1C202C] border border-[#242836] rounded-2xl p-4 shadow-sm">
         <div className="flex flex-wrap items-center gap-3">
           <div className="flex items-center gap-2">
             <Server className="h-4 w-4 text-slate-400" />
             <select
               value={selectedPrependDevice}
               onChange={(e) => onPrependDeviceChange(e.target.value)}
-              className="bg-slate-800 border border-slate-700 text-slate-200 text-xs rounded-xl px-3 py-2 font-medium focus:ring-2 focus:ring-indigo-500 focus:outline-none cursor-pointer"
+              className="bg-[#161922] border border-[#2D3345] text-slate-200 text-xs rounded-xl px-3 py-2 font-medium focus:ring-2 focus:ring-[#3B5B8C] focus:outline-none cursor-pointer"
             >
               <option value="all">🌐 Todos os Links da Rede (Visão Global)</option>
               {devices
@@ -104,14 +100,14 @@ export const TrafficDownloadTab: React.FC<TrafficDownloadTabProps> = ({
           </div>
 
           {/* View Mode Toggle: Cards por AS vs Tabela Geral */}
-          <div className="flex bg-slate-800/80 p-0.5 rounded-xl border border-slate-700/80 text-xs">
+          <div className="flex bg-[#161922] p-0.5 rounded-xl border border-[#242836] text-xs">
             <button
               type="button"
               onClick={() => setDownloadViewMode('cards')}
               title="Visualização em Cards por Detentor do AS / Operadora"
               className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg font-medium transition cursor-pointer ${
                 downloadViewMode === 'cards'
-                  ? 'bg-indigo-600 text-white shadow-sm'
+                  ? 'bg-[#3B5B8C] text-white shadow-xs'
                   : 'text-slate-400 hover:text-white'
               }`}
             >
@@ -124,7 +120,7 @@ export const TrafficDownloadTab: React.FC<TrafficDownloadTabProps> = ({
               title="Visualização Detalhada por Sessão BGP"
               className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg font-medium transition cursor-pointer ${
                 downloadViewMode === 'table'
-                  ? 'bg-indigo-600 text-white shadow-sm'
+                  ? 'bg-[#3B5B8C] text-white shadow-xs'
                   : 'text-slate-400 hover:text-white'
               }`}
             >
@@ -140,14 +136,14 @@ export const TrafficDownloadTab: React.FC<TrafficDownloadTabProps> = ({
               placeholder="Buscar por Operadora, AS, prefixo ou comunidade..."
               value={prependSearch}
               onChange={(e) => setPrependSearch(e.target.value)}
-              className="bg-slate-800/80 border border-slate-700 text-slate-200 text-xs rounded-xl pl-8 pr-3 py-2 focus:ring-2 focus:ring-indigo-500 focus:outline-none w-56 sm:w-72"
+              className="bg-[#161922] border border-[#2D3345] text-slate-200 text-xs rounded-xl pl-8 pr-3 py-2 focus:ring-2 focus:ring-[#3B5B8C] focus:outline-none w-56 sm:w-72"
             />
           </div>
         </div>
 
         <div className="flex items-center gap-3">
-          <div className="hidden lg:flex items-center gap-2 px-3 py-1.5 rounded-xl bg-slate-800/60 border border-slate-700/60 text-[11px] text-slate-400">
-            <Moon className="h-3.5 w-3.5 text-indigo-400" />
+          <div className="hidden lg:flex items-center gap-2 px-3 py-1.5 rounded-xl bg-[#161922] border border-[#242836] text-[11px] text-slate-400">
+            <Moon className="h-3.5 w-3.5 text-[#93B4E6]" />
             <span>
               Auto-Sync: <strong>Diário às 03:30 (Madrugada)</strong>
             </span>
@@ -158,13 +154,13 @@ export const TrafficDownloadTab: React.FC<TrafficDownloadTabProps> = ({
             type="button"
             onClick={() => setShowDownloadHelp((prev) => !prev)}
             title="Dicas de Engenharia de Download & Zero-Flap"
-            className={`flex items-center gap-1.5 px-3 py-2 rounded-xl border text-xs font-semibold transition cursor-pointer ${
+            className={`flex items-center gap-1.5 px-3 py-2 rounded-xl border text-xs font-medium transition cursor-pointer ${
               showDownloadHelp
-                ? 'bg-indigo-600/30 text-indigo-200 border-indigo-500/60 shadow-md shadow-indigo-500/10'
-                : 'bg-slate-800 hover:bg-slate-700 text-slate-300 border-slate-700'
+                ? 'bg-[#25334D] text-blue-200 border-[#3B5B8C]/60 shadow-xs'
+                : 'bg-[#1E2330] hover:bg-[#252C3D] text-slate-300 border-[#2D3345]'
             }`}
           >
-            <HelpCircle className="h-4 w-4 text-indigo-400" />
+            <HelpCircle className="h-4 w-4 text-[#93B4E6]" />
             <span className="hidden sm:inline">Dicas</span>
           </button>
 
@@ -172,10 +168,10 @@ export const TrafficDownloadTab: React.FC<TrafficDownloadTabProps> = ({
             onClick={onRefresh}
             disabled={prependsLoading}
             title="Forçar atualização via SSH no roteador"
-            className="p-2 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-xl border border-slate-700 transition cursor-pointer disabled:opacity-50"
+            className="p-2 bg-[#1E2330] hover:bg-[#252C3D] text-slate-300 rounded-xl border border-[#2D3345] transition cursor-pointer disabled:opacity-50"
           >
             <RefreshCw
-              className={`h-4 w-4 ${prependsLoading ? 'animate-spin text-indigo-400' : ''}`}
+              className={`h-4 w-4 ${prependsLoading ? 'animate-spin text-[#4A72B2]' : ''}`}
             />
           </button>
         </div>
@@ -183,8 +179,8 @@ export const TrafficDownloadTab: React.FC<TrafficDownloadTabProps> = ({
 
       {/* Informações / Dicas de Engenharia de Download (Retrátil) */}
       {showDownloadHelp && (
-        <div className="p-4 rounded-2xl bg-gradient-to-r from-indigo-950/60 via-slate-900 to-slate-900 border border-indigo-700/50 flex items-start gap-3.5 shadow-xl animate-in fade-in slide-in-from-top-2 duration-150">
-          <div className="p-2 rounded-xl bg-indigo-500/10 border border-indigo-500/20 text-indigo-400 shrink-0 mt-0.5">
+        <div className="p-4 rounded-2xl bg-[#1C202C] border border-[#242836] flex items-start gap-3.5 shadow-md animate-in fade-in slide-in-from-top-2 duration-150">
+          <div className="p-2 rounded-xl bg-[#25334D] border border-[#3B5B8C]/30 text-[#93B4E6] shrink-0 mt-0.5">
             <ShieldCheck className="h-4 w-4" />
           </div>
           <div className="text-xs space-y-1.5 flex-1">
@@ -193,14 +189,15 @@ export const TrafficDownloadTab: React.FC<TrafficDownloadTabProps> = ({
                 <span className="font-bold text-white text-xs uppercase tracking-wide">
                   Engenharia de Tráfego de Download (AS-Path Prepending & Bloqueio Seletivo)
                 </span>
-                <span className="px-2 py-0.5 rounded-full bg-emerald-950 border border-emerald-800 text-emerald-400 text-[10px] font-bold">
+                <span className="text-[11px] font-medium text-[#2E9E6B] flex items-center gap-1.5">
+                  <span className="w-1.5 h-1.5 rounded-full bg-[#2E9E6B]"></span>
                   Zero Flap &bull; Route-Refresh Ativo
                 </span>
               </div>
               <button
                 type="button"
                 onClick={() => setShowDownloadHelp(false)}
-                className="p-1 text-slate-400 hover:text-white rounded-lg hover:bg-slate-800 transition cursor-pointer"
+                className="p-1 text-slate-400 hover:text-white rounded-lg hover:bg-[#1E2330] transition cursor-pointer"
                 title="Fechar dicas"
               >
                 <X className="h-3.5 w-3.5" />
@@ -296,17 +293,17 @@ export const TrafficDownloadTab: React.FC<TrafficDownloadTabProps> = ({
                       return (
                       <div
                         key={grp.id}
-                        className="flex flex-col bg-slate-900/90 border border-slate-800/90 hover:border-slate-700 rounded-2xl shadow-xl overflow-hidden transition duration-200"
+                        className="flex flex-col bg-[#1C202C] border border-[#242836] hover:border-[#2D3345] rounded-2xl shadow-md overflow-hidden transition duration-200"
                       >
                         {/* AS Card Header */}
-                        <div className={`border-b border-slate-800/80 bg-slate-950/40 ${density === 'compact' ? 'p-3.5' : 'p-5'}`}>
+                        <div className={`border-b border-[#242836] bg-[#181C26] ${density === 'compact' ? 'p-3.5' : 'p-5'}`}>
                           <div className="flex items-start justify-between gap-3">
                             <div className="flex items-center gap-3.5">
                               {/* Dedicated Image Area */}
                               <div
                                 onClick={() => isSuperAdmin && onOpenCustomizeAS && onOpenCustomizeAS(grp)}
-                                className={`rounded-2xl bg-slate-800/90 border border-slate-700 flex items-center justify-center shrink-0 shadow-md overflow-hidden relative ${
-                                  isSuperAdmin && onOpenCustomizeAS ? 'hover:border-cyan-500/60 cursor-pointer group' : ''
+                                className={`rounded-2xl bg-[#161922] border border-[#242836] flex items-center justify-center shrink-0 shadow-sm overflow-hidden relative ${
+                                  isSuperAdmin && onOpenCustomizeAS ? 'hover:border-[#3B5B8C] cursor-pointer group' : ''
                                 } ${density === 'compact' ? 'h-9 w-9' : 'h-12 w-12'}`}
                                 title={isSuperAdmin ? 'Clique para trocar imagem ou editar AS' : undefined}
                               >
@@ -325,16 +322,16 @@ export const TrafficDownloadTab: React.FC<TrafficDownloadTabProps> = ({
                                   />
                                 ) : grp.role === 'ix_ptt' ? (
                                   <Globe
-                                    className={`${density === 'compact' ? 'h-4 w-4' : 'h-6 w-6'} text-purple-400`}
+                                    className={`${density === 'compact' ? 'h-4 w-4' : 'h-6 w-6'} text-[#93B4E6]`}
                                   />
                                 ) : (
                                   <Network
-                                    className={`${density === 'compact' ? 'h-4 w-4' : 'h-6 w-6'} text-indigo-400`}
+                                    className={`${density === 'compact' ? 'h-4 w-4' : 'h-6 w-6'} text-[#4A72B2]`}
                                   />
                                 )}
                                 {isSuperAdmin && onOpenCustomizeAS && (
-                                  <div className="absolute inset-0 bg-cyan-950/70 opacity-0 group-hover:opacity-100 flex items-center justify-center transition">
-                                    <Edit3 className="h-3.5 w-3.5 text-cyan-300" />
+                                  <div className="absolute inset-0 bg-[#161922]/80 opacity-0 group-hover:opacity-100 flex items-center justify-center transition">
+                                    <Edit3 className="h-3.5 w-3.5 text-[#93B4E6]" />
                                   </div>
                                 )}
                               </div>
@@ -346,10 +343,10 @@ export const TrafficDownloadTab: React.FC<TrafficDownloadTabProps> = ({
                                 {grp.device_name && (
                                   <div className="flex flex-wrap items-center gap-1.5 mt-1">
                                     <span
-                                      className="font-mono text-[11px] font-bold text-slate-200 bg-slate-800/90 px-2 py-0.5 rounded border border-slate-700 flex items-center gap-1"
+                                      className="font-mono text-[11px] text-slate-400 flex items-center gap-1.5"
                                       title={`Roteador BGP: ${grp.device_name}`}
                                     >
-                                      <Server className="h-3 w-3 text-indigo-400" />
+                                      <Server className="h-3 w-3 text-slate-500" />
                                       {grp.device_name}
                                     </span>
                                   </div>
@@ -362,7 +359,7 @@ export const TrafficDownloadTab: React.FC<TrafficDownloadTabProps> = ({
                               <button
                                 type="button"
                                 onClick={() => onOpenCustomizeAS(grp)}
-                                className="p-1.5 rounded-xl bg-slate-800/80 hover:bg-slate-700 text-slate-400 hover:text-cyan-300 border border-slate-700/80 transition cursor-pointer shrink-0"
+                                className="p-1.5 rounded-lg bg-[#1E2330] hover:bg-[#252C3D] text-slate-400 hover:text-white border border-[#2D3345] transition cursor-pointer shrink-0"
                                 title="Editar Nome e Imagem do AS (Super Admin)"
                               >
                                 <Edit3 className="h-3.5 w-3.5" />
@@ -371,9 +368,9 @@ export const TrafficDownloadTab: React.FC<TrafficDownloadTabProps> = ({
                           </div>
 
                           {/* Unified Sessions Bar */}
-                          <div className="mt-3 pt-3 border-t border-slate-800/60 flex items-center justify-between text-xs">
+                          <div className="mt-3 pt-3 border-t border-[#242836] flex items-center justify-between text-xs">
                             <div className="flex items-center gap-2 text-slate-300">
-                              <Zap className="h-3.5 w-3.5 text-amber-400 shrink-0" />
+                              <Zap className="h-3.5 w-3.5 text-[#D99B26] shrink-0" />
                               <span className="font-semibold text-[11px]">
                                 {grp.peer_count}{' '}
                                 {grp.peer_count === 1
@@ -391,7 +388,7 @@ export const TrafficDownloadTab: React.FC<TrafficDownloadTabProps> = ({
                                   expandedPeerGroup === grp.id ? null : grp.id
                                 )
                               }
-                              className="text-[11px] text-indigo-400 hover:text-indigo-300 font-medium flex items-center gap-1 cursor-pointer"
+                              className="text-[11px] text-[#93B4E6] hover:text-white font-medium flex items-center gap-1 cursor-pointer"
                             >
                               <span>
                                 {expandedPeerGroup === grp.id ? 'Ocultar IPs' : 'Ver IPs'}
@@ -406,11 +403,11 @@ export const TrafficDownloadTab: React.FC<TrafficDownloadTabProps> = ({
 
                           {/* Collapsible Peer IPs list */}
                           {expandedPeerGroup === grp.id && (
-                            <div className="mt-2.5 p-2.5 rounded-xl bg-slate-950/90 border border-slate-800 text-[11px] font-mono text-slate-300 flex flex-wrap gap-1.5 animate-in fade-in duration-150">
+                            <div className="mt-2.5 p-2.5 rounded-xl bg-[#161922] border border-[#242836] text-[11px] font-mono text-slate-300 flex flex-wrap gap-2 animate-in fade-in duration-150">
                               {grp.peer_ips.map((ip, idx) => (
                                 <span
                                   key={idx}
-                                  className="px-2 py-0.5 rounded bg-slate-900 border border-slate-800 text-indigo-200"
+                                  className="text-[#93B4E6]"
                                 >
                                   {ip}
                                 </span>
@@ -420,11 +417,11 @@ export const TrafficDownloadTab: React.FC<TrafficDownloadTabProps> = ({
                         </div>
 
                         {/* Body: Announced Prefixes */}
-                        <div className="p-4 flex-1 flex flex-col justify-between bg-slate-900/40">
+                        <div className="p-4 flex-1 flex flex-col justify-between bg-[#1C202C]">
                           <div>
                             <div className="flex items-center justify-between">
                               <div className="flex items-center gap-2">
-                                <RouteIcon className="h-3.5 w-3.5 text-indigo-400" />
+                                <RouteIcon className="h-3.5 w-3.5 text-[#4A72B2]" />
                                 <span className="text-[11px] font-bold uppercase tracking-wider text-slate-400">
                                   Prefixos Anunciados ({grp.prefixes.length})
                                 </span>
@@ -435,7 +432,7 @@ export const TrafficDownloadTab: React.FC<TrafficDownloadTabProps> = ({
                               <button
                                 type="button"
                                 onClick={() => togglePrefixGroup(grp.id)}
-                                className="text-[11px] text-indigo-400 hover:text-indigo-300 font-medium flex items-center gap-1 cursor-pointer transition py-0.5 px-1.5 rounded hover:bg-indigo-950/40"
+                                className="text-[11px] text-[#93B4E6] hover:text-white font-medium flex items-center gap-1 cursor-pointer transition py-0.5 px-1.5 rounded hover:bg-[#1E2330]"
                               >
                                 <span>
                                   {expandedPrefixGroups[grp.id]
@@ -455,26 +452,26 @@ export const TrafficDownloadTab: React.FC<TrafficDownloadTabProps> = ({
                                 {grp.prefixes.map((pfx) => (
                                   <div
                                     key={pfx.id}
-                                    className="p-3 rounded-xl bg-slate-950/60 border border-slate-800/80 hover:border-slate-700/80 transition flex flex-col sm:flex-row sm:items-center justify-between gap-2.5"
+                                    className="p-3 rounded-xl bg-[#161922] border border-[#242836] hover:border-[#2D3345] transition flex flex-col sm:flex-row sm:items-center justify-between gap-2.5"
                                   >
                                     <div className="space-y-1">
-                                      <div className="flex items-center gap-2">
-                                        <span className="font-mono font-bold text-white text-xs px-2 py-0.5 rounded bg-slate-900 border border-slate-800">
+                                      <div className="flex items-center gap-3">
+                                        <span className="font-mono font-semibold text-slate-100 text-xs">
                                           {pfx.prefix}
                                         </span>
                                         {pfx.is_blocked ? (
-                                          <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-rose-950/80 text-rose-300 border border-rose-800 inline-flex items-center gap-1">
-                                            <AlertTriangle className="h-3 w-3 text-rose-400" />
+                                          <span className="text-xs font-medium text-[#D9534F] inline-flex items-center gap-1.5">
+                                            <span className="w-1.5 h-1.5 rounded-full bg-[#D9534F]"></span>
                                             Bloqueado (Deny)
                                           </span>
                                         ) : pfx.prepend_count === 0 ? (
-                                          <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-950/80 text-emerald-300 border border-emerald-800 inline-flex items-center gap-1">
-                                            <CheckCircle2 className="h-3 w-3 text-emerald-400" />
+                                          <span className="text-xs font-medium text-[#2E9E6B] inline-flex items-center gap-1.5">
+                                            <span className="w-1.5 h-1.5 rounded-full bg-[#2E9E6B]"></span>
                                             0P (Primário)
                                           </span>
                                         ) : (
-                                          <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-amber-950/80 text-amber-300 border border-amber-800 inline-flex items-center gap-1">
-                                            <Clock className="h-3 w-3 text-amber-400" />
+                                          <span className="text-xs font-medium text-[#D99B26] inline-flex items-center gap-1.5">
+                                            <span className="w-1.5 h-1.5 rounded-full bg-[#D99B26]"></span>
                                             {pfx.prepend_count}x Prepend ({pfx.prepend_count}P)
                                           </span>
                                         )}
@@ -484,7 +481,7 @@ export const TrafficDownloadTab: React.FC<TrafficDownloadTabProps> = ({
                                     <button
                                       type="button"
                                       onClick={() => onOpenPrependModal(pfx, grp)}
-                                      className="inline-flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold shadow-md shadow-indigo-600/20 transition cursor-pointer self-start sm:self-auto"
+                                      className="inline-flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-lg bg-[#3B5B8C] hover:bg-[#4A72B2] text-white text-xs font-medium shadow-xs transition cursor-pointer self-start sm:self-auto"
                                     >
                                       <SlidersHorizontal className="h-3.5 w-3.5" />
                                       <span>Ajustar Prepend</span>
@@ -497,8 +494,8 @@ export const TrafficDownloadTab: React.FC<TrafficDownloadTabProps> = ({
 
                           {/* Footer Info */}
                           {expandedPrefixGroups[grp.id] && (
-                            <div className="mt-3 pt-2 text-[10px] text-slate-500 flex items-center gap-1.5 border-t border-slate-800/40 animate-in fade-in duration-150">
-                              <ShieldCheck className="h-3.5 w-3.5 text-emerald-400 shrink-0" />
+                            <div className="mt-3 pt-2 text-[10px] text-slate-500 flex items-center gap-1.5 border-t border-[#242836] animate-in fade-in duration-150">
+                              <ShieldCheck className="h-3.5 w-3.5 text-[#2E9E6B] shrink-0" />
                               <span>
                                 Ajustar este bloco afeta simultaneamente todas as {grp.peer_count}{' '}
                                 sessões deste AS sem repetição.
@@ -526,7 +523,7 @@ export const TrafficDownloadTab: React.FC<TrafficDownloadTabProps> = ({
                   {prependOverview.peers.map((peer) => (
                     <div
                       key={peer.id}
-                      className="p-4 rounded-2xl bg-slate-900/90 border border-slate-800 shadow-md space-y-3"
+                      className="p-4 rounded-2xl bg-[#1C202C] border border-[#242836] shadow-sm space-y-3"
                     >
                       <div className="flex items-start justify-between">
                         <div>
@@ -538,21 +535,22 @@ export const TrafficDownloadTab: React.FC<TrafficDownloadTabProps> = ({
                           </span>
                         </div>
                         <span
-                          className={`px-2 py-0.5 rounded text-[10px] font-bold ${
+                          className={`text-xs font-medium inline-flex items-center gap-1.5 ${
                             peer.status === 'Established'
-                              ? 'bg-emerald-950 text-emerald-400 border border-emerald-800'
-                              : 'bg-amber-950 text-amber-400 border border-amber-800'
+                              ? 'text-[#2E9E6B]'
+                              : 'text-[#D99B26]'
                           }`}
                         >
+                          <span className={`w-1.5 h-1.5 rounded-full ${peer.status === 'Established' ? 'bg-[#2E9E6B]' : 'bg-[#D99B26]'}`}></span>
                           {peer.status}
                         </span>
                       </div>
 
-                      <div className="text-xs space-y-1 font-mono text-slate-300 bg-slate-950/60 p-2.5 rounded-xl border border-slate-800/80">
+                      <div className="text-xs space-y-1 font-mono text-slate-300 bg-[#161922] p-2.5 rounded-xl border border-[#242836]">
                         <div className="flex justify-between">
                           <span className="text-slate-500 font-sans">Route-Policy:</span>
                           <span
-                            className="text-indigo-300 truncate max-w-[160px]"
+                            className="text-[#93B4E6] truncate max-w-[160px]"
                             title={peer.policy_name}
                           >
                             {peer.policy_name || 'N/A'}
@@ -560,7 +558,7 @@ export const TrafficDownloadTab: React.FC<TrafficDownloadTabProps> = ({
                         </div>
                         <div className="flex justify-between">
                           <span className="text-slate-500 font-sans">Prepend Padrão:</span>
-                          <span className="font-bold text-amber-300">
+                          <span className="font-bold text-[#D99B26]">
                             {peer.prepend_count === 0
                               ? '0 (Primário)'
                               : `${peer.prepend_count}x (${peer.prepend_count}P)`}
@@ -573,10 +571,10 @@ export const TrafficDownloadTab: React.FC<TrafficDownloadTabProps> = ({
               </div>
 
               {/* Prefixes Table */}
-              <div className="bg-slate-900/90 border border-slate-800 rounded-2xl shadow-xl overflow-hidden">
-                <div className="p-4 border-b border-slate-800 flex items-center justify-between">
+              <div className="bg-[#1C202C] border border-[#242836] rounded-2xl shadow-sm overflow-hidden">
+                <div className="p-4 border-b border-[#242836] flex items-center justify-between">
                   <div className="flex items-center gap-2">
-                    <RouteIcon className="h-4 w-4 text-indigo-400" />
+                    <RouteIcon className="h-4 w-4 text-[#4A72B2]" />
                     <span className="text-sm font-semibold text-white">
                       Prefixos Anunciados e Comunidades Tagged
                     </span>
@@ -589,7 +587,7 @@ export const TrafficDownloadTab: React.FC<TrafficDownloadTabProps> = ({
                 <div className="overflow-x-auto">
                   <table className="w-full text-left border-collapse text-xs">
                     <thead>
-                      <tr className="border-b border-slate-800 text-slate-400 font-semibold bg-slate-950/40">
+                      <tr className="border-b border-[#242836] text-slate-400 font-semibold bg-[#161922]">
                         <th className="py-3 px-4">Prefixo Anunciado</th>
                         <th className="py-3 px-4">Destino / Upstream</th>
                         <th className="py-3 px-4">Prepend Aplicado</th>
@@ -598,7 +596,7 @@ export const TrafficDownloadTab: React.FC<TrafficDownloadTabProps> = ({
                         <th className="py-3 px-4 text-right">Ações</th>
                       </tr>
                     </thead>
-                    <tbody className="divide-y divide-slate-800/60 font-mono">
+                    <tbody className="divide-y divide-[#242836] font-mono">
                       {prependOverview.prefixes.map((p) => {
                         const matchingGroup = prependOverview.as_groups?.find(
                           (g) =>
@@ -607,9 +605,9 @@ export const TrafficDownloadTab: React.FC<TrafficDownloadTabProps> = ({
                         )
 
                         return (
-                          <tr key={p.id} className="hover:bg-slate-800/30 transition">
+                          <tr key={p.id} className="hover:bg-[#1E2330]/50 transition">
                             <td className="py-3 px-4">
-                              <span className="px-2 py-0.5 rounded font-bold bg-indigo-950 text-indigo-300 border border-indigo-800">
+                              <span className="font-mono font-semibold text-slate-100 text-xs">
                                 {p.prefix}
                               </span>
                             </td>
@@ -621,12 +619,13 @@ export const TrafficDownloadTab: React.FC<TrafficDownloadTabProps> = ({
                             </td>
                             <td className="py-3 px-4">
                               {p.is_blocked ? (
-                                <span className="px-2 py-0.5 rounded font-bold text-rose-300 bg-rose-950/60 border border-rose-800/60 inline-flex items-center gap-1">
-                                  <AlertTriangle className="h-3 w-3" />
+                                <span className="text-xs font-medium text-[#D9534F] inline-flex items-center gap-1.5">
+                                  <span className="w-1.5 h-1.5 rounded-full bg-[#D9534F]"></span>
                                   Bloqueado (Deny)
                                 </span>
                               ) : (
-                                <span className="px-2 py-0.5 rounded font-bold text-amber-300 bg-amber-950/60 border border-amber-800/60">
+                                <span className="text-xs font-medium text-[#D99B26] inline-flex items-center gap-1.5">
+                                  <span className="w-1.5 h-1.5 rounded-full bg-[#D99B26]"></span>
                                   {p.prepend_count === 0
                                     ? 'Nenhum (0P / Primário)'
                                     : `${p.prepend_count}x Prepend (${p.prepend_count}P)`}
@@ -638,18 +637,18 @@ export const TrafficDownloadTab: React.FC<TrafficDownloadTabProps> = ({
                             </td>
                             <td className="py-3 px-4 font-sans">
                               {p.is_blocked ? (
-                                <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded text-[11px] font-semibold bg-rose-950/80 text-rose-400 border border-rose-800">
-                                  <ShieldAlert className="h-3 w-3" />
+                                <span className="inline-flex items-center gap-1.5 text-xs font-medium text-[#D9534F]">
+                                  <span className="w-1.5 h-1.5 rounded-full bg-[#D9534F]"></span>
                                   Anúncio Interrompido
                                 </span>
                               ) : p.prepend_count > 0 ? (
-                                <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded text-[11px] font-semibold bg-amber-950/80 text-amber-400 border border-amber-800">
-                                  <Clock className="h-3 w-3" />
+                                <span className="inline-flex items-center gap-1.5 text-xs font-medium text-[#D99B26]">
+                                  <span className="w-1.5 h-1.5 rounded-full bg-[#D99B26]"></span>
                                   Despriorizado (+{p.prepend_count} saltos AS)
                                 </span>
                               ) : (
-                                <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded text-[11px] font-semibold bg-emerald-950 text-emerald-400 border border-emerald-800">
-                                  <CheckCircle2 className="h-3 w-3" />
+                                <span className="inline-flex items-center gap-1.5 text-xs font-medium text-[#2E9E6B]">
+                                  <span className="w-1.5 h-1.5 rounded-full bg-[#2E9E6B]"></span>
                                   Prioritário (Caminho Mais Curto)
                                 </span>
                               )}
@@ -657,7 +656,7 @@ export const TrafficDownloadTab: React.FC<TrafficDownloadTabProps> = ({
                             <td className="py-3 px-4 font-sans text-right">
                               <button
                                 onClick={() => onOpenPrependModal(p, matchingGroup)}
-                                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-indigo-950 hover:bg-indigo-900 border border-indigo-700/60 text-indigo-300 hover:text-white text-xs font-semibold shadow-xs transition cursor-pointer"
+                                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[#3B5B8C] hover:bg-[#4A72B2] text-white text-xs font-medium shadow-xs transition cursor-pointer"
                               >
                                 <SlidersHorizontal className="h-3.5 w-3.5" />
                                 <span>Ajustar Prepend</span>

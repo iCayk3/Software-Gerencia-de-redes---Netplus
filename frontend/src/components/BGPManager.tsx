@@ -295,27 +295,27 @@ export const BGPManager: React.FC = () => {
   return (
     <div className="space-y-6">
       {/* Top Header Card */}
-      <div className="bg-slate-900/60 border border-slate-800 rounded-xl p-6 shadow-xl flex flex-col md:flex-row items-center justify-between gap-4">
+      <div className="bg-[#1C202C] border border-[#242836] rounded-xl p-6 shadow-md flex flex-col md:flex-row items-center justify-between gap-4">
         <div>
           <div className="flex items-center gap-3">
             <h2 className="text-lg font-semibold text-slate-100 flex items-center gap-2">
-              <Activity className="h-5 w-5 text-cyan-400" />
+              <Activity className="h-5 w-5 text-[#4A72B2]" />
               <span>Gerenciador Universal de BGP</span>
             </h2>
             {bmpStatus?.running ? (
-              <span className="flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-emerald-950/80 text-emerald-400 border border-emerald-800">
-                <span className="h-2 w-2 rounded-full bg-emerald-400 animate-ping"></span>
+              <span className="flex items-center gap-1.5 text-xs font-medium text-[#2E9E6B]">
+                <span className="h-1.5 w-1.5 rounded-full bg-[#2E9E6B] animate-pulse"></span>
                 BMP RFC 7854 Ativo ({bmpStatus.connected_routers} router{bmpStatus.connected_routers !== 1 ? 's' : ''})
               </span>
             ) : (
-              <span className="flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-amber-950/80 text-amber-400 border border-amber-800">
-                <Radio className="h-3 w-3" />
+              <span className="flex items-center gap-1.5 text-xs font-medium text-[#D99B26]">
+                <Radio className="h-3.5 w-3.5 text-[#D99B26]" />
                 BMP Porta 11019
               </span>
             )}
             {rpkiSummary && (
-              <span className="hidden sm:inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-cyan-950/80 text-cyan-400 border border-cyan-800">
-                <ShieldCheck className="h-3 w-3 text-cyan-400" />
+              <span className="hidden sm:inline-flex items-center gap-1.5 text-xs font-medium text-slate-400">
+                <ShieldCheck className="h-3.5 w-3.5 text-slate-500" />
                 RPKI {rpkiSummary.valid_percentage.toFixed(0)}% Válido
               </span>
             )}
@@ -329,9 +329,9 @@ export const BGPManager: React.FC = () => {
           {/* Button to open Huawei/Vendor BMP configuration guide */}
           <button
             onClick={openBMPGuide}
-            className="flex items-center gap-1.5 px-3 py-2 bg-cyan-950/70 hover:bg-cyan-900/80 text-cyan-300 border border-cyan-800/80 rounded-lg text-xs font-medium transition cursor-pointer"
+            className="flex items-center gap-1.5 px-3 py-2 bg-[#25334D] hover:bg-[#2F4163] text-blue-200 border border-[#3B5B8C]/40 rounded-lg text-xs font-medium transition cursor-pointer"
           >
-            <Radio className="h-3.5 w-3.5 text-cyan-400" />
+            <Radio className="h-3.5 w-3.5 text-[#93B4E6]" />
             <span>Ativar BMP no Huawei / Roteadores</span>
           </button>
 
@@ -341,7 +341,7 @@ export const BGPManager: React.FC = () => {
             <select
               value={selectedDeviceId}
               onChange={(e) => handleDeviceChange(e.target.value)}
-              className="px-3 py-2 bg-slate-950/80 border border-slate-700 rounded-lg text-xs text-slate-200 focus:outline-none focus:border-cyan-500 cursor-pointer"
+              className="px-3 py-2 bg-[#161922] border border-[#2D3345] rounded-lg text-xs text-slate-200 focus:outline-none focus:border-[#3B5B8C] cursor-pointer"
             >
               <option value="all">Todos os Equipamentos ({devices.length})</option>
               {devices.map((d) => (
@@ -355,62 +355,62 @@ export const BGPManager: React.FC = () => {
           <button
             onClick={() => loadBGPSessions(selectedDeviceId, true)}
             disabled={loading}
-            className="flex items-center gap-1.5 px-3 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 rounded-lg text-xs font-medium transition-colors cursor-pointer disabled:opacity-50"
+            className="flex items-center gap-1.5 px-3 py-2 bg-[#1E2330] hover:bg-[#252C3D] text-[#E2E5EC] border border-[#2D3345] rounded-lg text-xs font-medium transition-colors cursor-pointer disabled:opacity-50"
           >
-            <RefreshCw className={`h-3.5 w-3.5 ${loading ? 'animate-spin text-cyan-400' : ''}`} />
+            <RefreshCw className={`h-3.5 w-3.5 ${loading ? 'animate-spin text-[#4A72B2]' : ''}`} />
             <span>Atualizar BGP</span>
           </button>
         </div>
       </div>
 
       {error && (
-        <div className="p-4 rounded-xl bg-rose-950/30 border border-rose-800 text-rose-300 text-sm">
+        <div className="p-4 rounded-xl bg-[#1C202C] border border-[#D9534F]/40 text-[#D9534F] text-sm">
           {error}
         </div>
       )}
 
       {/* Metrics Summary */}
       <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
-        <div className="bg-slate-900/40 border border-slate-800 rounded-xl p-4 shadow-sm">
+        <div className="bg-[#1C202C] border border-[#242836] rounded-xl p-4 shadow-xs">
           <span className="text-xs text-slate-400 font-medium">Total de Peers BGP</span>
           <div className="text-2xl font-bold text-slate-100 mt-1">{totalSessions}</div>
         </div>
 
-        <div className="bg-slate-900/40 border border-slate-800 rounded-xl p-4 shadow-sm">
+        <div className="bg-[#1C202C] border border-[#242836] rounded-xl p-4 shadow-xs">
           <span className="text-xs text-slate-400 font-medium">Sessões Estabelecidas</span>
-          <div className="text-2xl font-bold text-emerald-400 mt-1 flex items-center gap-1.5">
+          <div className="text-2xl font-bold text-[#2E9E6B] mt-1 flex items-center gap-1.5">
             <CheckCircle2 className="h-5 w-5" />
             <span>{establishedSessions}</span>
           </div>
         </div>
 
-        <div className="bg-slate-900/40 border border-slate-800 rounded-xl p-4 shadow-sm">
+        <div className="bg-[#1C202C] border border-[#242836] rounded-xl p-4 shadow-xs">
           <span className="text-xs text-slate-400 font-medium">Sessões em Queda / Alerta</span>
-          <div className={`text-2xl font-bold mt-1 flex items-center gap-1.5 ${downSessions > 0 ? 'text-rose-400' : 'text-slate-400'}`}>
+          <div className={`text-2xl font-bold mt-1 flex items-center gap-1.5 ${downSessions > 0 ? 'text-[#D9534F]' : 'text-slate-400'}`}>
             <AlertTriangle className="h-5 w-5" />
             <span>{downSessions}</span>
           </div>
         </div>
 
-        <div className="bg-slate-900/40 border border-slate-800 rounded-xl p-4 shadow-sm">
+        <div className="bg-[#1C202C] border border-[#242836] rounded-xl p-4 shadow-xs">
           <span className="text-xs text-slate-400 font-medium">Telemetria BMP Live</span>
-          <div className="text-2xl font-bold text-emerald-400 mt-1 flex items-center gap-1.5">
-            <Radio className="h-5 w-5 text-emerald-400 animate-pulse" />
+          <div className="text-2xl font-bold text-[#2E9E6B] mt-1 flex items-center gap-1.5">
+            <Radio className="h-5 w-5 text-[#2E9E6B] animate-pulse" />
             <span>{bmpSessionsCount}</span>
             <span className="text-xs text-slate-500 font-normal">/ {totalSessions} peers</span>
           </div>
         </div>
 
-        <div className="bg-slate-900/40 border border-slate-800 rounded-xl p-4 shadow-sm">
+        <div className="bg-[#1C202C] border border-[#242836] rounded-xl p-4 shadow-xs">
           <span className="text-xs text-slate-400 font-medium">Total de Prefixos</span>
-          <div className="text-2xl font-bold text-cyan-400 mt-1">
+          <div className="text-2xl font-bold text-slate-100 mt-1">
             {totalPrefixes.toLocaleString()}
           </div>
         </div>
       </div>
 
       {/* Filter and Search Bar */}
-      <div className="flex flex-col sm:flex-row items-center justify-between gap-3 bg-slate-900/30 p-3 rounded-xl border border-slate-800/80">
+      <div className="flex flex-col sm:flex-row items-center justify-between gap-3 bg-[#1C202C] p-3 rounded-xl border border-[#242836]">
         <div className="relative w-full sm:w-80">
           <Search className="h-4 w-4 text-slate-500 absolute left-3 top-2.5" />
           <input
@@ -418,25 +418,25 @@ export const BGPManager: React.FC = () => {
             placeholder="Buscar por IP, AS, roteador..."
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            className="w-full pl-9 pr-3 py-1.5 bg-slate-950/80 border border-slate-700/80 rounded-lg text-xs text-slate-100 placeholder-slate-500 focus:outline-none focus:border-cyan-500"
+            className="w-full pl-9 pr-3 py-1.5 bg-[#161922] border border-[#2D3345] rounded-lg text-xs text-slate-100 placeholder-slate-500 focus:outline-none focus:border-[#3B5B8C]"
           />
         </div>
 
         {/* Status & Source Filters */}
         <div className="flex flex-wrap items-center gap-2 self-end sm:self-center">
-          <div className="flex items-center gap-1 bg-slate-950/60 p-1 rounded-lg border border-slate-800">
+          <div className="flex items-center gap-1 bg-[#161922] p-1 rounded-lg border border-[#242836]">
             <span className="text-[10px] text-slate-500 px-1 font-semibold uppercase">Origem:</span>
             {[
               { id: 'all', label: 'Todas' },
-              { id: 'bmp', label: '🟢 BMP Live' },
-              { id: 'ssh', label: '🟡 SSH' },
+              { id: 'bmp', label: 'BMP Live' },
+              { id: 'ssh', label: 'SSH' },
             ].map((btn) => (
               <button
                 key={btn.id}
                 onClick={() => setSourceFilter(btn.id as any)}
                 className={`px-2 py-0.5 rounded text-xs font-medium transition cursor-pointer ${
                   sourceFilter === btn.id
-                    ? 'bg-slate-800 text-cyan-300 font-semibold'
+                    ? 'bg-[#25334D] text-[#93B4E6] font-semibold'
                     : 'text-slate-400 hover:text-slate-200'
                 }`}
               >
@@ -445,7 +445,7 @@ export const BGPManager: React.FC = () => {
             ))}
           </div>
 
-          <div className="flex items-center gap-1 bg-slate-950/60 p-1 rounded-lg border border-slate-800">
+          <div className="flex items-center gap-1 bg-[#161922] p-1 rounded-lg border border-[#242836]">
             <span className="text-[10px] text-slate-500 px-1 font-semibold uppercase">Estado:</span>
             {[
               { id: 'all', label: 'Todos' },
@@ -519,10 +519,10 @@ export const BGPManager: React.FC = () => {
                   const isBMP = session.telemetry_source === 'bmp'
 
                   return (
-                    <tr key={idx} className="hover:bg-slate-800/30 transition-colors">
+                    <tr key={idx} className="hover:bg-[#1E2330]/50 transition-colors">
                       <td className="py-2.5 px-4 font-medium text-slate-200 whitespace-nowrap">
                         <div className="flex items-center gap-1.5">
-                          <Server className="h-3.5 w-3.5 text-cyan-400 shrink-0" />
+                          <Server className="h-3.5 w-3.5 text-[#4A72B2] shrink-0" />
                           <span>{session.device_name}</span>
                         </div>
                       </td>
@@ -533,7 +533,7 @@ export const BGPManager: React.FC = () => {
 
                       <td className="py-2.5 px-4 font-mono whitespace-nowrap">
                         <div className="flex items-center gap-1.5">
-                          <span className="font-mono text-xs font-bold text-cyan-300 bg-cyan-950/80 px-2 py-0.5 rounded border border-cyan-800/80">
+                          <span className="font-mono text-xs font-semibold text-slate-200">
                             AS{session.remote_as}
                           </span>
                         </div>
@@ -564,13 +564,13 @@ export const BGPManager: React.FC = () => {
                                   type="button"
                                   onClick={() => handleOpenEditSession(session)}
                                   title={`Editar descrição exclusiva desta sessão (${session.peer_ip})`}
-                                  className="p-1 rounded-md text-slate-500 hover:text-cyan-300 hover:bg-slate-800 transition-colors cursor-pointer shrink-0 opacity-70 group-hover/holder:opacity-100"
+                                  className="p-1 rounded-md text-slate-500 hover:text-white hover:bg-[#1E2330] transition-colors cursor-pointer shrink-0 opacity-70 group-hover/holder:opacity-100"
                                 >
                                   <Edit3 className="h-3 w-3" />
                                 </button>
                               </div>
                               {hasCustomDesc && hasHolder && holder !== primaryText && (
-                                <div className="text-[10px] text-cyan-400/90 font-medium truncate max-w-[200px]" title={`Detentor do AS${session.remote_as}: ${holder}`}>
+                                <div className="text-[10px] text-[#93B4E6] font-medium truncate max-w-[200px]" title={`Detentor do AS${session.remote_as}: ${holder}`}>
                                   {holder}
                                 </div>
                               )}
@@ -584,15 +584,15 @@ export const BGPManager: React.FC = () => {
                         {isBMP ? (
                           <span
                             title="Telemetria em tempo real via stream BMP (RFC 7854) - Zero impacto de CPU no roteador"
-                            className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-emerald-950/90 text-emerald-400 border border-emerald-800"
+                            className="inline-flex items-center gap-1.5 text-xs font-medium text-[#2E9E6B]"
                           >
-                            <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 animate-ping"></span>
+                            <span className="h-1.5 w-1.5 rounded-full bg-[#2E9E6B] animate-pulse"></span>
                             BMP Live
                           </span>
                         ) : (
                           <span
                             title="Leitura periódica por comandos CLI via SSH"
-                            className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium bg-slate-800 text-slate-400 border border-slate-700"
+                            className="text-xs font-medium text-slate-400"
                           >
                             SSH Polling
                           </span>
@@ -601,12 +601,12 @@ export const BGPManager: React.FC = () => {
 
                       <td className="py-2.5 px-4 whitespace-nowrap">
                         {isEstablished ? (
-                          <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
-                            <CheckCircle2 className="h-3 w-3" /> Established
+                          <span className="inline-flex items-center gap-1.5 text-xs font-medium text-[#2E9E6B]">
+                            <span className="w-1.5 h-1.5 rounded-full bg-[#2E9E6B]"></span> Established
                           </span>
                         ) : (
-                          <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-rose-500/10 text-rose-400 border border-rose-500/20">
-                            <AlertTriangle className="h-3 w-3" /> {session.state}
+                          <span className="inline-flex items-center gap-1.5 text-xs font-medium text-[#D9534F]">
+                            <span className="w-1.5 h-1.5 rounded-full bg-[#D9534F]"></span> {session.state}
                           </span>
                         )}
                       </td>

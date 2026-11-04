@@ -143,22 +143,22 @@ export const TopNav: React.FC<TopNavProps> = ({
   const currentSectionConfig = sectionSubTabs[activeSection] || sectionSubTabs.bgp
 
   return (
-    <header className="border-b border-slate-800 bg-slate-900/90 backdrop-blur sticky top-0 z-20">
+    <header className="border-b border-[#242836] bg-[#13151D]/95 backdrop-blur sticky top-0 z-20">
       <div className="px-4 sm:px-6 lg:px-8">
         {/* Top Meta Bar */}
-        <div className="flex items-center justify-between h-14 border-b border-slate-800/60 gap-4">
+        <div className="flex items-center justify-between h-14 border-b border-[#242836]/60 gap-4">
           <div className="flex items-center gap-3">
             {/* Mobile Sidebar Hamburger Toggle */}
             <button
               onClick={onOpenMobileSidebar}
-              className="md:hidden p-2 -ml-2 text-slate-400 hover:text-white rounded-lg hover:bg-slate-800"
+              className="md:hidden p-2 -ml-2 text-slate-400 hover:text-white rounded-lg hover:bg-[#1C202C]"
               title="Abrir Menu"
             >
               <Menu className="h-5 w-5" />
             </button>
 
             <div>
-              <h1 className="text-sm sm:text-base font-bold text-white flex items-center gap-2">
+              <h1 className="text-sm sm:text-base font-bold text-slate-100 flex items-center gap-2">
                 <span>{currentSectionConfig.title}</span>
               </h1>
             </div>
@@ -169,12 +169,12 @@ export const TopNav: React.FC<TopNavProps> = ({
             {/* Quick Search Ctrl + K */}
             <button
               onClick={onOpenSearch}
-              className="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-slate-800/80 hover:bg-slate-700/80 text-slate-300 hover:text-white border border-slate-700/70 text-xs transition shadow-sm cursor-pointer"
+              className="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-[#1C202C] hover:bg-[#252A3A] text-slate-300 hover:text-white border border-[#2D3345] text-xs transition shadow-xs cursor-pointer"
               title="Buscar equipamento, AS, link ou ferramenta (Ctrl + K)"
             >
-              <Search className="h-3.5 w-3.5 text-cyan-400" />
+              <Search className="h-3.5 w-3.5 text-[#4A72B2]" />
               <span className="hidden md:inline text-slate-400 text-[11px]">Buscar...</span>
-              <kbd className="hidden sm:inline-flex items-center gap-0.5 px-1.5 py-0.2 text-[10px] font-mono text-slate-400 bg-slate-900 rounded border border-slate-700">
+              <kbd className="hidden sm:inline-flex items-center gap-0.5 px-1.5 py-0.2 text-[10px] font-mono text-slate-400 bg-[#13151D] rounded border border-[#2D3345]">
                 Ctrl K
               </kbd>
             </button>
@@ -183,7 +183,7 @@ export const TopNav: React.FC<TopNavProps> = ({
             {activeAlertsCount > 0 && (
               <button
                 onClick={onOpenAlerts}
-                className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-rose-500/20 border border-rose-500/40 text-rose-300 text-xs font-semibold hover:bg-rose-500/30 transition cursor-pointer shadow-lg shadow-rose-500/10 animate-pulse"
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-rose-500/15 border border-rose-500/30 text-rose-300 text-xs font-semibold hover:bg-rose-500/25 transition cursor-pointer shadow-sm animate-pulse"
               >
                 <Bell className="h-3.5 w-3.5 text-rose-400" />
                 <span>{activeAlertsCount} Alerta{activeAlertsCount > 1 ? 's' : ''}</span>
@@ -193,7 +193,7 @@ export const TopNav: React.FC<TopNavProps> = ({
         </div>
 
         {/* Dynamic Sub-Tabs Navigation Strip */}
-        <div className="flex items-center space-x-1.5 sm:space-x-2 py-2.5 overflow-x-auto no-scrollbar">
+        <div className="flex items-center space-x-1 sm:space-x-1.5 py-2 overflow-x-auto no-scrollbar">
           {currentSectionConfig.tabs.map((tab) => {
             const Icon = tab.icon
             const isActive = activeSubTab === tab.id
@@ -205,11 +205,11 @@ export const TopNav: React.FC<TopNavProps> = ({
                 onClick={() => onSelectSubTab(tab.id)}
                 className={`flex items-center gap-2 px-3.5 py-1.5 rounded-xl text-xs font-semibold transition-all duration-150 whitespace-nowrap cursor-pointer relative ${
                   isActive
-                    ? 'bg-gradient-to-r from-cyan-600 to-blue-600 text-white shadow-md shadow-cyan-600/25 border border-cyan-400/30'
-                    : 'text-slate-400 hover:text-slate-100 hover:bg-slate-800/80 border border-transparent'
+                    ? 'bg-[#25334D] text-[#E2E5EC] border border-[#3B5B8C]/40 shadow-xs'
+                    : 'text-slate-400 hover:text-slate-200 hover:bg-[#1C202C] border border-transparent'
                 }`}
               >
-                <Icon className={`h-3.5 w-3.5 ${isActive ? 'text-white' : 'text-slate-400'}`} />
+                <Icon className={`h-3.5 w-3.5 ${isActive ? 'text-[#93B4E6]' : 'text-slate-400'}`} />
                 <span>{tab.label}</span>
                 {hasBadge && (
                   <span className="px-1.5 py-0.2 text-[10px] font-bold rounded-full bg-rose-500 text-white animate-pulse">

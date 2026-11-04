@@ -110,7 +110,7 @@ export const TrafficUploadTab: React.FC<TrafficUploadTabProps> = ({
   return (
     <div className="space-y-6">
       {/* Controls Bar */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-slate-900/80 border border-slate-800 rounded-2xl p-4 shadow-sm">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-[#1C202C] border border-[#242836] rounded-2xl p-4 shadow-sm">
         <div className="flex flex-wrap items-center gap-3">
           {/* Device Selector */}
           <div className="flex items-center gap-2">
@@ -118,7 +118,7 @@ export const TrafficUploadTab: React.FC<TrafficUploadTabProps> = ({
             <select
               value={selectedDeviceId}
               onChange={(e) => onDeviceChange(e.target.value)}
-              className="bg-slate-800 border border-slate-700 text-slate-200 text-xs rounded-xl px-3 py-2 font-medium focus:ring-2 focus:ring-cyan-500 focus:outline-none cursor-pointer"
+              className="bg-[#161922] border border-[#2D3345] text-slate-200 text-xs rounded-xl px-3 py-2 font-medium focus:ring-2 focus:ring-[#3B5B8C] focus:outline-none cursor-pointer"
             >
               <option value="all">🌐 Todos os Roteadores BGP</option>
               {devices
@@ -132,13 +132,13 @@ export const TrafficUploadTab: React.FC<TrafficUploadTabProps> = ({
           </div>
 
           {/* View Mode Toggle: Cards vs Table */}
-          <div className="flex bg-slate-800/80 p-0.5 rounded-xl border border-slate-700/80 text-xs">
+          <div className="flex bg-[#161922] p-0.5 rounded-xl border border-[#242836] text-xs">
             <button
               onClick={() => setUploadViewMode('cards')}
               title="Visualização em Seções/Quadrados por AS"
               className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg font-medium transition cursor-pointer ${
                 uploadViewMode === 'cards'
-                  ? 'bg-cyan-600 text-white shadow-sm'
+                  ? 'bg-[#3B5B8C] text-white shadow-xs'
                   : 'text-slate-400 hover:text-white'
               }`}
             >
@@ -150,7 +150,7 @@ export const TrafficUploadTab: React.FC<TrafficUploadTabProps> = ({
               title="Visualização em Tabela Geral"
               className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg font-medium transition cursor-pointer ${
                 uploadViewMode === 'table'
-                  ? 'bg-cyan-600 text-white shadow-sm'
+                  ? 'bg-[#3B5B8C] text-white shadow-xs'
                   : 'text-slate-400 hover:text-white'
               }`}
             >
@@ -167,20 +167,20 @@ export const TrafficUploadTab: React.FC<TrafficUploadTabProps> = ({
               placeholder="Filtrar por AS, Operadora, Prefixo ou Gateway..."
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              className="bg-slate-800/80 border border-slate-700 text-slate-200 text-xs rounded-xl pl-8 pr-3 py-2 focus:ring-2 focus:ring-cyan-500 focus:outline-none w-56 sm:w-72"
+              className="bg-[#161922] border border-[#2D3345] text-slate-200 text-xs rounded-xl pl-8 pr-3 py-2 focus:ring-2 focus:ring-[#3B5B8C] focus:outline-none w-56 sm:w-72"
             />
           </div>
         </div>
 
         <div className="flex items-center gap-3">
           {/* Madrugada auto-sync indicator */}
-          <div className="hidden lg:flex items-center gap-2 px-3 py-1.5 rounded-xl bg-slate-800/60 border border-slate-700/60 text-[11px] text-slate-400">
-            <Moon className="h-3.5 w-3.5 text-indigo-400" />
+          <div className="hidden lg:flex items-center gap-2 px-3 py-1.5 rounded-xl bg-[#161922] border border-[#242836] text-[11px] text-slate-400">
+            <Moon className="h-3.5 w-3.5 text-[#93B4E6]" />
             <span>
               Auto-Sync: <strong>Diário às 03:30 (Madrugada)</strong>
             </span>
             {syncStatus?.last_sync_time && (
-              <span className="text-slate-500 border-l border-slate-700 pl-2">
+              <span className="text-slate-500 border-l border-[#242836] pl-2">
                 Última:{' '}
                 {new Date(syncStatus.last_sync_time).toLocaleTimeString('pt-BR', {
                   hour: '2-digit',
@@ -194,14 +194,14 @@ export const TrafficUploadTab: React.FC<TrafficUploadTabProps> = ({
             onClick={onRefresh}
             disabled={loading}
             title="Forçar atualização via SSH nos roteadores"
-            className="p-2 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-xl border border-slate-700 transition cursor-pointer disabled:opacity-50"
+            className="p-2 bg-[#1E2330] hover:bg-[#252C3D] text-slate-300 rounded-xl border border-[#2D3345] transition cursor-pointer disabled:opacity-50"
           >
-            <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin text-cyan-400' : ''}`} />
+            <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin text-[#4A72B2]' : ''}`} />
           </button>
 
           <button
             onClick={onOpenAddRouteGeneric}
-            className="flex items-center gap-2 px-3.5 py-2 bg-cyan-600 hover:bg-cyan-500 text-white text-xs font-semibold rounded-xl shadow-lg shadow-cyan-600/20 transition cursor-pointer"
+            className="flex items-center gap-2 px-3.5 py-2 bg-[#3B5B8C] hover:bg-[#4A72B2] text-white text-xs font-medium rounded-xl shadow-xs transition cursor-pointer"
           >
             <Plus className="h-4 w-4" />
             <span>Nova Rota Avulsa</span>
@@ -240,24 +240,24 @@ export const TrafficUploadTab: React.FC<TrafficUploadTabProps> = ({
                 return (
                   <div
                     key={sec.id}
-                    className="flex flex-col bg-slate-900/90 border border-slate-800/90 hover:border-slate-700 rounded-2xl shadow-xl overflow-hidden transition duration-200"
+                    className="flex flex-col bg-[#1C202C] border border-[#242836] hover:border-[#2D3345] rounded-2xl shadow-md overflow-hidden transition duration-200"
                   >
                     {/* AS Card Header */}
-                    <div className={`border-b border-slate-800/80 bg-slate-950/40 ${density === 'compact' ? 'p-3.5' : 'p-5'}`}>
+                    <div className={`border-b border-[#242836] bg-[#181C26] ${density === 'compact' ? 'p-3.5' : 'p-5'}`}>
                       <div className="flex items-start justify-between gap-3">
                         {/* Logo / Image Box */}
                         <div className="flex items-center gap-3.5">
                           <div
                             onClick={() => isSuperAdmin && onOpenCustomizeAS(sec)}
                             title={isSuperAdmin ? 'Clique para trocar imagem ou editar AS' : undefined}
-                            className={`rounded-2xl bg-slate-800/90 border border-slate-700 flex items-center justify-center overflow-hidden shrink-0 shadow-md ${
-                              isSuperAdmin ? 'hover:border-cyan-500/60 transition cursor-pointer group relative' : ''
+                            className={`rounded-2xl bg-[#161922] border border-[#242836] flex items-center justify-center overflow-hidden shrink-0 shadow-sm ${
+                              isSuperAdmin ? 'hover:border-[#3B5B8C] transition cursor-pointer group relative' : ''
                             } ${density === 'compact' ? 'h-11 w-11' : 'h-14 w-14'}`}
                           >
                             {renderASLogo(sec.metadata, sec.peer_name)}
                             {isSuperAdmin && (
-                              <div className="absolute inset-0 bg-cyan-950/70 backdrop-blur-xs opacity-0 group-hover:opacity-100 flex items-center justify-center transition">
-                                <ImageIcon className="h-4 w-4 text-cyan-300" />
+                              <div className="absolute inset-0 bg-[#161922]/80 backdrop-blur-xs opacity-0 group-hover:opacity-100 flex items-center justify-center transition">
+                                <ImageIcon className="h-4 w-4 text-[#93B4E6]" />
                               </div>
                             )}
                           </div>
@@ -280,7 +280,7 @@ export const TrafficUploadTab: React.FC<TrafficUploadTabProps> = ({
                           <button
                             onClick={() => onOpenCustomizeAS(sec)}
                             title="Personalizar Nome e Imagem do AS (Super Admin)"
-                            className="p-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-white border border-slate-700/80 transition cursor-pointer shrink-0"
+                            className="p-2 rounded-xl bg-[#1E2330] hover:bg-[#252C3D] text-slate-400 hover:text-white border border-[#2D3345] transition cursor-pointer shrink-0"
                           >
                             <Edit3 className="h-3.5 w-3.5" />
                           </button>
@@ -288,16 +288,16 @@ export const TrafficUploadTab: React.FC<TrafficUploadTabProps> = ({
                       </div>
 
                       {/* BGP Session Status Bar */}
-                      <div className="mt-4 pt-3 border-t border-slate-800/60 flex items-center justify-between text-[11px]">
+                      <div className="mt-4 pt-3 border-t border-[#242836] flex items-center justify-between text-[11px]">
                         <div className="flex items-center gap-1.5">
                           <span
                             className={`h-2 w-2 rounded-full ${
-                              isEstablished ? 'bg-emerald-400 animate-pulse' : 'bg-rose-500'
+                              isEstablished ? 'bg-[#2E9E6B] animate-pulse' : 'bg-[#D9534F]'
                             }`}
                           />
                           <span
                             className={`font-semibold ${
-                              isEstablished ? 'text-emerald-400' : 'text-rose-400'
+                              isEstablished ? 'text-[#2E9E6B]' : 'text-[#D9534F]'
                             }`}
                           >
                             {sec.bgp_state}
@@ -307,19 +307,19 @@ export const TrafficUploadTab: React.FC<TrafficUploadTabProps> = ({
                           )}
                         </div>
 
-                        <div className="flex items-center gap-1 text-slate-400 font-mono">
+                        <div className="flex items-center gap-1.5 text-slate-400 font-mono">
                           <span className="text-slate-500 font-sans">Next-Hop:</span>
-                          <strong className="text-emerald-400">{sec.peer_ip}</strong>
+                          <strong className="text-slate-200">{sec.peer_ip}</strong>
                         </div>
                       </div>
 
                       {/* Local-Preference (Upload TE) & Action */}
-                      <div className="mt-2.5 text-xs flex items-center justify-between bg-slate-900/90 px-3 py-1.5 rounded-xl border border-slate-800/90 shadow-inner">
+                      <div className="mt-2.5 text-xs flex items-center justify-between bg-[#161922] px-3 py-1.5 rounded-xl border border-[#242836] shadow-inner">
                         <div className="flex items-center gap-1.5 font-mono">
                           <span className="text-slate-400 font-sans text-[11px] font-medium">
                             Local-Pref:
                           </span>
-                          <span className="font-bold text-amber-400 bg-amber-950/70 px-2 py-0.5 rounded-lg border border-amber-700/60 text-xs">
+                          <span className="font-mono font-bold text-[#D99B26] text-xs">
                             {sec.local_pref ?? 100}
                           </span>
                           {sec.import_policy && (
@@ -334,20 +334,20 @@ export const TrafficUploadTab: React.FC<TrafficUploadTabProps> = ({
                         <button
                           onClick={() => onOpenLocalPref(sec)}
                           title="Ajustar Local-Preference no equipamento"
-                          className="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-amber-500/10 hover:bg-amber-500/20 text-amber-300 border border-amber-500/30 text-[11px] font-semibold transition cursor-pointer hover:scale-[1.02] active:scale-[0.98]"
+                          className="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-[#25334D] hover:bg-[#2F4163] text-amber-200 border border-[#3B5B8C]/40 text-[11px] font-semibold transition cursor-pointer"
                         >
-                          <SlidersHorizontal className="h-3 w-3 text-amber-400" />
+                          <SlidersHorizontal className="h-3 w-3 text-[#D99B26]" />
                           <span>Ajustar</span>
                         </button>
                       </div>
                     </div>
 
                     {/* AS Card Body: Rotas / Blocos de Saída */}
-                    <div className="p-4 flex-1 flex flex-col justify-between bg-slate-900/40">
+                    <div className="p-4 flex-1 flex flex-col justify-between bg-[#1C202C]">
                       <div>
                         <div className="flex items-center justify-between">
                           <div className="flex items-center gap-2">
-                            <RouteIcon className="h-3.5 w-3.5 text-cyan-400" />
+                            <RouteIcon className="h-3.5 w-3.5 text-[#4A72B2]" />
                             <span className="text-xs font-semibold text-slate-300">
                               Blocos de Saída Direcionados ({sec.static_routes.length})
                             </span>
@@ -358,7 +358,7 @@ export const TrafficUploadTab: React.FC<TrafficUploadTabProps> = ({
                           <button
                             type="button"
                             onClick={() => onToggleUploadGroup(sec.id)}
-                            className="text-[11px] text-cyan-400 hover:text-cyan-300 font-medium flex items-center gap-1 cursor-pointer transition py-0.5 px-1.5 rounded hover:bg-cyan-950/40"
+                            className="text-[11px] text-[#93B4E6] hover:text-white font-medium flex items-center gap-1 cursor-pointer transition py-0.5 px-1.5 rounded hover:bg-[#1E2330]"
                           >
                             <span>
                               {expandedUploadGroups[sec.id] ? 'Ocultar Blocos' : 'Ver Blocos'}
@@ -374,7 +374,7 @@ export const TrafficUploadTab: React.FC<TrafficUploadTabProps> = ({
                         {expandedUploadGroups[sec.id] && (
                           <div className="mt-3 space-y-3 animate-in fade-in duration-150">
                             {sec.static_routes.length === 0 ? (
-                              <div className="p-4 rounded-xl border border-dashed border-slate-800 bg-slate-950/30 text-center text-slate-400 text-[11px] space-y-1">
+                              <div className="p-4 rounded-xl border border-dashed border-[#242836] bg-[#161922] text-center text-slate-400 text-[11px] space-y-1">
                                 <p className="text-slate-300 font-medium">
                                   Nenhum bloco estático direcionado
                                 </p>
@@ -391,21 +391,15 @@ export const TrafficUploadTab: React.FC<TrafficUploadTabProps> = ({
                                   return (
                                     <div
                                       key={route.id}
-                                      className="flex items-center justify-between p-2.5 rounded-xl bg-slate-950/60 border border-slate-800/80 hover:border-slate-700 text-xs transition"
+                                      className="flex items-center justify-between p-2.5 rounded-xl bg-[#161922] border border-[#242836] hover:border-[#2D3345] text-xs transition"
                                     >
                                       <div className="flex flex-col">
-                                        <div className="flex items-center gap-1.5 font-mono">
-                                          <span
-                                            className={`px-2 py-0.5 rounded font-bold text-[11px] ${
-                                              isDefault
-                                                ? 'bg-amber-950 text-amber-300 border border-amber-800'
-                                                : 'bg-cyan-950 text-cyan-300 border border-cyan-800'
-                                            }`}
-                                          >
+                                        <div className="flex items-center gap-2 font-mono">
+                                          <span className="font-mono font-semibold text-xs text-slate-100">
                                             {route.destination}
                                           </span>
                                           {isDefault && (
-                                            <span className="text-[10px] font-sans font-bold text-amber-400">
+                                            <span className="text-[10px] font-sans font-semibold text-[#D99B26]">
                                               Default
                                             </span>
                                           )}
