@@ -72,11 +72,6 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({
         ...(newPassword ? { password: newPassword } : {}),
       })
 
-      // Atualiza o objeto no sessionStorage/localStorage se aplicável
-      if (user) {
-        user.name = name.trim() || user.name
-      }
-
       setFeedback({ type: 'success', text: 'Perfil e credenciais atualizados com sucesso!' })
       setNewPassword('')
       setConfirmPassword('')
@@ -111,7 +106,7 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({
           </div>
           <button
             onClick={onClose}
-            className="p-1.5 text-slate-400 hover:text-white rounded-lg hover:bg-[#1C202C] transition cursor-pointer"
+            className="p-1.5 text-slate-400 hover:text-white rounded-lg hover:bg-[#1C202C] transition cursor-pointer focus:outline-none focus:ring-0"
             title="Fechar"
           >
             <X className="h-5 w-5" />
@@ -123,7 +118,7 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({
           <button
             type="button"
             onClick={() => setActiveTab('appearance')}
-            className={`flex items-center gap-2 pb-3 text-xs font-semibold border-b-2 transition cursor-pointer ${
+            className={`flex items-center gap-2 pb-3 text-xs font-semibold border-b-2 transition cursor-pointer focus:outline-none focus:ring-0 select-none ${
               activeTab === 'appearance'
                 ? 'border-[#4A72B2] text-[#93B4E6]'
                 : 'border-transparent text-slate-400 hover:text-slate-200'
@@ -135,7 +130,7 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({
           <button
             type="button"
             onClick={() => setActiveTab('profile')}
-            className={`flex items-center gap-2 pb-3 text-xs font-semibold border-b-2 transition cursor-pointer ${
+            className={`flex items-center gap-2 pb-3 text-xs font-semibold border-b-2 transition cursor-pointer focus:outline-none focus:ring-0 select-none ${
               activeTab === 'profile'
                 ? 'border-[#4A72B2] text-[#93B4E6]'
                 : 'border-transparent text-slate-400 hover:text-slate-200'
@@ -185,7 +180,7 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({
                 <button
                   type="button"
                   onClick={() => onNavStyleChange('dock')}
-                  className={`flex flex-col items-start p-3.5 rounded-xl border text-left transition-all cursor-pointer ${
+                  className={`flex flex-col items-start p-3.5 rounded-xl border text-left transition-all cursor-pointer focus:outline-none focus:ring-0 select-none ${
                     navStyle === 'dock'
                       ? 'bg-[#25334D] border-[#3B5B8C] text-white ring-1 ring-[#4A72B2]/60 shadow-lg'
                       : 'bg-[#1C202C] border-[#242836] text-slate-300 hover:bg-[#252C3D] hover:border-slate-700'
@@ -195,9 +190,12 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({
                     <span className="p-2 rounded-lg bg-[#161922] text-[#93B4E6]">
                       <Sliders className="h-4 w-4" />
                     </span>
-                    {navStyle === 'dock' && (
-                      <span className="w-2 h-2 rounded-full bg-[#4A72B2]" />
-                    )}
+                    <span className="flex items-center gap-1.5">
+                      <span className="text-[10px] font-semibold text-[#93B4E6]">Padrão</span>
+                      {navStyle === 'dock' && (
+                        <span className="w-2 h-2 rounded-full bg-[#4A72B2]" />
+                      )}
+                    </span>
                   </div>
                   <span className="text-xs font-bold block">Menu Dock (Apple)</span>
                   <span className="text-[11px] text-slate-400 mt-1 leading-snug">
@@ -209,7 +207,7 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({
                 <button
                   type="button"
                   onClick={() => onNavStyleChange('sidebar')}
-                  className={`flex flex-col items-start p-3.5 rounded-xl border text-left transition-all cursor-pointer ${
+                  className={`flex flex-col items-start p-3.5 rounded-xl border text-left transition-all cursor-pointer focus:outline-none focus:ring-0 select-none ${
                     navStyle === 'sidebar'
                       ? 'bg-[#25334D] border-[#3B5B8C] text-white ring-1 ring-[#4A72B2]/60 shadow-lg'
                       : 'bg-[#1C202C] border-[#242836] text-slate-300 hover:bg-[#252C3D] hover:border-slate-700'
@@ -233,7 +231,7 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({
                 <button
                   type="button"
                   onClick={() => onNavStyleChange('both')}
-                  className={`flex flex-col items-start p-3.5 rounded-xl border text-left transition-all cursor-pointer ${
+                  className={`flex flex-col items-start p-3.5 rounded-xl border text-left transition-all cursor-pointer focus:outline-none focus:ring-0 select-none ${
                     navStyle === 'both'
                       ? 'bg-[#25334D] border-[#3B5B8C] text-white ring-1 ring-[#4A72B2]/60 shadow-lg'
                       : 'bg-[#1C202C] border-[#242836] text-slate-300 hover:bg-[#252C3D] hover:border-slate-700'
@@ -266,7 +264,7 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({
               <button
                 type="button"
                 onClick={onToggleDensity}
-                className="px-3 py-1.5 rounded-xl bg-[#1C202C] hover:bg-[#252C3D] border border-[#242836] text-xs text-slate-200 transition cursor-pointer"
+                className="px-3 py-1.5 rounded-xl bg-[#1C202C] hover:bg-[#252C3D] border border-[#242836] text-xs text-slate-200 transition cursor-pointer focus:outline-none focus:ring-0"
               >
                 Alternar para {density === 'comfortable' ? 'Compacto' : 'Confortável'}
               </button>
@@ -321,7 +319,7 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({
                   <button
                     type="button"
                     onClick={() => setShowPassword(!showPassword)}
-                    className="absolute right-3 top-7 text-slate-400 hover:text-slate-200 cursor-pointer"
+                    className="absolute right-3 top-7 text-slate-400 hover:text-slate-200 cursor-pointer focus:outline-none"
                   >
                     {showPassword ? <EyeOff className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}
                   </button>
@@ -344,14 +342,14 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({
               <button
                 type="button"
                 onClick={onClose}
-                className="px-4 py-2 rounded-xl bg-[#1C202C] hover:bg-[#252C3D] text-slate-300 text-xs transition cursor-pointer"
+                className="px-4 py-2 rounded-xl bg-[#1C202C] hover:bg-[#252C3D] text-slate-300 text-xs transition cursor-pointer focus:outline-none focus:ring-0"
               >
                 Cancelar
               </button>
               <button
                 type="submit"
                 disabled={saving}
-                className="px-5 py-2 rounded-xl bg-[#25334D] hover:bg-[#2E3E5E] border border-[#3B5B8C] text-[#93B4E6] font-medium text-xs transition cursor-pointer shadow-md"
+                className="px-5 py-2 rounded-xl bg-[#25334D] hover:bg-[#2E3E5E] border border-[#3B5B8C] text-[#93B4E6] font-medium text-xs transition cursor-pointer shadow-md focus:outline-none focus:ring-0"
               >
                 {saving ? 'Salvando...' : 'Salvar Alterações'}
               </button>
@@ -365,7 +363,7 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({
             <button
               type="button"
               onClick={onClose}
-              className="px-5 py-2 rounded-xl bg-[#25334D] hover:bg-[#2E3E5E] border border-[#3B5B8C] text-[#93B4E6] font-medium text-xs transition cursor-pointer shadow-md"
+              className="px-5 py-2 rounded-xl bg-[#25334D] hover:bg-[#2E3E5E] border border-[#3B5B8C] text-[#93B4E6] font-medium text-xs transition cursor-pointer shadow-md focus:outline-none focus:ring-0"
             >
               Concluído
             </button>

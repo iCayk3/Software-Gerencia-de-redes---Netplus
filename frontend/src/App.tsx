@@ -53,9 +53,13 @@ function AppContent() {
   const [isCommandPaletteOpen, setIsCommandPaletteOpen] = useState(false)
   const [isProfileModalOpen, setIsProfileModalOpen] = useState(false)
 
-  // Estilo de Navegação: 'dock' | 'sidebar' | 'both'
+  // Estilo de Navegação: 'dock' (Padrão Oficial NetPulse) | 'sidebar' | 'both'
   const [navStyle, setNavStyle] = useState<NavStyleType>(() => {
-    return (localStorage.getItem('netpulse_nav_style') as NavStyleType) || 'both'
+    const stored = localStorage.getItem('netpulse_nav_style')
+    if (stored === 'sidebar' || stored === 'both') {
+      return stored as NavStyleType
+    }
+    return 'dock'
   })
 
   const handleNavStyleChange = (style: NavStyleType) => {
