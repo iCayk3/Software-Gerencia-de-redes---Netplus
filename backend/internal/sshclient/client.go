@@ -2,7 +2,6 @@ package sshclient
 
 import (
 	"bytes"
-	"crypto/sha256"
 	"fmt"
 	"io"
 	"net"
@@ -10,52 +9,20 @@ import (
 	"sync"
 	"time"
 
+	"network-software/internal/crypto"
+
 	"golang.org/x/crypto/ssh"
 )
 
-// pooledConnection wraps an active SSH client connection with idle tracking and single-channel mutex.
-type pooledConnection struct {
-	client   *ssh.Client
-	banner   string
-	lastUsed time.Time
-	mu       sync.Mutex // Ensures serial channel allocation on the same network device connection
-}
-
-var (
-	poolMu   sync.Mutex
-	connPool = make(map[string]*pooledConnection)
-)
-
-func init() {
-	// Background reaper to cleanly close connections that have been idle for > 40 seconds.
-	// This ensures router VTY lines are not kept open when NetPulse is idle.
-	go func() {
-		for {
-			time.Sleep(10 * time.Second)
-			poolMu.Lock()
-			now := time.Now()
-			for key, pc := range connPool {
-				if now.Sub(pc.lastUsed) > 40*time.Second {
-					_ = pc.client.Close()
-					delete(connPool, key)
-				}
-			}
-			poolMu.Unlock()
-		}
-	}()
-}
-
-// CloseAllPools closes all currently pooled SSH connections across all devices.
+// CloseAllPools is maintained for backwards compatibility.
+// Because we use clean, dedicated sessions that release router VTY lines immediately,
+// this function acts as a safe no-op.
 func CloseAllPools() {
-	poolMu.Lock()
-	defer poolMu.Unlock()
-	for key, pc := range connPool {
-		_ = pc.client.Close()
-		delete(connPool, key)
-	}
+	// No-op: connections are cleanly terminated per operation, preventing router VTY exhaustion.
 }
 
-// SSHClient wraps connection to a network router or switch with connection reuse.
+// SSHClient manages direct, robust SSH connections to network routers (Huawei, MikroTik, Datacom).
+// It avoids persistent connection pooling deadlocks and releases router VTY lines immediately after execution.
 type SSHClient struct {
 	Host     string
 	Port     int
@@ -69,25 +36,38 @@ func NewSSHClient(host string, port int, username, password string) *SSHClient {
 	if port <= 0 {
 		port = 22
 	}
+	// Defensive check: if password is still ciphertext (e.g. from an edge load), decrypt it
+	if strings.HasPrefix(password, crypto.PrefixV1) {
+		if plain, err := crypto.Decrypt(password, crypto.GetEncryptionKey()); err == nil {
+			password = plain
+		}
+	}
 	return &SSHClient{
 		Host:     host,
 		Port:     port,
 		Username: username,
 		Password: password,
-		Timeout:  10 * time.Second,
+		Timeout:  7 * time.Second,
 	}
 }
 
-func (c *SSHClient) poolKey() string {
-	pwdHash := sha256.Sum256([]byte(c.Password))
-	return fmt.Sprintf("%s:%d:%s:%x", c.Host, c.Port, c.Username, pwdHash[:8])
-}
-
+// getSSHConfig constructs a resilient ClientConfig supporting both password and keyboard-interactive
+// authentication methods, as well as a wide array of legacy and modern ciphers/KEX/MACs used by network gear.
 func (c *SSHClient) getSSHConfig() *ssh.ClientConfig {
+	// Support keyboard-interactive (standard on Huawei AAA / RADIUS / TACACS+ / MikroTik interactive mode)
+	keyboardInteractiveAuth := ssh.KeyboardInteractive(func(user, instruction string, questions []string, echos []bool) ([]string, error) {
+		answers := make([]string, len(questions))
+		for i := range questions {
+			answers[i] = c.Password
+		}
+		return answers, nil
+	})
+
 	config := &ssh.ClientConfig{
 		User: c.Username,
 		Auth: []ssh.AuthMethod{
 			ssh.Password(c.Password),
+			keyboardInteractiveAuth,
 		},
 		HostKeyCallback: ssh.InsecureIgnoreHostKey(),
 		Timeout:         c.Timeout,
@@ -118,105 +98,70 @@ func (c *SSHClient) getSSHConfig() *ssh.ClientConfig {
 		"3des-cbc",
 	}
 
+	config.MACs = []string{
+		"hmac-sha2-256-etm@openssh.com",
+		"hmac-sha2-512-etm@openssh.com",
+		"hmac-sha2-256",
+		"hmac-sha2-512",
+		"hmac-sha1",
+		"hmac-sha1-96",
+	}
+
 	return config
 }
 
-// getPooledClient retrieves an existing warm client or establishes a new one.
-func (c *SSHClient) getPooledClient() (*pooledConnection, error) {
-	key := c.poolKey()
-
-	poolMu.Lock()
-	if pc, ok := connPool[key]; ok {
-		// Test if connection is still alive by attempting a lightweight session creation
-		testSess, err := pc.client.NewSession()
-		if err == nil {
-			_ = testSess.Close()
-			pc.lastUsed = time.Now()
-			poolMu.Unlock()
-			return pc, nil
-		}
-		// Connection failed/closed by remote device
-		_ = pc.client.Close()
-		delete(connPool, key)
-	}
-	poolMu.Unlock()
-
-	// Dial fresh SSH connection
+// dial establishes a direct, deadline-protected SSH connection.
+func (c *SSHClient) dial() (*ssh.Client, string, error) {
 	addr := fmt.Sprintf("%s:%d", c.Host, c.Port)
-	conn, err := net.DialTimeout("tcp", addr, c.Timeout)
+	dialer := net.Dialer{Timeout: c.Timeout}
+	conn, err := dialer.Dial("tcp", addr)
 	if err != nil {
-		return nil, fmt.Errorf("TCP connection to %s failed: %w", addr, err)
+		return nil, "", fmt.Errorf("TCP connection to %s failed: %w", addr, err)
 	}
+
+	// Enforce strict deadline on SSH handshake to prevent indefinite blocking
+	_ = conn.SetDeadline(time.Now().Add(c.Timeout + 3*time.Second))
 
 	sshConn, chans, reqs, err := ssh.NewClientConn(conn, addr, c.getSSHConfig())
 	if err != nil {
 		_ = conn.Close()
-		return nil, fmt.Errorf("SSH authentication failed to %s: %w", addr, err)
+		return nil, "", fmt.Errorf("SSH authentication failed to %s: %w", addr, err)
 	}
 
-	// Consume background channels and requests
-	go ssh.DiscardRequests(reqs)
+	// Handshake completed successfully: clear connection deadline for stream handling
+	_ = conn.SetDeadline(time.Time{})
 
+	go ssh.DiscardRequests(reqs)
 	client := ssh.NewClient(sshConn, chans, reqs)
 	banner := string(sshConn.ServerVersion())
-
-	pc := &pooledConnection{
-		client:   client,
-		banner:   banner,
-		lastUsed: time.Now(),
-	}
-
-	poolMu.Lock()
-	connPool[key] = pc
-	poolMu.Unlock()
-
-	return pc, nil
+	return client, banner, nil
 }
 
-// evictClient drops the cached connection if it died unexpectedly.
-func (c *SSHClient) evictClient() {
-	key := c.poolKey()
-	poolMu.Lock()
-	defer poolMu.Unlock()
-	if pc, ok := connPool[key]; ok {
-		_ = pc.client.Close()
-		delete(connPool, key)
-	}
-}
-
-// TestConnection verifies if credentials and host are reachable via SSH.
+// TestConnection verifies credentials and reachability via SSH.
+// It establishes a direct connection, measures latency, reads banner, and cleanly closes immediately.
 func (c *SSHClient) TestConnection() (float64, string, error) {
 	start := time.Now()
-	pc, err := c.getPooledClient()
+	client, banner, err := c.dial()
 	if err != nil {
 		return 0, "", err
 	}
+	_ = client.Close()
+
 	latency := float64(time.Since(start).Microseconds()) / 1000.0
-	return latency, pc.banner, nil
+	return latency, banner, nil
 }
 
-// RunCommand connects or reuses a pooled connection, executes a single CLI command via SSH exec session, and returns output.
+// RunCommand connects directly, executes a single CLI command via SSH exec session, and cleanly disconnects.
 func (c *SSHClient) RunCommand(cmd string) (string, error) {
-	pc, err := c.getPooledClient()
+	client, _, err := c.dial()
 	if err != nil {
 		return "", err
 	}
+	defer client.Close()
 
-	pc.mu.Lock()
-	defer pc.mu.Unlock()
-
-	session, err := pc.client.NewSession()
+	session, err := client.NewSession()
 	if err != nil {
-		// Cached connection likely dropped by remote host, evict and retry once
-		c.evictClient()
-		pc, err = c.getPooledClient()
-		if err != nil {
-			return "", err
-		}
-		session, err = pc.client.NewSession()
-		if err != nil {
-			return "", fmt.Errorf("failed to create session: %w", err)
-		}
+		return "", fmt.Errorf("failed to create session: %w", err)
 	}
 	defer session.Close()
 
@@ -225,50 +170,51 @@ func (c *SSHClient) RunCommand(cmd string) (string, error) {
 		ssh.TTY_OP_ISPEED: 115200,
 		ssh.TTY_OP_OSPEED: 115200,
 	}
-	_ = session.RequestPty("vt100", 80, 200, modes)
+	_ = session.RequestPty("vt100", 200, 500, modes)
 
 	var stdout, stderr bytes.Buffer
 	session.Stdout = &stdout
 	session.Stderr = &stderr
 
-	if err := session.Run(cmd); err != nil {
-		if stdout.Len() > 0 {
-			return cleanOutput(stdout.String()), nil
-		}
-		return "", fmt.Errorf("command execution failed (%v): %s", err, stderr.String())
+	type execResult struct {
+		err error
 	}
+	resultChan := make(chan execResult, 1)
 
-	pc.lastUsed = time.Now()
-	return cleanOutput(stdout.String()), nil
+	go func() {
+		resultChan <- execResult{err: session.Run(cmd)}
+	}()
+
+	select {
+	case res := <-resultChan:
+		if res.err != nil {
+			if stdout.Len() > 0 {
+				return cleanOutput(stdout.String()), nil
+			}
+			return "", fmt.Errorf("command execution failed (%v): %s", res.err, stderr.String())
+		}
+		return cleanOutput(stdout.String()), nil
+	case <-time.After(15 * time.Second):
+		return cleanOutput(stdout.String()), fmt.Errorf("command execution timed out after 15s")
+	}
 }
 
 // RunInteractiveSession executes a sequence of commands inside an interactive shell session,
-// reusing the pooled SSH client connection to eliminate connection churn.
+// handling auto-confirmations [Y/N] and auto-advancing pagers (More) before cleanly disconnecting.
 func (c *SSHClient) RunInteractiveSession(commands []string, waitAfterCommand time.Duration) (string, error) {
 	if waitAfterCommand <= 0 {
-		waitAfterCommand = 1200 * time.Millisecond
+		waitAfterCommand = 600 * time.Millisecond
 	}
 
-	pc, err := c.getPooledClient()
+	client, _, err := c.dial()
 	if err != nil {
 		return "", err
 	}
+	defer client.Close()
 
-	pc.mu.Lock()
-	defer pc.mu.Unlock()
-
-	session, err := pc.client.NewSession()
+	session, err := client.NewSession()
 	if err != nil {
-		// Retry once on dropped connection
-		c.evictClient()
-		pc, err = c.getPooledClient()
-		if err != nil {
-			return "", err
-		}
-		session, err = pc.client.NewSession()
-		if err != nil {
-			return "", fmt.Errorf("failed to create interactive session: %w", err)
-		}
+		return "", fmt.Errorf("failed to create interactive session: %w", err)
 	}
 	defer session.Close()
 
@@ -295,6 +241,7 @@ func (c *SSHClient) RunInteractiveSession(commands []string, waitAfterCommand ti
 	}
 
 	var outputBuf bytes.Buffer
+	var bufMu sync.Mutex
 	done := make(chan struct{})
 
 	go func() {
@@ -303,11 +250,18 @@ func (c *SSHClient) RunInteractiveSession(commands []string, waitAfterCommand ti
 			n, err := stdout.Read(buf)
 			if n > 0 {
 				chunk := buf[:n]
+				bufMu.Lock()
 				outputBuf.Write(chunk)
+				bufMu.Unlock()
 
-				// Auto-answer security warning or confirmation prompts (e.g. Huawei initial password [Y/N])
+				// Auto-answer password warning or confirmation prompts (e.g. Huawei initial password [Y/N])
 				if bytes.Contains(chunk, []byte("[Y/N]")) || bytes.Contains(chunk, []byte("[y/n]")) {
 					_, _ = io.WriteString(stdin, "N\n")
+				}
+
+				// Auto-advance pagers (Huawei "---- More ----", Cisco/Datacom "--More--")
+				if bytes.Contains(chunk, []byte("More")) || bytes.Contains(chunk, []byte("more")) {
+					_, _ = io.WriteString(stdin, " ")
 				}
 			}
 			if err != nil {
@@ -317,31 +271,35 @@ func (c *SSHClient) RunInteractiveSession(commands []string, waitAfterCommand ti
 		close(done)
 	}()
 
-	// Brief initial pause for shell banner
-	time.Sleep(300 * time.Millisecond)
+	// Brief initial pause for router login banner
+	time.Sleep(200 * time.Millisecond)
 
 	for i, cmd := range commands {
 		_, _ = io.WriteString(stdin, cmd+"\n")
 
-		// Setup commands (e.g. screen-length 0 temporary, terminal length 0) do not produce large tables;
-		// use a fast 150ms delay instead of full waitAfterCommand, cutting query latency significantly.
+		// Setup commands (e.g. screen-length 0 temporary, terminal length 0) do not produce large output;
+		// use a fast 100ms pause instead of full waitAfterCommand.
 		if isSetupCommand(cmd) && i < len(commands)-1 {
-			time.Sleep(150 * time.Millisecond)
+			time.Sleep(100 * time.Millisecond)
 		} else {
 			time.Sleep(waitAfterCommand)
 		}
 	}
 
+	// Exit user shell cleanly
 	_, _ = io.WriteString(stdin, "quit\n")
 	_ = stdin.Close()
 
 	select {
 	case <-done:
-	case <-time.After(2500 * time.Millisecond):
+	case <-time.After(2000 * time.Millisecond):
 	}
 
-	pc.lastUsed = time.Now()
-	return cleanOutput(outputBuf.String()), nil
+	bufMu.Lock()
+	result := cleanOutput(outputBuf.String())
+	bufMu.Unlock()
+
+	return result, nil
 }
 
 // isSetupCommand checks if the command is a terminal configuration command rather than data query.

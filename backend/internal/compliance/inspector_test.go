@@ -227,3 +227,42 @@ func TestAuditDevice_UsesExpectedASNWhenBgpMissing(t *testing.T) {
 		t.Errorf("expected chk-bgp-process item")
 	}
 }
+
+func TestAuditDevice_Huawei_ASPrefixNormalization(t *testing.T) {
+	ins := NewInspector()
+	dev := &models.Device{
+		ID:     "dev-huawei-prefix",
+		Name:   "BGP-RT.01",
+		Vendor: models.VendorHuawei,
+		Host:   "45.166.28.254",
+	}
+
+	runner := &mockRunner{
+		runCmdFunc: func(cmd string) (string, error) {
+			switch {
+			case strings.Contains(cmd, "display bgp peer"):
+				return "BGP local router ID : 45.166.28.254\n Local AS number : 267943\n 170.82.183.217 4 266445\n", nil
+			case strings.Contains(cmd, "RP-TAG-V4-ORIGIN"):
+				return "route-policy RP-TAG-V4-ORIGIN permit node 10\n if-match ip-prefix EXACT-V4-2228\n apply community 267943:1000 1:20030 additive\n", nil
+			case strings.Contains(cmd, "info-center"):
+				return "info-center loghost 10.10.10.1 facility local7 1514\n", nil
+			default:
+				return "", nil
+			}
+		},
+	}
+
+	// Passing "AS267943" with prefix "AS" should match "267943" perfectly without warning
+	audit, err := ins.AuditDevice(dev, runner, "AS267943")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	for _, item := range audit.Items {
+		if item.ID == "chk-bgp-process" {
+			if item.Status != models.CompliancePassed {
+				t.Errorf("expected status CompliancePassed with normalized ASN, got %s: %s", item.Status, item.Message)
+			}
+		}
+	}
+}

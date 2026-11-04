@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log"
 	"os"
 	"path/filepath"
 	"strings"
@@ -74,6 +75,8 @@ func (s *DeviceStore) load() error {
 		if d.Password != "" {
 			if plain, err := crypto.Decrypt(d.Password, key); err == nil {
 				d.Password = plain
+			} else {
+				log.Printf("[Security Warning] ⚠️ Falha ao descriptografar senha de %s (%s): %v. Verifique a variável DEVICE_ENCRYPTION_KEY.", d.Name, d.Host, err)
 			}
 		}
 		s.devices[d.ID] = d

@@ -46,7 +46,7 @@ func (d *DatacomDriver) TestConnection() (models.SSHTestResult, error) {
 func (d *DatacomDriver) RunCommand(cmd string) (string, error) {
 	// Disable paging in DmOS via 'terminal length 0'
 	cmds := []string{"terminal length 0", cmd}
-	return d.client.RunInteractiveSession(cmds, 1200*time.Millisecond)
+	return d.client.RunInteractiveSession(cmds, 600*time.Millisecond)
 }
 
 func (d *DatacomDriver) GetBGPSessions() ([]models.BGPSession, error) {

@@ -234,8 +234,18 @@ func (c *DeviceController) AuditDeviceCompliance(w http.ResponseWriter, r *http.
 		if tID == "" {
 			tID = "default-tenant"
 		}
-		if tenant, err := c.tenantStore.GetByID(tID); err == nil && tenant != nil {
+		if tenant, err := c.tenantStore.GetByID(tID); err == nil && tenant != nil && tenant.ASN != "" {
 			expectedASN = tenant.ASN
+		} else {
+			// Fallback: use first configured tenant with an ASN
+			if allTenants, err := c.tenantStore.GetAll(); err == nil {
+				for _, t := range allTenants {
+					if t.ASN != "" {
+						expectedASN = t.ASN
+						break
+					}
+				}
+			}
 		}
 	}
 
@@ -292,8 +302,18 @@ func (c *DeviceController) GetDeviceCompliance(w http.ResponseWriter, r *http.Re
 		if tID == "" {
 			tID = "default-tenant"
 		}
-		if tenant, err := c.tenantStore.GetByID(tID); err == nil && tenant != nil {
+		if tenant, err := c.tenantStore.GetByID(tID); err == nil && tenant != nil && tenant.ASN != "" {
 			expectedASN = tenant.ASN
+		} else {
+			// Fallback: use first configured tenant with an ASN
+			if allTenants, err := c.tenantStore.GetAll(); err == nil {
+				for _, t := range allTenants {
+					if t.ASN != "" {
+						expectedASN = t.ASN
+						break
+					}
+				}
+			}
 		}
 	}
 

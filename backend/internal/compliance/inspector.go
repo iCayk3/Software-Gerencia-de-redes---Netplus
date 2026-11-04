@@ -129,54 +129,79 @@ func (ins *Inspector) AuditDevice(dev *models.Device, runner RouterCommandRunner
 	return audit, nil
 }
 
+func cleanASN(asn string) string {
+	asn = strings.TrimSpace(asn)
+	asn = strings.TrimPrefix(strings.ToUpper(asn), "AS")
+	return strings.TrimSpace(asn)
+}
+
 // ==============================================================================
 // Huawei Inspection (VRP - NE8000 / NE40 / S6730)
 // ==============================================================================
 
 func (ins *Inspector) inspectHuawei(audit *models.DeviceComplianceAudit, runner RouterCommandRunner, expectedASN string) {
-	bgpCfg, _ := runner.RunCommand("display current-configuration configuration bgp")
-	tagPol, _ := runner.RunCommand("display route-policy RP-TAG-V4-ORIGIN")
-	prefixCfg, _ := runner.RunCommand("display ip ip-prefix")
-	if prefixCfg == "" {
-		prefixCfg, _ = runner.RunCommand("display current-configuration configuration ip-prefix")
+	normExpected := cleanASN(expectedASN)
+
+	// 1. Query display bgp peer FIRST: universally supported across all Huawei VRP releases and privilege levels
+	bgpPeerOutput, _ := runner.RunCommand("display bgp peer")
+
+	asFallback := regexp.MustCompile(`(?i)Local\s+AS\s+number\s*:\s*(\d+)`).FindStringSubmatch(bgpPeerOutput)
+	ridFallback := regexp.MustCompile(`(?i)BGP\s+local\s+router\s+ID\s*:\s*([0-9\.]+)`).FindStringSubmatch(bgpPeerOutput)
+	if len(asFallback) > 1 {
+		audit.LocalASN = asFallback[1]
 	}
-	syslogCfg, _ := runner.RunCommand("display current-configuration | include info-center")
+	if len(ridFallback) > 1 {
+		audit.RouterID = ridFallback[1]
+	}
 
-	// 1. BGP Process & ASN
-	asnRe := regexp.MustCompile(`(?m)^\s*bgp\s+(\d+)`)
-	asnMatch := asnRe.FindStringSubmatch(bgpCfg)
-	ridRe := regexp.MustCompile(`(?m)router-id\s+([0-9\.]+)`)
-	ridMatch := ridRe.FindStringSubmatch(bgpCfg)
+	// Count peers from display bgp peer
+	peerTableRe := regexp.MustCompile(`(?m)^\s*([0-9a-fA-F\.\:]+)\s+[46]\s+(\d+)`)
+	peerTableMatches := peerTableRe.FindAllStringSubmatch(bgpPeerOutput, -1)
+	if len(peerTableMatches) > 0 {
+		audit.TotalSessions = len(peerTableMatches)
+	}
 
-	if len(asnMatch) > 1 {
-		audit.LocalASN = asnMatch[1]
+	// 2. Fetch BGP configuration
+	bgpCfg, _ := runner.RunCommand("display current-configuration configuration bgp")
+	if len(bgpCfg) < 20 || strings.Contains(bgpCfg, "Error:") || strings.Contains(bgpCfg, "Wrong parameter") {
+		// Fallback for VRP5 and platforms where 'configuration bgp' is not a parameter
+		bgpCfgFallback, _ := runner.RunCommand("display current-configuration | begin bgp")
+		if len(bgpCfgFallback) > 20 {
+			bgpCfg = bgpCfgFallback
+		}
+	}
+
+	if audit.LocalASN == "" {
+		asnRe := regexp.MustCompile(`(?m)^\s*bgp\s+(\d+)`)
+		asnMatch := asnRe.FindStringSubmatch(bgpCfg)
+		if len(asnMatch) > 1 {
+			audit.LocalASN = asnMatch[1]
+		}
+	}
+	if audit.RouterID == "" {
+		ridRe := regexp.MustCompile(`(?m)router-id\s+([0-9\.]+)`)
+		ridMatch := ridRe.FindStringSubmatch(bgpCfg)
 		if len(ridMatch) > 1 {
 			audit.RouterID = ridMatch[1]
 		}
 	}
 
-	// Fallback inteligente: se display current-configuration configuration bgp não retornou ASN
-	// (por exemplo, usuário SSH sem permissão de ver configuration completa), tenta display bgp peer
-	bgpPeerOutput := ""
-	if audit.LocalASN == "" {
-		bgpPeerOutput, _ = runner.RunCommand("display bgp peer")
-		asFallback := regexp.MustCompile(`(?i)Local\s+AS\s+number\s*:\s*(\d+)`).FindStringSubmatch(bgpPeerOutput)
-		ridFallback := regexp.MustCompile(`(?i)BGP\s+local\s+router\s+ID\s*:\s*([0-9\.]+)`).FindStringSubmatch(bgpPeerOutput)
-		if len(asFallback) > 1 {
-			audit.LocalASN = asFallback[1]
-		}
-		if len(ridFallback) > 1 {
-			audit.RouterID = ridFallback[1]
-		}
+	tagPol, _ := runner.RunCommand("display route-policy RP-TAG-V4-ORIGIN")
+	prefixCfg, _ := runner.RunCommand("display ip ip-prefix")
+	if prefixCfg == "" || strings.Contains(prefixCfg, "Error:") {
+		prefixCfg, _ = runner.RunCommand("display current-configuration configuration ip-prefix")
 	}
+	syslogCfg, _ := runner.RunCommand("display current-configuration | include info-center")
+
+	normLocal := cleanASN(audit.LocalASN)
 
 	if audit.LocalASN != "" {
 		status := models.CompliancePassed
 		msg := fmt.Sprintf("Processo BGP ativo com AS %s (Router-ID: %s)", audit.LocalASN, audit.RouterID)
-		if expectedASN != "" && audit.LocalASN != expectedASN {
+		if normExpected != "" && normLocal != normExpected {
 			status = models.ComplianceWarning
-			msg = fmt.Sprintf("Processo BGP ativo com AS %s (Router-ID: %s). ⚠️ Atenção: O AS detectado difere do ASN oficial cadastrado para sua empresa (AS %s).", audit.LocalASN, audit.RouterID, expectedASN)
-		} else if expectedASN != "" {
+			msg = fmt.Sprintf("Processo BGP ativo com AS %s (Router-ID: %s). ⚠️ Atenção: O AS detectado difere do ASN oficial cadastrado para sua empresa (AS %s).", audit.LocalASN, audit.RouterID, normExpected)
+		} else if normExpected != "" {
 			msg = fmt.Sprintf("Processo BGP ativo com AS %s (Router-ID: %s) — Em total conformidade com o ASN oficial da sua empresa.", audit.LocalASN, audit.RouterID)
 		}
 
@@ -190,9 +215,9 @@ func (ins *Inspector) inspectHuawei(audit *models.DeviceComplianceAudit, runner 
 			FoundValue:  fmt.Sprintf("AS %s", audit.LocalASN),
 		})
 	} else {
-		targetASN := expectedASN
+		targetASN := normExpected
 		if targetASN == "" {
-			targetASN = "SEU_ASN"
+			targetASN = "267943"
 		}
 		audit.Items = append(audit.Items, models.ComplianceCheckItem{
 			ID:          "chk-bgp-process",
@@ -206,21 +231,11 @@ func (ins *Inspector) inspectHuawei(audit *models.DeviceComplianceAudit, runner 
 		return
 	}
 
-	// 2. BGP Peers & Sessions
-	peerRe := regexp.MustCompile(`(?m)peer\s+([0-9\.]+)\s+as-number\s+(\d+)`)
-	peerMatches := peerRe.FindAllStringSubmatch(bgpCfg, -1)
-	audit.TotalSessions = len(peerMatches)
-
-	// Fallback para contagem de peers via display bgp peer se o bloco de config não continha peers
+	// 2. BGP Peers & Sessions (count from bgpCfg if not yet found via display bgp peer)
 	if audit.TotalSessions == 0 {
-		if bgpPeerOutput == "" {
-			bgpPeerOutput, _ = runner.RunCommand("display bgp peer")
-		}
-		peerTableRe := regexp.MustCompile(`(?m)^\s*([0-9a-fA-F\.\:]+)\s+[46]\s+(\d+)`)
-		peerTableMatches := peerTableRe.FindAllStringSubmatch(bgpPeerOutput, -1)
-		if len(peerTableMatches) > 0 {
-			audit.TotalSessions = len(peerTableMatches)
-		}
+		peerRe := regexp.MustCompile(`(?m)peer\s+([0-9\.]+)\s+as-number\s+(\d+)`)
+		peerMatches := peerRe.FindAllStringSubmatch(bgpCfg, -1)
+		audit.TotalSessions = len(peerMatches)
 	}
 
 	// Count export policies
@@ -371,9 +386,9 @@ func (ins *Inspector) inspectMikrotikV7(audit *models.DeviceComplianceAudit, run
 			FoundValue:  fmt.Sprintf("AS %s", audit.LocalASN),
 		})
 	} else {
-		targetASN := expectedASN
+		targetASN := cleanASN(expectedASN)
 		if targetASN == "" {
-			targetASN = "SEU_ASN"
+			targetASN = "267943"
 		}
 		audit.Items = append(audit.Items, models.ComplianceCheckItem{
 			ID:          "chk-bgp-process",
@@ -428,12 +443,12 @@ func (ins *Inspector) inspectMikrotikV7(audit *models.DeviceComplianceAudit, run
 			Remediation: "Crie a chain de filtro em /routing/filter/rule.",
 		})
 
-		asn := audit.LocalASN
+		asn := cleanASN(audit.LocalASN)
 		if asn == "" {
-			asn = expectedASN
+			asn = cleanASN(expectedASN)
 		}
 		if asn == "" {
-			asn = "SEU_ASN"
+			asn = "267943"
 		}
 
 		audit.RemediationScript = fmt.Sprintf(`# ==============================================================================
@@ -466,9 +481,9 @@ func (ins *Inspector) inspectMikrotikV6(audit *models.DeviceComplianceAudit, run
 			FoundValue:  fmt.Sprintf("AS %s", audit.LocalASN),
 		})
 	} else {
-		targetASN := expectedASN
+		targetASN := cleanASN(expectedASN)
 		if targetASN == "" {
-			targetASN = "SEU_ASN"
+			targetASN = "267943"
 		}
 		audit.Items = append(audit.Items, models.ComplianceCheckItem{
 			ID:          "chk-bgp-process",
@@ -505,12 +520,12 @@ func (ins *Inspector) inspectMikrotikV6(audit *models.DeviceComplianceAudit, run
 			Remediation: "Crie a regra de filtro /routing filter add chain=bgp-origin-tag.",
 		})
 
-		asn := audit.LocalASN
+		asn := cleanASN(audit.LocalASN)
 		if asn == "" {
-			asn = expectedASN
+			asn = cleanASN(expectedASN)
 		}
 		if asn == "" {
-			asn = "SEU_ASN"
+			asn = "267943"
 		}
 
 		audit.RemediationScript = fmt.Sprintf(`# ==============================================================================
@@ -543,9 +558,9 @@ func (ins *Inspector) inspectDatacom(audit *models.DeviceComplianceAudit, runner
 			FoundValue:  fmt.Sprintf("AS %s", audit.LocalASN),
 		})
 	} else {
-		targetASN := expectedASN
+		targetASN := cleanASN(expectedASN)
 		if targetASN == "" {
-			targetASN = "SEU_ASN"
+			targetASN = "267943"
 		}
 		audit.Items = append(audit.Items, models.ComplianceCheckItem{
 			ID:          "chk-bgp-process",

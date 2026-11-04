@@ -50,7 +50,7 @@ func (d *HuaweiDriver) TestConnection() (models.SSHTestResult, error) {
 func (d *HuaweiDriver) RunCommand(cmd string) (string, error) {
 	// Send 'screen-length 0 temporary' first to disable paging, then run the requested command
 	cmds := []string{"screen-length 0 temporary", cmd}
-	return d.client.RunInteractiveSession(cmds, 1200*time.Millisecond)
+	return d.client.RunInteractiveSession(cmds, 600*time.Millisecond)
 }
 
 func (d *HuaweiDriver) GetBGPSessions() ([]models.BGPSession, error) {
