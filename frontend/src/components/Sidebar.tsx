@@ -114,11 +114,11 @@ export const Sidebar: React.FC<SidebarProps> = ({
       icon: KeyRound,
       defaultSubTab: 'overview',
     },
-    ...(isSuperAdmin ? [{
+    ...(isSuperAdmin || user?.role === 'admin' ? [{
       id: 'tenants' as MainSectionType,
-      label: 'Empresas Clientes',
-      shortLabel: 'Empresas',
-      description: 'Provedores, ASNs e isolamento BGP',
+      label: 'Configurações da Empresa',
+      shortLabel: 'Empresa',
+      description: 'Dados da empresa, ASN oficial e BGP',
       icon: Building2,
       defaultSubTab: 'list',
     }] : []),

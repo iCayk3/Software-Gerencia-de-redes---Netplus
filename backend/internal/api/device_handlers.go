@@ -15,11 +15,12 @@ import (
 )
 
 type DeviceController struct {
-	store      *storage.DeviceStore
-	engine     *telemetry.Engine
-	licenseMgr *license.LicenseManager
-	auditCache map[string]*models.DeviceComplianceAudit
-	auditMu    sync.RWMutex
+	store       *storage.DeviceStore
+	engine      *telemetry.Engine
+	licenseMgr  *license.LicenseManager
+	tenantStore storage.ITenantStore
+	auditCache  map[string]*models.DeviceComplianceAudit
+	auditMu     sync.RWMutex
 }
 
 func NewDeviceController(store *storage.DeviceStore, engine *telemetry.Engine) *DeviceController {
@@ -28,6 +29,10 @@ func NewDeviceController(store *storage.DeviceStore, engine *telemetry.Engine) *
 		engine:     engine,
 		auditCache: make(map[string]*models.DeviceComplianceAudit),
 	}
+}
+
+func (c *DeviceController) SetTenantStore(ts storage.ITenantStore) {
+	c.tenantStore = ts
 }
 
 func (c *DeviceController) SetLicenseManager(lm *license.LicenseManager) {
@@ -223,7 +228,18 @@ func (c *DeviceController) AuditDeviceCompliance(w http.ResponseWriter, r *http.
 		return
 	}
 
-	audit, err := driver.AuditCompliance()
+	expectedASN := ""
+	if c.tenantStore != nil {
+		tID := device.TenantID
+		if tID == "" {
+			tID = "default-tenant"
+		}
+		if tenant, err := c.tenantStore.GetByID(tID); err == nil && tenant != nil {
+			expectedASN = tenant.ASN
+		}
+	}
+
+	audit, err := driver.AuditCompliance(expectedASN)
 	if err != nil {
 		WriteError(w, http.StatusInternalServerError, "Erro ao inspecionar configuração do equipamento: "+err.Error())
 		return
@@ -270,7 +286,18 @@ func (c *DeviceController) GetDeviceCompliance(w http.ResponseWriter, r *http.Re
 		return
 	}
 
-	audit, err := driver.AuditCompliance()
+	expectedASN := ""
+	if c.tenantStore != nil {
+		tID := device.TenantID
+		if tID == "" {
+			tID = "default-tenant"
+		}
+		if tenant, err := c.tenantStore.GetByID(tID); err == nil && tenant != nil {
+			expectedASN = tenant.ASN
+		}
+	}
+
+	audit, err := driver.AuditCompliance(expectedASN)
 	if err != nil {
 		WriteError(w, http.StatusInternalServerError, "Erro ao inspecionar configuração do equipamento: "+err.Error())
 		return

@@ -269,11 +269,11 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({
       },
       {
         id: 'nav-tenants',
-        title: 'Empresas Clientes & Provedores (Multi-Tenancy)',
-        subtitle: 'Cadastro de empresas parceiras, ASNs e isolamento BGP',
+        title: 'Configurações da Empresa (ASN e Parâmetros de Rede)',
+        subtitle: 'Gerenciar dados da empresa, ASN oficial e parâmetros BGP',
         category: 'Navegação',
         icon: Building2,
-        badge: 'Multi-Tenant',
+        badge: 'Empresa & ASN',
         badgeColor: 'bg-cyan-500/10 text-cyan-400 border-cyan-500/30',
         onSelect: () => {
           onNavigate('tenants', 'list')

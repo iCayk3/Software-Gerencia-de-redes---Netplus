@@ -42,7 +42,7 @@ func TestAuditDevice_SSHFailure(t *testing.T) {
 		},
 	}
 
-	audit, err := ins.AuditDevice(dev, runner)
+	audit, err := ins.AuditDevice(dev, runner, "")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -85,7 +85,7 @@ func TestAuditDevice_HuaweiCompliant(t *testing.T) {
 		},
 	}
 
-	audit, err := ins.AuditDevice(dev, runner)
+	audit, err := ins.AuditDevice(dev, runner, "")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -129,7 +129,7 @@ func TestAuditDevice_HuaweiMissingOriginTagging(t *testing.T) {
 		},
 	}
 
-	audit, err := ins.AuditDevice(dev, runner)
+	audit, err := ins.AuditDevice(dev, runner, "")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -175,7 +175,7 @@ Peer            V    AS  MsgRcvd  MsgSent  OutQ  Up/Down       State  PrefRcv
 		},
 	}
 
-	audit, err := ins.AuditDevice(dev, runner)
+	audit, err := ins.AuditDevice(dev, runner, "")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -188,5 +188,42 @@ Peer            V    AS  MsgRcvd  MsgSent  OutQ  Up/Down       State  PrefRcv
 	}
 	if audit.TotalSessions != 1 {
 		t.Errorf("expected 1 session from fallback, got %d", audit.TotalSessions)
+	}
+}
+
+func TestAuditDevice_UsesExpectedASNWhenBgpMissing(t *testing.T) {
+	ins := NewInspector()
+	dev := &models.Device{
+		ID:     "dev-huawei-nobgp",
+		Name:   "BGP-RT.01",
+		Vendor: models.VendorHuawei,
+		Host:   "45.166.28.254",
+	}
+
+	runner := &mockRunner{
+		runCmdFunc: func(cmd string) (string, error) {
+			return "", nil
+		},
+	}
+
+	audit, err := ins.AuditDevice(dev, runner, "267943")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	foundItem := false
+	for _, item := range audit.Items {
+		if item.ID == "chk-bgp-process" {
+			foundItem = true
+			if !strings.Contains(item.Message, "bgp 267943") {
+				t.Errorf("expected message to mention 'bgp 267943', got '%s'", item.Message)
+			}
+			if !strings.Contains(item.Remediation, "bgp 267943") {
+				t.Errorf("expected remediation to mention 'bgp 267943', got '%s'", item.Remediation)
+			}
+		}
+	}
+	if !foundItem {
+		t.Errorf("expected chk-bgp-process item")
 	}
 }

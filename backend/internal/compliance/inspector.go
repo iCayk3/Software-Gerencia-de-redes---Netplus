@@ -28,7 +28,8 @@ func NewInspector() *Inspector {
 
 // AuditDevice connects and verifies whether a device complies with NetPulse 3-tier
 // Traffic Engineering architecture and management standards.
-func (ins *Inspector) AuditDevice(dev *models.Device, runner RouterCommandRunner) (*models.DeviceComplianceAudit, error) {
+// expectedASN is the official ASN configured for the tenant in NetPulse (e.g. "267943").
+func (ins *Inspector) AuditDevice(dev *models.Device, runner RouterCommandRunner, expectedASN string) (*models.DeviceComplianceAudit, error) {
 	now := time.Now()
 	audit := &models.DeviceComplianceAudit{
 		DeviceID:      dev.ID,
@@ -77,13 +78,13 @@ func (ins *Inspector) AuditDevice(dev *models.Device, runner RouterCommandRunner
 	// 2. Vendor-Specific Configuration Inspection
 	switch dev.Vendor {
 	case models.VendorHuawei:
-		ins.inspectHuawei(audit, runner)
+		ins.inspectHuawei(audit, runner, expectedASN)
 	case models.VendorMikrotikV7:
-		ins.inspectMikrotikV7(audit, runner)
+		ins.inspectMikrotikV7(audit, runner, expectedASN)
 	case models.VendorMikrotikV6:
-		ins.inspectMikrotikV6(audit, runner)
+		ins.inspectMikrotikV6(audit, runner, expectedASN)
 	case models.VendorDatacom:
-		ins.inspectDatacom(audit, runner)
+		ins.inspectDatacom(audit, runner, expectedASN)
 	default:
 		ins.inspectGeneric(audit, runner)
 	}
@@ -132,7 +133,7 @@ func (ins *Inspector) AuditDevice(dev *models.Device, runner RouterCommandRunner
 // Huawei Inspection (VRP - NE8000 / NE40 / S6730)
 // ==============================================================================
 
-func (ins *Inspector) inspectHuawei(audit *models.DeviceComplianceAudit, runner RouterCommandRunner) {
+func (ins *Inspector) inspectHuawei(audit *models.DeviceComplianceAudit, runner RouterCommandRunner, expectedASN string) {
 	bgpCfg, _ := runner.RunCommand("display current-configuration configuration bgp")
 	tagPol, _ := runner.RunCommand("display route-policy RP-TAG-V4-ORIGIN")
 	prefixCfg, _ := runner.RunCommand("display ip ip-prefix")
@@ -170,24 +171,37 @@ func (ins *Inspector) inspectHuawei(audit *models.DeviceComplianceAudit, runner 
 	}
 
 	if audit.LocalASN != "" {
+		status := models.CompliancePassed
+		msg := fmt.Sprintf("Processo BGP ativo com AS %s (Router-ID: %s)", audit.LocalASN, audit.RouterID)
+		if expectedASN != "" && audit.LocalASN != expectedASN {
+			status = models.ComplianceWarning
+			msg = fmt.Sprintf("Processo BGP ativo com AS %s (Router-ID: %s). ⚠️ Atenção: O AS detectado difere do ASN oficial cadastrado para sua empresa (AS %s).", audit.LocalASN, audit.RouterID, expectedASN)
+		} else if expectedASN != "" {
+			msg = fmt.Sprintf("Processo BGP ativo com AS %s (Router-ID: %s) — Em total conformidade com o ASN oficial da sua empresa.", audit.LocalASN, audit.RouterID)
+		}
+
 		audit.Items = append(audit.Items, models.ComplianceCheckItem{
 			ID:          "chk-bgp-process",
 			Category:    "bgp_core",
 			Title:       "Processo BGP & AS Local",
 			Description: "Identificação do processo de roteamento BGP ativo e Autonomous System Number (ASN).",
-			Status:      models.CompliancePassed,
-			Message:     fmt.Sprintf("Processo BGP ativo com AS %s (Router-ID: %s)", audit.LocalASN, audit.RouterID),
+			Status:      status,
+			Message:     msg,
 			FoundValue:  fmt.Sprintf("AS %s", audit.LocalASN),
 		})
 	} else {
+		targetASN := expectedASN
+		if targetASN == "" {
+			targetASN = "SEU_ASN"
+		}
 		audit.Items = append(audit.Items, models.ComplianceCheckItem{
 			ID:          "chk-bgp-process",
 			Category:    "bgp_core",
 			Title:       "Processo BGP & AS Local",
 			Description: "Identificação do processo de roteamento BGP ativo e Autonomous System Number (ASN).",
 			Status:      models.ComplianceFailed,
-			Message:     "Nenhum processo BGP ativo ou bloco 'bgp <ASN>' localizado na configuração ativa.",
-			Remediation: "Habilite o BGP com 'system-view' e 'bgp <seu_asn>', ou verifique se o usuário SSH possui nível de privilégio suficiente para executar 'display current-configuration'.",
+			Message:     fmt.Sprintf("Nenhum processo BGP ativo ou bloco 'bgp %s' localizado na configuração ativa.", targetASN),
+			Remediation: fmt.Sprintf("Habilite o BGP com 'system-view' e 'bgp %s' (ASN oficial da sua empresa).", targetASN),
 		})
 		return
 	}
@@ -299,6 +313,9 @@ func (ins *Inspector) inspectHuawei(audit *models.DeviceComplianceAudit, runner 
 	if !audit.HasOriginTagging {
 		asn := audit.LocalASN
 		if asn == "" {
+			asn = expectedASN
+		}
+		if asn == "" {
 			asn = "SEU_ASN"
 		}
 		audit.RemediationScript = fmt.Sprintf(`# ==============================================================================
@@ -335,7 +352,7 @@ refresh bgp all export
 // MikroTik RouterOS v7 Inspection
 // ==============================================================================
 
-func (ins *Inspector) inspectMikrotikV7(audit *models.DeviceComplianceAudit, runner RouterCommandRunner) {
+func (ins *Inspector) inspectMikrotikV7(audit *models.DeviceComplianceAudit, runner RouterCommandRunner, expectedASN string) {
 	bgpConns, _ := runner.RunCommand("/routing/bgp/connection/print detail")
 	filterRules, _ := runner.RunCommand("/routing/filter/rule/print detail")
 
@@ -354,14 +371,18 @@ func (ins *Inspector) inspectMikrotikV7(audit *models.DeviceComplianceAudit, run
 			FoundValue:  fmt.Sprintf("AS %s", audit.LocalASN),
 		})
 	} else {
+		targetASN := expectedASN
+		if targetASN == "" {
+			targetASN = "SEU_ASN"
+		}
 		audit.Items = append(audit.Items, models.ComplianceCheckItem{
 			ID:          "chk-bgp-process",
 			Category:    "bgp_core",
 			Title:       "Processo BGP & AS Local (RouterOS v7)",
 			Description: "Instância e conexões BGP ativas no MikroTik RouterOS v7.",
 			Status:      models.ComplianceFailed,
-			Message:     "Nenhuma conexão BGP com local.as configurada em /routing/bgp/connection.",
-			Remediation: "Adicione sua conexão BGP com /routing/bgp/connection/add local.as=<ASN>.",
+			Message:     fmt.Sprintf("Nenhuma conexão BGP com local.as configurada em /routing/bgp/connection (esperado: AS %s).", targetASN),
+			Remediation: fmt.Sprintf("Adicione sua conexão BGP com /routing/bgp/connection/add local.as=%s.", targetASN),
 		})
 		return
 	}
@@ -407,11 +428,19 @@ func (ins *Inspector) inspectMikrotikV7(audit *models.DeviceComplianceAudit, run
 			Remediation: "Crie a chain de filtro em /routing/filter/rule.",
 		})
 
+		asn := audit.LocalASN
+		if asn == "" {
+			asn = expectedASN
+		}
+		if asn == "" {
+			asn = "SEU_ASN"
+		}
+
 		audit.RemediationScript = fmt.Sprintf(`# ==============================================================================
 # SCRIPT DE ADEQUAÇÃO AO PADRÃO NETPULSE - MIKROTIK ROUTEROS V7
 # ==============================================================================
 /routing/filter/rule/add chain=bgp-origin-tag rule="if (dst in 0.0.0.0/0) { bgp-communities.add %s:1000; bgp-communities.add 1:20030; accept; }"
-`, audit.LocalASN)
+`, asn)
 	}
 }
 
@@ -419,7 +448,7 @@ func (ins *Inspector) inspectMikrotikV7(audit *models.DeviceComplianceAudit, run
 // MikroTik RouterOS v6 Inspection
 // ==============================================================================
 
-func (ins *Inspector) inspectMikrotikV6(audit *models.DeviceComplianceAudit, runner RouterCommandRunner) {
+func (ins *Inspector) inspectMikrotikV6(audit *models.DeviceComplianceAudit, runner RouterCommandRunner, expectedASN string) {
 	bgpInstance, _ := runner.RunCommand("/routing bgp instance print detail")
 	filters, _ := runner.RunCommand("/routing filter print detail")
 
@@ -437,14 +466,18 @@ func (ins *Inspector) inspectMikrotikV6(audit *models.DeviceComplianceAudit, run
 			FoundValue:  fmt.Sprintf("AS %s", audit.LocalASN),
 		})
 	} else {
+		targetASN := expectedASN
+		if targetASN == "" {
+			targetASN = "SEU_ASN"
+		}
 		audit.Items = append(audit.Items, models.ComplianceCheckItem{
 			ID:          "chk-bgp-process",
 			Category:    "bgp_core",
 			Title:       "Instância BGP & AS Local (RouterOS v6)",
 			Description: "Instância de BGP default no MikroTik RouterOS v6.",
 			Status:      models.ComplianceFailed,
-			Message:     "Nenhuma instância BGP configurada.",
-			Remediation: "Configure a instância com /routing bgp instance set default as=<ASN>.",
+			Message:     fmt.Sprintf("Nenhuma instância BGP configurada (esperado: AS %s).", targetASN),
+			Remediation: fmt.Sprintf("Configure a instância com /routing bgp instance set default as=%s.", targetASN),
 		})
 		return
 	}
@@ -472,11 +505,19 @@ func (ins *Inspector) inspectMikrotikV6(audit *models.DeviceComplianceAudit, run
 			Remediation: "Crie a regra de filtro /routing filter add chain=bgp-origin-tag.",
 		})
 
+		asn := audit.LocalASN
+		if asn == "" {
+			asn = expectedASN
+		}
+		if asn == "" {
+			asn = "SEU_ASN"
+		}
+
 		audit.RemediationScript = fmt.Sprintf(`# ==============================================================================
 # SCRIPT DE ADEQUAÇÃO AO PADRÃO NETPULSE - MIKROTIK ROUTEROS V6
 # ==============================================================================
 /routing filter add chain=bgp-origin-tag set-bgp-communities=%s:1000,1:20030 action=accept
-`, audit.LocalASN)
+`, asn)
 	}
 }
 
@@ -484,7 +525,7 @@ func (ins *Inspector) inspectMikrotikV6(audit *models.DeviceComplianceAudit, run
 // Datacom Inspection (DmOS)
 // ==============================================================================
 
-func (ins *Inspector) inspectDatacom(audit *models.DeviceComplianceAudit, runner RouterCommandRunner) {
+func (ins *Inspector) inspectDatacom(audit *models.DeviceComplianceAudit, runner RouterCommandRunner, expectedASN string) {
 	bgpCfg, _ := runner.RunCommand("show running-config router bgp")
 	routeMapCfg, _ := runner.RunCommand("show running-config route-map")
 
@@ -502,14 +543,18 @@ func (ins *Inspector) inspectDatacom(audit *models.DeviceComplianceAudit, runner
 			FoundValue:  fmt.Sprintf("AS %s", audit.LocalASN),
 		})
 	} else {
+		targetASN := expectedASN
+		if targetASN == "" {
+			targetASN = "SEU_ASN"
+		}
 		audit.Items = append(audit.Items, models.ComplianceCheckItem{
 			ID:          "chk-bgp-process",
 			Category:    "bgp_core",
 			Title:       "Processo BGP & AS Local (Datacom DmOS)",
 			Description: "Processo router bgp ativo no Datacom DmOS.",
 			Status:      models.ComplianceFailed,
-			Message:     "Processo BGP não encontrado no Datacom.",
-			Remediation: "Habilite com 'router bgp <ASN>'.",
+			Message:     fmt.Sprintf("Processo BGP não encontrado no Datacom (esperado: AS %s).", targetASN),
+			Remediation: fmt.Sprintf("Habilite com 'router bgp %s'.", targetASN),
 		})
 		return
 	}

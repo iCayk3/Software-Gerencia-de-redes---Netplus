@@ -125,10 +125,10 @@ export const TopNav: React.FC<TopNavProps> = ({
       ],
     },
     tenants: {
-      title: 'Empresas Clientes & Multi-Tenancy',
-      subtitle: 'Cadastro centralizado de empresas parceiras, ASNs autorizados, contatos e isolamento de rotas BGP',
+      title: 'Configurações da Empresa & Rede',
+      subtitle: 'Definição dos parâmetros oficiais da sua organização: ASN oficial, dados cadastrais e parâmetros BGP para gerência pelo Servidor Master',
       tabs: [
-        { id: 'list', label: 'Empresas Cadastradas', icon: Building2 },
+        { id: 'list', label: 'Dados da Empresa & ASN', icon: Building2 },
       ],
     },
     users: {

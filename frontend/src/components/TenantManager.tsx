@@ -161,6 +161,7 @@ export const TenantManager: React.FC = () => {
   const totalTenants = tenants.length
   const totalRouters = tenants.reduce((acc, t) => acc + (t.device_count || 0), 0)
   const totalUsers = tenants.reduce((acc, t) => acc + (t.user_count || 0), 0)
+  const primaryTenant = tenants.find((t) => t.id === activeTenantId) || tenants.find((t) => t.id === 'default-tenant') || tenants[0]
 
   return (
     <div className="space-y-6">
@@ -171,10 +172,10 @@ export const TenantManager: React.FC = () => {
             <span className="p-2 rounded-xl bg-cyan-500/10 border border-cyan-500/20 text-cyan-400">
               <Building2 className="h-5 w-5" />
             </span>
-            <h1 className="text-xl font-bold text-white tracking-tight">Empresas Clientes & Provedores</h1>
+            <h1 className="text-xl font-bold text-white tracking-tight">Configurações da Empresa & Rede</h1>
           </div>
           <p className="text-xs text-slate-400 mt-1">
-            Gestão centralizada de empresas B2B. Cada cliente possui seu ASN oficial e enxerga apenas suas próprias sessões BGP.
+            Definição dos parâmetros oficiais da sua organização: ASN oficial, dados cadastrais e parâmetros BGP para gerência pelo Servidor Master.
           </p>
         </div>
 
@@ -183,20 +184,41 @@ export const TenantManager: React.FC = () => {
             onClick={loadTenants}
             disabled={loading}
             className="p-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 transition border border-slate-700 hover:text-white cursor-pointer"
-            title="Atualizar lista"
+            title="Atualizar dados"
           >
             <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
           </button>
 
-          {isSuperAdmin && (
+          {primaryTenant && (
             <button
-              onClick={handleOpenCreateModal}
+              onClick={() => handleOpenEditModal(primaryTenant)}
               className="flex items-center gap-2 px-4 py-2 rounded-xl bg-cyan-600 hover:bg-cyan-500 text-white font-medium text-xs shadow-lg shadow-cyan-600/20 transition cursor-pointer"
             >
-              <Plus className="h-4 w-4" />
-              <span>Nova Empresa Cliente</span>
+              <Edit2 className="h-4 w-4" />
+              <span>Editar Parâmetros da Empresa & ASN</span>
             </button>
           )}
+
+          {isSuperAdmin && totalTenants > 1 && (
+            <button
+              onClick={handleOpenCreateModal}
+              className="flex items-center gap-2 px-3 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 font-medium text-xs border border-slate-700 transition cursor-pointer"
+            >
+              <Plus className="h-4 w-4" />
+              <span>Nova Empresa</span>
+            </button>
+          )}
+        </div>
+      </div>
+
+      {/* Informativo Servidor Master & Automação BGP */}
+      <div className="p-4 rounded-xl bg-gradient-to-r from-cyan-950/40 to-slate-900 border border-cyan-800/40 text-xs text-slate-300 flex items-start gap-3 shadow-md">
+        <Server className="h-5 w-5 text-cyan-400 shrink-0 mt-0.5" />
+        <div>
+          <span className="font-semibold text-cyan-200">Gerenciamento Integrado ao Servidor Master:</span>
+          <p className="text-slate-400 mt-0.5">
+            O <strong>ASN Oficial</strong> configurado abaixo é injetado automaticamente em todo o sistema NetPulse: ele substitui qualquer valor genérico nos scripts de remediação de roteadores (Huawei, MikroTik, Datacom), orienta o diagnóstico inteligente de BGP e alimenta a validação de rotas RPKI.
+          </p>
         </div>
       </div>
 
@@ -223,11 +245,16 @@ export const TenantManager: React.FC = () => {
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
         <div className="p-4 rounded-xl bg-slate-900/60 border border-slate-800 flex items-center justify-between">
           <div>
-            <p className="text-[11px] font-medium text-slate-400 uppercase tracking-wider">Empresas Cadastradas</p>
-            <p className="text-2xl font-bold text-white mt-1">{totalTenants}</p>
+            <p className="text-[11px] font-medium text-slate-400 uppercase tracking-wider">ASN Oficial da Empresa</p>
+            <p className="text-2xl font-bold font-mono text-cyan-300 mt-1">
+              {primaryTenant?.asn ? `AS${primaryTenant.asn}` : 'Não Definido'}
+            </p>
+            <p className="text-[10px] text-slate-400 mt-0.5 truncate max-w-[180px]">
+              {primaryTenant?.name || 'Sua Empresa'}
+            </p>
           </div>
           <div className="p-3 rounded-xl bg-cyan-500/10 text-cyan-400">
-            <Building2 className="h-5 w-5" />
+            <Network className="h-5 w-5" />
           </div>
         </div>
 
@@ -430,7 +457,7 @@ export const TenantManager: React.FC = () => {
             <div className="flex items-center justify-between border-b border-slate-800 pb-3">
               <h2 className="text-base font-bold text-white flex items-center gap-2">
                 <Building2 className="h-5 w-5 text-cyan-400" />
-                <span>{editingTenant ? 'Editar Empresa Cliente' : 'Nova Empresa Cliente'}</span>
+                <span>{editingTenant ? 'Configurações da Empresa & ASN Oficial' : 'Nova Empresa'}</span>
               </h2>
               <button onClick={() => setIsModalOpen(false)} className="text-slate-400 hover:text-white text-lg">
                 &times;
@@ -450,7 +477,7 @@ export const TenantManager: React.FC = () => {
                 <input
                   type="text"
                   required
-                  placeholder="Ex: Provedor Conexão Fibra"
+                  placeholder="Ex: Sol Provedor de Internet"
                   value={formData.name}
                   onChange={(e) => setFormData({ ...formData, name: e.target.value })}
                   className="w-full bg-slate-950 border border-slate-800 rounded-xl p-2.5 text-slate-200 focus:outline-hidden focus:border-cyan-500"
@@ -465,9 +492,12 @@ export const TenantManager: React.FC = () => {
                     required
                     placeholder="Ex: 267943"
                     value={formData.asn}
-                    onChange={(e) => setFormData({ ...formData, asn: e.target.value })}
+                    onChange={(e) => setFormData({ ...formData, asn: e.target.value.replace(/[^0-9]/g, '') })}
                     className="w-full bg-slate-950 border border-slate-800 rounded-xl p-2.5 text-slate-200 font-mono focus:outline-hidden focus:border-cyan-500"
                   />
+                  <p className="text-[10px] text-cyan-400 mt-0.5">
+                    Utilizado na auditoria dos roteadores e políticas BGP.
+                  </p>
                 </div>
 
                 <div>

@@ -52,6 +52,7 @@ func NewRouter(
 	licenseCtrl := NewLicenseController(licenseMgr, store)
 
 	devCtrl := NewDeviceController(store, engine)
+	devCtrl.SetTenantStore(tenantStore)
 	devCtrl.SetLicenseManager(licenseMgr)
 	telCtrl := NewTelemetryController(engine, store, tenantStore)
 	routesCtrl := NewRoutesController(store, trafficSvc, auditStore)

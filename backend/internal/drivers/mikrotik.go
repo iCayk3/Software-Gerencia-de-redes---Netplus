@@ -26,9 +26,9 @@ func NewMikrotikV7Driver(device *models.Device, client *sshclient.SSHClient) *Mi
 	return &MikrotikDriver{device: device, client: client, version: 7}
 }
 
-func (d *MikrotikDriver) AuditCompliance() (*models.DeviceComplianceAudit, error) {
+func (d *MikrotikDriver) AuditCompliance(expectedASN string) (*models.DeviceComplianceAudit, error) {
 	ins := compliance.NewInspector()
-	return ins.AuditDevice(d.device, d)
+	return ins.AuditDevice(d.device, d, expectedASN)
 }
 
 func (d *MikrotikDriver) TestConnection() (models.SSHTestResult, error) {

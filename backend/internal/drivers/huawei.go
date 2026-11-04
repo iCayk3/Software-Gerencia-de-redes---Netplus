@@ -26,9 +26,9 @@ func NewHuaweiDriver(device *models.Device, client *sshclient.SSHClient) *Huawei
 	return &HuaweiDriver{device: device, client: client}
 }
 
-func (d *HuaweiDriver) AuditCompliance() (*models.DeviceComplianceAudit, error) {
+func (d *HuaweiDriver) AuditCompliance(expectedASN string) (*models.DeviceComplianceAudit, error) {
 	ins := compliance.NewInspector()
-	return ins.AuditDevice(d.device, d)
+	return ins.AuditDevice(d.device, d, expectedASN)
 }
 
 func (d *HuaweiDriver) TestConnection() (models.SSHTestResult, error) {
