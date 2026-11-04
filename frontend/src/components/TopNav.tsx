@@ -8,13 +8,11 @@ import {
   Terminal,
   Radio,
   Bell,
-  Cpu,
   Wifi,
   Globe,
   Menu,
   ShieldCheck,
   Search,
-  SlidersHorizontal,
   Building2,
   Users,
   Layers,
@@ -22,7 +20,6 @@ import {
 } from 'lucide-react'
 import type { MainSectionType } from './Sidebar'
 import type { HealthResponse } from '../services/api'
-import { useAuth } from '../context/AuthContext'
 
 export interface SubTabItem {
   id: string
@@ -36,12 +33,12 @@ interface TopNavProps {
   activeSubTab: string
   onSelectSubTab: (subTabId: string) => void
   activeAlertsCount?: number
-  health: HealthResponse | null
+  health?: HealthResponse | null
   onOpenMobileSidebar: () => void
   onOpenAlerts: () => void
   onOpenSearch: () => void
-  density: 'comfortable' | 'compact'
-  onToggleDensity: () => void
+  density?: 'comfortable' | 'compact'
+  onToggleDensity?: () => void
 }
 
 export const TopNav: React.FC<TopNavProps> = ({
@@ -49,14 +46,10 @@ export const TopNav: React.FC<TopNavProps> = ({
   activeSubTab,
   onSelectSubTab,
   activeAlertsCount = 0,
-  health,
   onOpenMobileSidebar,
   onOpenAlerts,
   onOpenSearch,
-  density,
-  onToggleDensity,
 }) => {
-  const { user, isSuperAdmin, tenants, activeTenantId, currentTenant, setActiveTenant } = useAuth()
 
   // Configuração das sub-abas dinâmicas de cada seção
   const sectionSubTabs: Record<MainSectionType, { title: string; subtitle: string; tabs: SubTabItem[] }> = {
@@ -173,48 +166,10 @@ export const TopNav: React.FC<TopNavProps> = ({
 
           {/* Right Status Controls */}
           <div className="flex items-center gap-2.5 sm:gap-3">
-            {/* Multi-Tenant Switcher (SuperAdmin) or Client Company Badge */}
-            {isSuperAdmin ? (
-              <div className="flex items-center gap-1.5 bg-slate-800/90 border border-slate-700/80 rounded-xl px-2.5 py-1 text-xs shadow-sm">
-                <Building2 className="h-3.5 w-3.5 text-cyan-400 shrink-0" />
-                <span className="text-slate-400 hidden xl:inline text-[11px] font-medium">Empresa:</span>
-                <select
-                  value={activeTenantId || ''}
-                  onChange={(e) => setActiveTenant(e.target.value || null)}
-                  className="bg-transparent text-white font-medium text-xs focus:outline-none cursor-pointer pr-1"
-                  title="Filtrar visão do sistema por empresa cliente"
-                >
-                  <option value="" className="bg-slate-900 text-cyan-300">
-                    🌐 Visão Global (Todas)
-                  </option>
-                  {tenants.map((t) => (
-                    <option key={t.id} value={t.id} className="bg-slate-900 text-slate-100">
-                      🏢 {t.name} {t.asn ? `(AS${t.asn})` : ''}
-                    </option>
-                  ))}
-                </select>
-              </div>
-            ) : currentTenant ? (
-              <div
-                className="flex items-center gap-1.5 bg-cyan-950/60 border border-cyan-800/80 text-cyan-300 rounded-xl px-2.5 py-1 text-xs font-medium"
-                title={`Empresa vinculada: ${currentTenant.name}`}
-              >
-                <Building2 className="h-3.5 w-3.5 text-cyan-400 shrink-0" />
-                <span className="truncate max-w-[130px] sm:max-w-[170px]">
-                  {currentTenant.name}
-                </span>
-                {currentTenant.asn && (
-                  <span className="text-[10px] font-mono px-1.5 py-0.2 rounded bg-cyan-900/60 text-cyan-200 border border-cyan-700/60">
-                    AS{currentTenant.asn}
-                  </span>
-                )}
-              </div>
-            ) : null}
-
             {/* Quick Search Ctrl + K */}
             <button
               onClick={onOpenSearch}
-              className="flex items-center gap-2 px-2.5 py-1.5 rounded-xl bg-slate-800/80 hover:bg-slate-700/80 text-slate-300 hover:text-white border border-slate-700/70 text-xs transition shadow-sm cursor-pointer"
+              className="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-slate-800/80 hover:bg-slate-700/80 text-slate-300 hover:text-white border border-slate-700/70 text-xs transition shadow-sm cursor-pointer"
               title="Buscar equipamento, AS, link ou ferramenta (Ctrl + K)"
             >
               <Search className="h-3.5 w-3.5 text-cyan-400" />
@@ -222,26 +177,6 @@ export const TopNav: React.FC<TopNavProps> = ({
               <kbd className="hidden sm:inline-flex items-center gap-0.5 px-1.5 py-0.2 text-[10px] font-mono text-slate-400 bg-slate-900 rounded border border-slate-700">
                 Ctrl K
               </kbd>
-            </button>
-
-            {/* Density Mode Toggle */}
-            <button
-              onClick={onToggleDensity}
-              className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl text-xs font-medium border transition cursor-pointer ${
-                density === 'compact'
-                  ? 'bg-cyan-500/10 border-cyan-500/30 text-cyan-300 shadow-sm shadow-cyan-500/10'
-                  : 'bg-slate-800/60 border-slate-700/60 text-slate-400 hover:text-white'
-              }`}
-              title={
-                density === 'compact'
-                  ? 'Modo Compacto Ativo (Clique para Confortável)'
-                  : 'Modo Confortável Ativo (Clique para Compacto)'
-              }
-            >
-              <SlidersHorizontal className="h-3.5 w-3.5" />
-              <span className="hidden lg:inline text-[11px]">
-                {density === 'compact' ? 'Compacto' : 'Conforto'}
-              </span>
             </button>
 
             {/* Active Alerts Pill Button */}
@@ -253,56 +188,6 @@ export const TopNav: React.FC<TopNavProps> = ({
                 <Bell className="h-3.5 w-3.5 text-rose-400" />
                 <span>{activeAlertsCount} Alerta{activeAlertsCount > 1 ? 's' : ''}</span>
               </button>
-            )}
-
-            {/* Zero Flap Security Tag (in BGP section) */}
-            {(activeSection === 'bgp' || activeSection === 'traffic') && (
-              <span className="hidden xl:inline-flex items-center gap-1 text-[11px] font-semibold px-2.5 py-1.5 rounded-xl bg-emerald-950/80 text-emerald-300 border border-emerald-800/80">
-                <ShieldCheck className="h-3.5 w-3.5 text-emerald-400" />
-                <span>Zero Flap</span>
-              </span>
-            )}
-
-            {/* Engine Tag */}
-            {health && (
-              <div className="hidden 2xl:flex items-center gap-1.5 text-xs text-slate-400 px-2.5 py-1.5 rounded-xl bg-slate-800/60 border border-slate-700/60 font-mono text-[11px]">
-                <Cpu className="h-3 w-3 text-cyan-400" />
-                <span>{health.go_version || 'Go 1.27'}</span>
-              </div>
-            )}
-
-            {/* Authenticated User Role Badge */}
-            {user && (
-              <div
-                className={`hidden sm:flex items-center gap-1.5 text-xs font-semibold px-2.5 py-1.5 rounded-xl border ${
-                  isSuperAdmin
-                    ? 'bg-amber-950/80 text-amber-300 border-amber-800/80'
-                    : user.role === 'admin'
-                    ? 'bg-red-950/80 text-red-300 border-red-800/80'
-                    : user.role === 'noc_operator'
-                    ? 'bg-cyan-950/80 text-cyan-300 border-cyan-800/80'
-                    : 'bg-emerald-950/80 text-emerald-300 border-emerald-800/80'
-                }`}
-                title={`Logado como ${user.name} (${user.email})`}
-              >
-                <span
-                  className={`h-1.5 w-1.5 rounded-full ${
-                    isSuperAdmin
-                      ? 'bg-amber-400 animate-pulse'
-                      : user.role === 'admin'
-                      ? 'bg-red-400 animate-pulse'
-                      : user.role === 'noc_operator'
-                      ? 'bg-cyan-400 animate-pulse'
-                      : 'bg-emerald-400'
-                  }`}
-                />
-                <span className="truncate max-w-[120px]">{user.name}</span>
-                {isSuperAdmin && (
-                  <span className="text-[9px] bg-amber-500/20 text-amber-300 px-1 py-0.2 rounded border border-amber-500/30">
-                    SUPER
-                  </span>
-                )}
-              </div>
             )}
           </div>
         </div>
