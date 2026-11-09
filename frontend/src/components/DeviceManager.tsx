@@ -42,6 +42,8 @@ interface DeviceManagerProps {
   onSelectDeviceForTerminal?: (device: Device) => void
   onSelectDeviceForBGP?: (device: Device) => void
   density?: 'comfortable' | 'compact'
+  initialViewMode?: 'cards' | 'map'
+  onViewModeChange?: (mode: 'cards' | 'map') => void
 }
 
 const VENDOR_OPTIONS: { id: VendorType; label: string; badge: string; color: string }[] = [
@@ -62,6 +64,8 @@ export const DeviceManager: React.FC<DeviceManagerProps> = ({
   onSelectDeviceForTerminal,
   onSelectDeviceForBGP,
   density = 'comfortable',
+  initialViewMode = 'cards',
+  onViewModeChange,
 }) => {
   const { isSuperAdmin, tenants, activeTenantId } = useAuth()
 
@@ -70,7 +74,18 @@ export const DeviceManager: React.FC<DeviceManagerProps> = ({
   const [error, setError] = useState<string | null>(null)
 
   // View Mode: 'cards' | 'map'
-  const [viewMode, setViewMode] = useState<'cards' | 'map'>('cards')
+  const [viewMode, setViewMode] = useState<'cards' | 'map'>(initialViewMode)
+
+  useEffect(() => {
+    if (initialViewMode) {
+      setViewMode(initialViewMode)
+    }
+  }, [initialViewMode])
+
+  const handleSwitchView = (mode: 'cards' | 'map') => {
+    setViewMode(mode)
+    onViewModeChange?.(mode)
+  }
 
   // Modal State
   const [isModalOpen, setIsModalOpen] = useState(false)
@@ -326,7 +341,7 @@ export const DeviceManager: React.FC<DeviceManagerProps> = ({
           <div className="flex items-center bg-[#161922] p-1 rounded-xl border border-[#242836]">
             <button
               type="button"
-              onClick={() => setViewMode('cards')}
+              onClick={() => handleSwitchView('cards')}
               className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition cursor-pointer ${
                 viewMode === 'cards'
                   ? 'bg-[#25334D] text-[#93B4E6] border border-[#3B5B8C]/40 shadow-xs'
@@ -338,7 +353,7 @@ export const DeviceManager: React.FC<DeviceManagerProps> = ({
             </button>
             <button
               type="button"
-              onClick={() => setViewMode('map')}
+              onClick={() => handleSwitchView('map')}
               className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition cursor-pointer ${
                 viewMode === 'map'
                   ? 'bg-[#25334D] text-[#93B4E6] border border-[#3B5B8C]/40 shadow-xs'

@@ -98,6 +98,7 @@ function AppContent() {
       bgp: 'BGP & Engenharia de Tráfego',
       ospf: 'Protocolo OSPF',
       devices: 'Equipamentos & Borda',
+      map: 'Mapa do Backbone',
       telemetry: 'NOC & Telemetria',
       diagnostics: 'Ferramentas de Rede',
       audit: 'Trilha de Auditoria',
@@ -160,6 +161,9 @@ function AppContent() {
       case 'devices':
         setActiveSubTab('inventory')
         break
+      case 'map':
+        setActiveSubTab('map')
+        break
       case 'telemetry':
         setActiveSubTab('overview')
         break
@@ -221,6 +225,7 @@ function AppContent() {
       {(navStyle === 'sidebar' || navStyle === 'both' || isMobileSidebarOpen) && (
         <Sidebar
           activeSection={activeSection}
+          activeSubTab={activeSubTab}
           onSelectSection={handleSectionChange}
           activeAlertsCount={activeAlertsCount}
           isCollapsed={isSidebarCollapsed}
@@ -290,11 +295,22 @@ function AppContent() {
               />
             )}
 
-            {/* ================= SEÇÃO 2: EQUIPAMENTOS & INFRAESTRUTURA ================= */}
-            {activeSection === 'devices' && (
+            {/* ================= SEÇÃO: EQUIPAMENTOS, BACKBONE & MAPA ================= */}
+            {(activeSection === 'devices' || activeSection === 'map') && (
               <>
                 {activeSubTab === 'inventory' && (
                   <DeviceManager
+                    initialViewMode="cards"
+                    onViewModeChange={(mode) => setActiveSubTab(mode === 'map' ? 'map' : 'inventory')}
+                    onSelectDeviceForTerminal={handleSelectDeviceForTerminal}
+                    onSelectDeviceForBGP={handleSelectDeviceForBGP}
+                    density={density}
+                  />
+                )}
+                {activeSubTab === 'map' && (
+                  <DeviceManager
+                    initialViewMode="map"
+                    onViewModeChange={(mode) => setActiveSubTab(mode === 'map' ? 'map' : 'inventory')}
                     onSelectDeviceForTerminal={handleSelectDeviceForTerminal}
                     onSelectDeviceForBGP={handleSelectDeviceForBGP}
                     density={density}
@@ -369,6 +385,7 @@ function AppContent() {
       {(navStyle === 'dock' || navStyle === 'both') && (
         <NetPulseDock
           activeSection={activeSection}
+          activeSubTab={activeSubTab}
           onSelectSection={handleSectionChange}
           activeAlertsCount={activeAlertsCount}
           onOpenSearch={() => setIsCommandPaletteOpen(true)}

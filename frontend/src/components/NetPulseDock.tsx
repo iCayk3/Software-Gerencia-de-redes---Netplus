@@ -11,6 +11,7 @@ import {
   KeyRound,
   Search,
   UserCog,
+  MapPin,
 } from 'lucide-react'
 import { Dock, DockIcon, DockItem, DockLabel } from '@/components/ui/dock'
 import type { MainSectionType } from './Sidebar'
@@ -18,7 +19,8 @@ import { useAuth } from '../context/AuthContext'
 
 interface NetPulseDockProps {
   activeSection: MainSectionType
-  onSelectSection: (section: MainSectionType) => void
+  activeSubTab?: string
+  onSelectSection: (section: MainSectionType, subTab?: string) => void
   activeAlertsCount?: number
   onOpenSearch?: () => void
   onOpenProfile?: () => void
@@ -30,10 +32,12 @@ interface DockNavItem {
   icon: React.ComponentType<{ className?: string }>
   badge?: number
   superAdminOnly?: boolean
+  defaultSubTab?: string
 }
 
 export const NetPulseDock: React.FC<NetPulseDockProps> = ({
   activeSection,
+  activeSubTab,
   onSelectSection,
   activeAlertsCount = 0,
   onOpenSearch,
@@ -56,6 +60,13 @@ export const NetPulseDock: React.FC<NetPulseDockProps> = ({
       id: 'devices',
       label: 'Equipamentos & Borda',
       icon: Server,
+      defaultSubTab: 'inventory',
+    },
+    {
+      id: 'map',
+      label: 'Mapa do Backbone',
+      icon: MapPin,
+      defaultSubTab: 'map',
     },
     {
       id: 'telemetry',
@@ -113,13 +124,18 @@ export const NetPulseDock: React.FC<NetPulseDockProps> = ({
       >
         {/* Itens Principais */}
         {mainItems.map((item) => {
-          const isActive = activeSection === item.id
+          const isActive =
+            item.id === 'map'
+              ? activeSection === 'map' || (activeSection === 'devices' && activeSubTab === 'map')
+              : item.id === 'devices'
+                ? activeSection === 'devices' && activeSubTab !== 'map'
+                : activeSection === item.id
           const Icon = item.icon
 
           return (
             <DockItem
               key={item.id}
-              onClick={() => onSelectSection(item.id)}
+              onClick={() => onSelectSection(item.id, item.defaultSubTab)}
               className={`aspect-square rounded-2xl transition-all duration-100 border ${
                 isActive
                   ? 'bg-[#25334D] border-[#3B5B8C] text-[#93B4E6] shadow-lg shadow-[#4A72B2]/20 ring-1 ring-[#4A72B2]/50'

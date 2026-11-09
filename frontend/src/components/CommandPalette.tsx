@@ -18,7 +18,8 @@ import {
   X,
   CornerDownLeft,
   Layers,
-  KeyRound
+  KeyRound,
+  MapPin,
 } from 'lucide-react'
 import type { MainSectionType } from './Sidebar'
 import type { Device } from '../services/api'
@@ -199,6 +200,19 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({
         badgeColor: 'bg-blue-500/10 text-blue-400 border-blue-500/30',
         onSelect: () => {
           onNavigate('devices', 'inventory')
+          onClose()
+        },
+      },
+      {
+        id: 'nav-map',
+        title: 'Mapa Geográfico do Backbone',
+        subtitle: 'Visualização geográfica de roteadores BGP, PEs, Switches e OLTs',
+        category: 'Navegação',
+        icon: MapPin,
+        badge: 'Mapa',
+        badgeColor: 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30',
+        onSelect: () => {
+          onNavigate('map', 'map')
           onClose()
         },
       },

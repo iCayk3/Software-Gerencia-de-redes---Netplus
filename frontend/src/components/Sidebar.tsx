@@ -16,11 +16,12 @@ import {
   KeyRound,
   X,
   UserCog,
+  MapPin,
 } from 'lucide-react'
 import type { HealthResponse } from '../services/api'
 import { useAuth } from '../context/AuthContext'
 
-export type MainSectionType = 'bgp' | 'ospf' | 'devices' | 'telemetry' | 'diagnostics' | 'audit' | 'tenants' | 'users' | 'traffic' | 'license'
+export type MainSectionType = 'bgp' | 'ospf' | 'devices' | 'map' | 'telemetry' | 'diagnostics' | 'audit' | 'tenants' | 'users' | 'traffic' | 'license'
 
 interface NavSectionItem {
   id: MainSectionType
@@ -34,7 +35,8 @@ interface NavSectionItem {
 
 interface SidebarProps {
   activeSection: MainSectionType
-  onSelectSection: (section: MainSectionType) => void
+  activeSubTab?: string
+  onSelectSection: (section: MainSectionType, subTab?: string) => void
   activeAlertsCount?: number
   isCollapsed: boolean
   onToggleCollapse: () => void
@@ -47,6 +49,7 @@ interface SidebarProps {
 
 export const Sidebar: React.FC<SidebarProps> = ({
   activeSection,
+  activeSubTab,
   onSelectSection,
   activeAlertsCount = 0,
   isCollapsed,
@@ -83,6 +86,14 @@ export const Sidebar: React.FC<SidebarProps> = ({
       description: 'Inventário, bordas BGP e SSH',
       icon: Server,
       defaultSubTab: 'inventory',
+    },
+    {
+      id: 'map',
+      label: 'Mapa do Backbone',
+      shortLabel: 'Mapa',
+      description: 'Geolocalização de SW, BGP, PE e OLTs',
+      icon: MapPin,
+      defaultSubTab: 'map',
     },
     {
       id: 'telemetry',
@@ -177,14 +188,19 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
         {navSections.map((item) => {
           const Icon = item.icon
-          const isActive = activeSection === item.id
+          const isActive =
+            item.id === 'map'
+              ? activeSection === 'map' || (activeSection === 'devices' && activeSubTab === 'map')
+              : item.id === 'devices'
+                ? activeSection === 'devices' && activeSubTab !== 'map'
+                : activeSection === item.id
           const hasBadge = item.badge !== undefined && item.badge > 0
 
           return (
             <button
               key={item.id}
               onClick={() => {
-                onSelectSection(item.id)
+                onSelectSection(item.id, item.defaultSubTab)
                 onCloseMobile()
               }}
               title={isCollapsed ? item.label : undefined}

@@ -18,6 +18,7 @@ import {
   Layers,
   KeyRound,
   UserCog,
+  MapPin,
 } from 'lucide-react'
 import type { MainSectionType } from './Sidebar'
 import type { HealthResponse } from '../services/api'
@@ -93,6 +94,16 @@ export const TopNav: React.FC<TopNavProps> = ({
       title: 'Equipamentos & Infraestrutura de Rede',
       subtitle: 'Gerenciamento de roteadores, switches, credenciais SSH, bordas BGP e terminal remoto',
       tabs: [
+        { id: 'inventory', label: 'Inventário de Equipamentos', icon: Server },
+        { id: 'map', label: 'Mapa do Backbone', icon: MapPin },
+        { id: 'terminal', label: 'Terminal SSH Interativo', icon: Terminal },
+      ],
+    },
+    map: {
+      title: 'Mapa Geográfico do Backbone',
+      subtitle: 'Visualização e geolocalização de roteadores BGP, PEs, Switches e OLTs ópticas',
+      tabs: [
+        { id: 'map', label: 'Mapa do Backbone', icon: MapPin },
         { id: 'inventory', label: 'Inventário de Equipamentos', icon: Server },
         { id: 'terminal', label: 'Terminal SSH Interativo', icon: Terminal },
       ],
