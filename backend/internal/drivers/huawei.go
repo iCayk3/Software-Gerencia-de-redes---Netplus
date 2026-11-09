@@ -158,7 +158,6 @@ func (d *HuaweiDriver) ApplyBGPPrepend(req models.PrependApplyRequest) error {
 				applyCommCmd,
 				"commit",
 				"return",
-				"refresh bgp all export",
 			}
 
 			if BGPManualExecutionOnly {
@@ -187,7 +186,7 @@ func (d *HuaweiDriver) ApplyBGPPrepend(req models.PrependApplyRequest) error {
 				fmt.Sprintf("apply community %s additive", strings.Join(updatedComms, " ")),
 			)
 		}
-		cmds = append(cmds, "commit", "return", "refresh bgp all export")
+		cmds = append(cmds, "commit", "return")
 
 		if BGPManualExecutionOnly {
 			log.Printf("[MODO MANUAL BGP - PREPEND] Comandos gerados para todos os nós para %s: %s", req.PeerIP, strings.Join(cmds, " ; "))

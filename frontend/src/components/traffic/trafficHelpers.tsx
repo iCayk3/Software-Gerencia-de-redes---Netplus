@@ -163,16 +163,33 @@ export const renderASLogo = (meta: ASMetadata, peerName: string) => {
 }
 
 export const copyToClipboard = (text: string, onCopied?: () => void) => {
-  if (navigator.clipboard) {
-    navigator.clipboard.writeText(text).then(onCopied).catch(() => {})
-  } else {
+  if (!text) return
+
+  // Fast synchronous copy (no IPC delays or permission prompt hangs)
+  try {
     const el = document.createElement('textarea')
     el.value = text
+    el.setAttribute('readonly', '')
+    el.style.position = 'fixed'
+    el.style.left = '-9999px'
+    el.style.top = '-9999px'
+    el.style.opacity = '0'
     document.body.appendChild(el)
+    el.focus()
     el.select()
     document.execCommand('copy')
     document.body.removeChild(el)
-    if (onCopied) onCopied()
+  } catch {
+    // Ignore fallback error
+  }
+
+  // Non-blocking modern clipboard API as background backup
+  if (navigator?.clipboard?.writeText) {
+    navigator.clipboard.writeText(text).catch(() => {})
+  }
+
+  if (onCopied) {
+    onCopied()
   }
 }
 
@@ -424,7 +441,6 @@ export const getPrependCliPreviewForDevice = (
       commLine,
       'commit',
       'return',
-      'refresh bgp all export',
     ].join('\n')
   }
 
@@ -539,7 +555,6 @@ export const getBatchPrependCliPreviewForDevice = (
 
     lines.push('commit')
     lines.push('return')
-    lines.push('refresh bgp all export')
 
     return lines.join('\n')
   }

@@ -590,7 +590,6 @@ func buildPrependCLI(dev *models.Device, req models.PrependApplyRequest) ([]stri
 			fmt.Sprintf("apply community 267943:1000 %s 1:40000 1:41000 1:42000 1:43000 additive", comm),
 			"commit",
 			"return",
-			"refresh bgp all export",
 		}
 		script := fmt.Sprintf("# [%s] %s (Huawei VRP)\n%s", devName, devHost, strings.Join(cmds, "\n"))
 		return cmds, script

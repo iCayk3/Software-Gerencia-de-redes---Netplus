@@ -12,7 +12,7 @@ import {
   Info,
 } from 'lucide-react'
 import type { Device } from '../../services/api'
-import { getBatchPrependCliPreviewForDevice, type BatchPrependTarget } from './trafficHelpers'
+import { getBatchPrependCliPreviewForDevice, copyToClipboard, type BatchPrependTarget } from './trafficHelpers'
 
 export interface BatchPrependModalProps {
   isOpen: boolean
@@ -60,9 +60,10 @@ export const BatchPrependModal: React.FC<BatchPrependModalProps> = ({
 
   const handleCopy = () => {
     if (!batchCliScript) return
-    navigator.clipboard.writeText(batchCliScript)
-    setCopied(true)
-    setTimeout(() => setCopied(false), 2000)
+    copyToClipboard(batchCliScript, () => {
+      setCopied(true)
+      setTimeout(() => setCopied(false), 2000)
+    })
   }
 
   const handleExecute = async () => {
@@ -402,7 +403,7 @@ export const BatchPrependModal: React.FC<BatchPrependModalProps> = ({
               )}
             </button>
           </div>
-          <div className="bg-[#13151D] border border-[#242836] p-3.5 rounded-xl font-mono text-[11px] text-[#2E9E6B] leading-relaxed whitespace-pre-wrap select-all max-h-48 overflow-y-auto shadow-inner">
+          <div className="bg-[#13151D] border border-[#242836] p-3.5 rounded-xl font-mono text-[11px] text-[#2E9E6B] leading-relaxed whitespace-pre-wrap select-text max-h-48 overflow-y-auto shadow-inner">
             {batchCliScript}
           </div>
         </div>

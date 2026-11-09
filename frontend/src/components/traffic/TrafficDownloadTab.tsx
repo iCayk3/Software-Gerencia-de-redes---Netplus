@@ -99,6 +99,9 @@ export const TrafficDownloadTab: React.FC<TrafficDownloadTabProps> = ({
   // Automatic perception of the Central BGP Master Router
   const masterDevice = useMemo(() => getBGPMasterDevice(devices), [devices])
 
+  // Memoized targets array for efficient renders and smooth interactions
+  const targetsArray = useMemo(() => Array.from(selectedTargets.values()), [selectedTargets])
+
   // Selection handlers
   const toggleTarget = (target: BatchPrependTarget) => {
     setSelectedTargets((prev) => {
@@ -1253,7 +1256,7 @@ export const TrafficDownloadTab: React.FC<TrafficDownloadTabProps> = ({
           isOpen={isBatchModalOpen}
           mode={batchModalMode}
           onClose={() => setIsBatchModalOpen(false)}
-          targets={Array.from(selectedTargets.values())}
+          targets={targetsArray}
           devices={devices}
           masterDevice={masterDevice}
           onApplyBatch={async (targets, prependCount, isBlock) => {

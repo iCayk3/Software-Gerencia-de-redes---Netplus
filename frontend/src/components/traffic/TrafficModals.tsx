@@ -1242,10 +1242,10 @@ export const TrafficModals: React.FC<TrafficModalsProps> = ({
               <div className="p-3 rounded-xl bg-slate-950 border border-slate-800 space-y-1">
                 <div className="flex items-center gap-2 text-indigo-300 font-semibold text-[11px]">
                   <Zap className="h-3.5 w-3.5" />
-                  <span>Aplicação Segura via BGP Route-Refresh (RFC 2918)</span>
+                  <span>Aplicação Segura via BGP Route-Policy (RFC 2918)</span>
                 </div>
                 <p className="text-[11px] text-slate-400">
-                  O comando <code>refresh bgp all export</code> propaga as comunidades sem derrubar a
+                  As comunidades de anúncio são atualizadas no nó do BGP Master sem derrubar a
                   sessão BGP (Zero-Flap).
                 </p>
               </div>
@@ -1322,7 +1322,7 @@ export const TrafficModals: React.FC<TrafficModalsProps> = ({
                   </button>
                 </div>
 
-                <div className="bg-slate-950 border border-slate-800 p-3.5 rounded-xl font-mono text-[11px] text-emerald-400 leading-relaxed whitespace-pre-wrap select-all max-h-52 overflow-y-auto shadow-inner">
+                <div className="bg-slate-950 border border-slate-800 p-3.5 rounded-xl font-mono text-[11px] text-emerald-400 leading-relaxed whitespace-pre-wrap select-text max-h-52 overflow-y-auto shadow-inner">
                   {prependCliPreview}
                 </div>
               </div>
