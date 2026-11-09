@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react'
+import React, { useState, useMemo, useCallback } from 'react'
 import {
   Server,
   LayoutGrid,
@@ -101,6 +101,25 @@ export const TrafficDownloadTab: React.FC<TrafficDownloadTabProps> = ({
 
   // Memoized targets array for efficient renders and smooth interactions
   const targetsArray = useMemo(() => Array.from(selectedTargets.values()), [selectedTargets])
+
+  // Memoized filtered AS groups for maximum responsiveness with multiple blocks
+  const filteredGroups = useMemo(() => {
+    const groups =
+      prependOverview?.as_groups && prependOverview.as_groups.length > 0
+        ? prependOverview.as_groups
+        : []
+    const q = prependSearch.trim().toLowerCase()
+    if (!q) return groups
+    return groups.filter((grp) => {
+      return (
+        grp.group_name.toLowerCase().includes(q) ||
+        grp.remote_as.includes(q) ||
+        grp.community_base.includes(q) ||
+        grp.peer_ips.some((ip) => ip.toLowerCase().includes(q)) ||
+        grp.prefixes.some((p) => p.prefix.toLowerCase().includes(q))
+      )
+    })
+  }, [prependOverview?.as_groups, prependSearch])
 
   // Selection handlers
   const toggleTarget = (target: BatchPrependTarget) => {
@@ -258,9 +277,23 @@ export const TrafficDownloadTab: React.FC<TrafficDownloadTabProps> = ({
     })
   }
 
-  const clearSelection = () => {
+  const clearSelection = useCallback(() => {
     setSelectedTargets(new Map())
-  }
+  }, [])
+
+  const handleCloseBatchModal = useCallback(() => {
+    setIsBatchModalOpen(false)
+  }, [])
+
+  const handleApplyBatchModal = useCallback(
+    async (targets: BatchPrependTarget[], prependCount: number, isBlock: boolean) => {
+      if (onApplyBatchPrepend) {
+        await onApplyBatchPrepend(targets, prependCount, isBlock)
+        clearSelection()
+      }
+    },
+    [onApplyBatchPrepend, clearSelection]
+  )
   return (
     <div className={`space-y-6 ${isDockActive ? 'pb-36 sm:pb-44' : 'pb-16'}`}>
       {/* Controls Bar for Download */}
@@ -469,42 +502,21 @@ export const TrafficDownloadTab: React.FC<TrafficDownloadTabProps> = ({
           {/* ================= MODE 1: CARDS POR AS / OPERADORA ================= */}
           {downloadViewMode === 'cards' ? (
             <div>
-              {(() => {
-                const groups =
-                  prependOverview.as_groups && prependOverview.as_groups.length > 0
-                    ? prependOverview.as_groups
-                    : []
-
-                const filtered = groups.filter((grp) => {
-                  const q = prependSearch.toLowerCase()
-                  return (
-                    grp.group_name.toLowerCase().includes(q) ||
-                    grp.remote_as.includes(q) ||
-                    grp.community_base.includes(q) ||
-                    grp.peer_ips.some((ip) => ip.toLowerCase().includes(q)) ||
-                    grp.prefixes.some((p) => p.prefix.toLowerCase().includes(q))
-                  )
-                })
-
-                if (filtered.length === 0) {
-                  return (
-                    <div className="p-12 text-center text-slate-400 text-xs bg-slate-900/60 border border-slate-800 rounded-2xl">
-                      <Globe className="h-8 w-8 text-slate-600 mx-auto mb-2" />
-                      <p className="font-semibold text-slate-300">
-                        Nenhum AS ou operadora encontrado
-                      </p>
-                      <p className="text-slate-500 mt-1">
-                        {groups.length === 0
-                          ? 'Não foram detectados grupos de AS ou comunidades configuradas neste roteador.'
-                          : 'Ajuste o filtro de busca ou alterne para a visualização em tabela detalhada.'}
-                      </p>
-                    </div>
-                  )
-                }
-
-                return (
-                  <div className={`grid grid-cols-1 lg:grid-cols-2 2xl:grid-cols-3 ${density === 'compact' ? 'gap-3.5' : 'gap-6'}`}>
-                    {filtered.map((grp) => {
+              {filteredGroups.length === 0 ? (
+                <div className="p-12 text-center text-slate-400 text-xs bg-slate-900/60 border border-slate-800 rounded-2xl">
+                  <Globe className="h-8 w-8 text-slate-600 mx-auto mb-2" />
+                  <p className="font-semibold text-slate-300">
+                    Nenhum AS ou operadora encontrado
+                  </p>
+                  <p className="text-slate-500 mt-1">
+                    {!prependOverview.as_groups || prependOverview.as_groups.length === 0
+                      ? 'Não foram detectados grupos de AS ou comunidades configuradas neste roteador.'
+                      : 'Ajuste o filtro de busca ou alterne para a visualização em tabela detalhada.'}
+                  </p>
+                </div>
+              ) : (
+                <div className={`grid grid-cols-1 lg:grid-cols-2 2xl:grid-cols-3 ${density === 'compact' ? 'gap-3.5' : 'gap-6'}`}>
+                  {filteredGroups.map((grp) => {
                       const meta = asMetadata[grp.remote_as]
                       const asTitle = meta?.alias || grp.group_name
                       const asImageUrl = meta?.image_url
@@ -899,10 +911,10 @@ export const TrafficDownloadTab: React.FC<TrafficDownloadTabProps> = ({
                           )}
                         </div>
                       </div>
-                    )})}
-                  </div>
-                )
-              })()}
+                    )
+                  })}
+                </div>
+              )}
             </div>
           ) : (
             /* ================= MODE 2: TABELA DETALHADA ================= */
@@ -1258,16 +1270,11 @@ export const TrafficDownloadTab: React.FC<TrafficDownloadTabProps> = ({
         <BatchPrependModal
           isOpen={isBatchModalOpen}
           mode={batchModalMode}
-          onClose={() => setIsBatchModalOpen(false)}
+          onClose={handleCloseBatchModal}
           targets={targetsArray}
           devices={devices}
           masterDevice={masterDevice}
-          onApplyBatch={async (targets, prependCount, isBlock) => {
-            if (onApplyBatchPrepend) {
-              await onApplyBatchPrepend(targets, prependCount, isBlock)
-              clearSelection()
-            }
-          }}
+          onApplyBatch={handleApplyBatchModal}
         />
       )}
     </div>
