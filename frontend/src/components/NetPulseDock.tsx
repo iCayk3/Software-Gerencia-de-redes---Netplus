@@ -106,7 +106,7 @@ export const NetPulseDock: React.FC<NetPulseDockProps> = ({
       aria-label="Menu Principal NetPulse Dock"
     >
       <Dock
-        className="items-center pb-2 bg-[#13151D]/95 border border-[#242836] shadow-2xl backdrop-blur-xl rounded-2xl px-4"
+        className="items-center pb-2 px-4"
         panelHeight={68}
         magnification={84}
         distance={140}

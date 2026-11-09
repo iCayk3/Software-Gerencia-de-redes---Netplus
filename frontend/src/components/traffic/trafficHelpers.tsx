@@ -165,29 +165,40 @@ export const renderASLogo = (meta: ASMetadata, peerName: string) => {
 export const copyToClipboard = (text: string, onCopied?: () => void) => {
   if (!text) return
 
-  // Fast synchronous copy (no IPC delays or permission prompt hangs)
+  // Modern async clipboard API: zero UI blocking, zero layout jumps
+  if (typeof navigator !== 'undefined' && navigator.clipboard?.writeText) {
+    navigator.clipboard
+      .writeText(text)
+      .then(() => {
+        if (onCopied) onCopied()
+      })
+      .catch(() => {
+        fallbackCopy(text, onCopied)
+      })
+    return
+  }
+
+  fallbackCopy(text, onCopied)
+}
+
+function fallbackCopy(text: string, onCopied?: () => void) {
   try {
     const el = document.createElement('textarea')
     el.value = text
     el.setAttribute('readonly', '')
     el.style.position = 'fixed'
-    el.style.left = '-9999px'
-    el.style.top = '-9999px'
+    el.style.top = '0'
+    el.style.left = '0'
+    el.style.width = '1px'
+    el.style.height = '1px'
     el.style.opacity = '0'
     document.body.appendChild(el)
-    el.focus()
     el.select()
     document.execCommand('copy')
     document.body.removeChild(el)
   } catch {
-    // Ignore fallback error
+    // Ignore error
   }
-
-  // Non-blocking modern clipboard API as background backup
-  if (navigator?.clipboard?.writeText) {
-    navigator.clipboard.writeText(text).catch(() => {})
-  }
-
   if (onCopied) {
     onCopied()
   }

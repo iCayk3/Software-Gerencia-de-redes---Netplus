@@ -119,8 +119,8 @@ const BatchPrependModalComponent: React.FC<BatchPrependModalProps> = ({
           </button>
         </div>
 
-        {/* Scrollable Content Body */}
-        <div className="flex-1 overflow-y-auto p-5 space-y-4 overscroll-contain">
+        {/* Scrollable Content Body - Unified Single Scroll Surface */}
+        <div className="flex-1 overflow-y-auto p-5 space-y-4">
           {/* Master Controller Banner */}
           <div className="p-3.5 rounded-xl bg-gradient-to-r from-[#25334D]/80 to-[#1C202C] border border-[#3B5B8C]/50 text-slate-200 text-xs flex items-start gap-3 shadow-sm shrink-0">
             <Crown className="h-5 w-5 text-[#E5A93C] shrink-0 mt-0.5" />
@@ -172,9 +172,9 @@ const BatchPrependModalComponent: React.FC<BatchPrependModalProps> = ({
                   Resumo De ➔ Para
                 </span>
               </div>
-              <div className="rounded-xl border border-[#242836] overflow-hidden max-h-56 overflow-y-auto overscroll-contain">
+              <div className="rounded-xl border border-[#242836] overflow-x-auto">
                 <table className="w-full text-left text-xs font-mono">
-                  <thead className="bg-[#161922] text-slate-400 font-semibold border-b border-[#242836] sticky top-0 z-10">
+                  <thead className="bg-[#161922] text-slate-400 font-semibold border-b border-[#242836]">
                     <tr>
                       <th className="py-2 px-3 bg-[#161922]">Prefixo</th>
                       <th className="py-2 px-3 bg-[#161922]">Operadora / IX</th>
@@ -235,7 +235,7 @@ const BatchPrependModalComponent: React.FC<BatchPrependModalProps> = ({
                   Todas receberão o novo prepend escolhido
                 </span>
               </div>
-              <div className="p-2.5 rounded-xl bg-[#161922] border border-[#242836] flex flex-wrap gap-2 max-h-36 overflow-y-auto overscroll-contain">
+              <div className="p-2.5 rounded-xl bg-[#161922] border border-[#242836] flex flex-wrap gap-2">
                 {targets.map((t, idx) => (
                   <span
                     key={`${t.peerIp}-${t.prefix}-${idx}`}
@@ -405,7 +405,7 @@ const BatchPrependModalComponent: React.FC<BatchPrependModalProps> = ({
                 )}
               </button>
             </div>
-            <pre className="bg-[#13151D] border border-[#242836] p-3.5 rounded-xl font-mono text-[11px] text-[#2E9E6B] leading-relaxed whitespace-pre select-text max-h-52 overflow-y-auto overflow-x-auto overscroll-contain shadow-inner">
+            <pre className="bg-[#13151D] border border-[#242836] p-3.5 rounded-xl font-mono text-[11px] text-[#2E9E6B] leading-relaxed whitespace-pre select-text overflow-x-auto shadow-inner">
               {batchCliScript}
             </pre>
           </div>

@@ -119,7 +119,19 @@ export const TrafficDownloadTab: React.FC<TrafficDownloadTabProps> = ({
         grp.prefixes.some((p) => p.prefix.toLowerCase().includes(q))
       )
     })
-  }, [prependOverview?.as_groups, prependSearch])
+  }, [prependOverview, prependSearch])
+
+  // Memoized selection count by AS group for instant O(1) lookups
+  const selectedCountByGroup = useMemo(() => {
+    const counts = new Map<string, number>()
+    if (selectedTargets.size === 0) return counts
+    for (const target of selectedTargets.values()) {
+      if (target.asGroupId) {
+        counts.set(target.asGroupId, (counts.get(target.asGroupId) || 0) + 1)
+      }
+    }
+    return counts
+  }, [selectedTargets])
 
   // Selection handlers
   const toggleTarget = (target: BatchPrependTarget) => {
@@ -520,14 +532,10 @@ export const TrafficDownloadTab: React.FC<TrafficDownloadTabProps> = ({
                       const meta = asMetadata[grp.remote_as]
                       const asTitle = meta?.alias || grp.group_name
                       const asImageUrl = meta?.image_url
+                      const groupSelectedCount = selectedCountByGroup.get(grp.id) || 0
                       const isAllGroupSelected =
-                        grp.prefixes.length > 0 &&
-                        grp.prefixes.every((pfx) =>
-                          selectedTargets.has(`${pfx.peer_ip}_${pfx.prefix}`)
-                        )
-                      const isSomeGroupSelected = grp.prefixes.some((pfx) =>
-                        selectedTargets.has(`${pfx.peer_ip}_${pfx.prefix}`)
-                      )
+                        grp.prefixes.length > 0 && groupSelectedCount === grp.prefixes.length
+                      const isSomeGroupSelected = groupSelectedCount > 0
                       const isGroupOnSecondary =
                         masterDevice && grp.device_name && grp.device_name !== masterDevice.name
 
@@ -627,79 +635,72 @@ export const TrafficDownloadTab: React.FC<TrafficDownloadTabProps> = ({
 
                             <div className="flex items-center gap-2 shrink-0">
                               {/* Additional Button for Multi-block selection in this AS */}
-                              {(() => {
-                                const selectedInGroup = grp.prefixes.filter((p) =>
-                                  selectedTargets.has(`${p.peer_ip}_${p.prefix}`)
-                                )
-                                if (selectedInGroup.length === 0) return null
+                              {groupSelectedCount > 0 && (
+                                <div className="relative">
+                                  <button
+                                    type="button"
+                                    onClick={() =>
+                                      setOpenGroupMenuId(
+                                        openGroupMenuId === grp.id ? null : grp.id
+                                      )
+                                    }
+                                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-[#25334D] hover:bg-[#3B5B8C] text-slate-200 hover:text-white text-xs font-semibold border border-[#3B5B8C]/40 shadow-xs transition-colors duration-150 cursor-pointer"
+                                    title="Ajustar prepends dos blocos selecionados deste AS"
+                                  >
+                                    <SlidersHorizontal className="h-3.5 w-3.5 text-[#93B4E6]" />
+                                    <span>Ajustar ({groupSelectedCount})</span>
+                                    <ChevronDown className="h-3 w-3 text-slate-400" />
+                                  </button>
 
-                                return (
-                                  <div className="relative">
-                                    <button
-                                      type="button"
-                                      onClick={() =>
-                                        setOpenGroupMenuId(
-                                          openGroupMenuId === grp.id ? null : grp.id
-                                        )
-                                      }
-                                      className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-[#25334D] hover:bg-[#3B5B8C] text-slate-200 hover:text-white text-xs font-semibold border border-[#3B5B8C]/40 shadow-xs transition cursor-pointer"
-                                      title="Ajustar prepends dos blocos selecionados deste AS"
-                                    >
-                                      <SlidersHorizontal className="h-3.5 w-3.5 text-[#93B4E6]" />
-                                      <span>Ajustar ({selectedInGroup.length})</span>
-                                      <ChevronDown className="h-3 w-3 text-slate-400" />
-                                    </button>
-
-                                    {openGroupMenuId === grp.id && (
-                                      <div className="absolute right-0 mt-1.5 w-60 rounded-xl bg-[#1C202C] border border-[#2D3345] shadow-2xl p-1.5 z-40 space-y-1 animate-in fade-in duration-150">
-                                        <div className="px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wider text-slate-400 border-b border-[#242836] pb-1">
-                                          Definir para {selectedInGroup.length} {selectedInGroup.length === 1 ? 'bloco' : 'blocos'}:
-                                        </div>
-                                        <button
-                                          type="button"
-                                          onClick={() => applyGroupBatchPrepend(grp, 0, false)}
-                                          className="w-full text-left px-2.5 py-1.5 rounded-lg text-xs text-[#2E9E6B] hover:bg-[#161922] transition flex items-center justify-between cursor-pointer"
-                                        >
-                                          <span>0P (Primário / Sem Prepend)</span>
-                                          <span className="text-[10px] bg-[#161922] px-1.5 py-0.5 rounded text-emerald-400">0P</span>
-                                        </button>
-                                        <button
-                                          type="button"
-                                          onClick={() => applyGroupBatchPrepend(grp, 1, false)}
-                                          className="w-full text-left px-2.5 py-1.5 rounded-lg text-xs text-[#D99B26] hover:bg-[#161922] transition flex items-center justify-between cursor-pointer"
-                                        >
-                                          <span>1x Prepend (+1 Salto AS)</span>
-                                          <span className="text-[10px] bg-[#161922] px-1.5 py-0.5 rounded text-amber-400">1P</span>
-                                        </button>
-                                        <button
-                                          type="button"
-                                          onClick={() => applyGroupBatchPrepend(grp, 2, false)}
-                                          className="w-full text-left px-2.5 py-1.5 rounded-lg text-xs text-[#D99B26] hover:bg-[#161922] transition flex items-center justify-between cursor-pointer"
-                                        >
-                                          <span>2x Prepend (+2 Saltos AS)</span>
-                                          <span className="text-[10px] bg-[#161922] px-1.5 py-0.5 rounded text-amber-400">2P</span>
-                                        </button>
-                                        <button
-                                          type="button"
-                                          onClick={() => applyGroupBatchPrepend(grp, 3, false)}
-                                          className="w-full text-left px-2.5 py-1.5 rounded-lg text-xs text-[#D99B26] hover:bg-[#161922] transition flex items-center justify-between cursor-pointer"
-                                        >
-                                          <span>3x Prepend (+3 Saltos AS)</span>
-                                          <span className="text-[10px] bg-[#161922] px-1.5 py-0.5 rounded text-amber-400">3P</span>
-                                        </button>
-                                        <button
-                                          type="button"
-                                          onClick={() => applyGroupBatchPrepend(grp, 0, true)}
-                                          className="w-full text-left px-2.5 py-1.5 rounded-lg text-xs text-[#D9534F] hover:bg-[#161922] transition flex items-center justify-between cursor-pointer"
-                                        >
-                                          <span>Bloquear Anúncio (Deny)</span>
-                                          <span className="text-[10px] bg-[#161922] px-1.5 py-0.5 rounded text-rose-400">Deny</span>
-                                        </button>
+                                  {openGroupMenuId === grp.id && (
+                                    <div className="absolute right-0 mt-1.5 w-60 rounded-xl bg-[#1C202C] border border-[#2D3345] shadow-2xl p-1.5 z-40 space-y-1 animate-in fade-in duration-150">
+                                      <div className="px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wider text-slate-400 border-b border-[#242836] pb-1">
+                                        Definir para {groupSelectedCount} {groupSelectedCount === 1 ? 'bloco' : 'blocos'}:
                                       </div>
-                                    )}
-                                  </div>
-                                )
-                              })()}
+                                      <button
+                                        type="button"
+                                        onClick={() => applyGroupBatchPrepend(grp, 0, false)}
+                                        className="w-full text-left px-2.5 py-1.5 rounded-lg text-xs text-[#2E9E6B] hover:bg-[#161922] transition flex items-center justify-between cursor-pointer"
+                                      >
+                                        <span>0P (Primário / Sem Prepend)</span>
+                                        <span className="text-[10px] bg-[#161922] px-1.5 py-0.5 rounded text-emerald-400">0P</span>
+                                      </button>
+                                      <button
+                                        type="button"
+                                        onClick={() => applyGroupBatchPrepend(grp, 1, false)}
+                                        className="w-full text-left px-2.5 py-1.5 rounded-lg text-xs text-[#D99B26] hover:bg-[#161922] transition flex items-center justify-between cursor-pointer"
+                                      >
+                                        <span>1x Prepend (+1 Salto AS)</span>
+                                        <span className="text-[10px] bg-[#161922] px-1.5 py-0.5 rounded text-amber-400">1P</span>
+                                      </button>
+                                      <button
+                                        type="button"
+                                        onClick={() => applyGroupBatchPrepend(grp, 2, false)}
+                                        className="w-full text-left px-2.5 py-1.5 rounded-lg text-xs text-[#D99B26] hover:bg-[#161922] transition flex items-center justify-between cursor-pointer"
+                                      >
+                                        <span>2x Prepend (+2 Saltos AS)</span>
+                                        <span className="text-[10px] bg-[#161922] px-1.5 py-0.5 rounded text-amber-400">2P</span>
+                                      </button>
+                                      <button
+                                        type="button"
+                                        onClick={() => applyGroupBatchPrepend(grp, 3, false)}
+                                        className="w-full text-left px-2.5 py-1.5 rounded-lg text-xs text-[#D99B26] hover:bg-[#161922] transition flex items-center justify-between cursor-pointer"
+                                      >
+                                        <span>3x Prepend (+3 Saltos AS)</span>
+                                        <span className="text-[10px] bg-[#161922] px-1.5 py-0.5 rounded text-amber-400">3P</span>
+                                      </button>
+                                      <button
+                                        type="button"
+                                        onClick={() => applyGroupBatchPrepend(grp, 0, true)}
+                                        className="w-full text-left px-2.5 py-1.5 rounded-lg text-xs text-[#D9534F] hover:bg-[#161922] transition flex items-center justify-between cursor-pointer"
+                                      >
+                                        <span>Bloquear Anúncio (Deny)</span>
+                                        <span className="text-[10px] bg-[#161922] px-1.5 py-0.5 rounded text-rose-400">Deny</span>
+                                      </button>
+                                    </div>
+                                  )}
+                                </div>
+                              )}
 
                               {/* SuperAdmin Edit Button */}
                               {isSuperAdmin && onOpenCustomizeAS && (
@@ -1180,7 +1181,7 @@ export const TrafficDownloadTab: React.FC<TrafficDownloadTabProps> = ({
         <div
           className={`fixed ${
             isDockActive ? 'bottom-26 sm:bottom-30' : 'bottom-6'
-          } left-1/2 -translate-x-1/2 z-45 max-w-4xl w-[94%] sm:w-auto bg-[#1C202C]/95 backdrop-blur-md border border-[#3B5B8C] shadow-2xl rounded-2xl px-5 py-3.5 flex flex-wrap items-center justify-between gap-4 animate-in slide-in-from-bottom-4 duration-200`}
+          } left-1/2 -translate-x-1/2 z-45 max-w-4xl w-[94%] sm:w-auto bg-[#1C202C] border border-[#3B5B8C] shadow-2xl rounded-2xl px-5 py-3.5 flex flex-wrap items-center justify-between gap-4 duration-150`}
         >
           <div className="flex items-center gap-3">
             <div className="h-8 w-8 rounded-xl bg-[#25334D] border border-[#3B5B8C]/40 flex items-center justify-center text-[#93B4E6] shrink-0">
