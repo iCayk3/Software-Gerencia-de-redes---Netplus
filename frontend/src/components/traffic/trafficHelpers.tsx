@@ -470,13 +470,17 @@ export interface BatchPrependTarget {
   communityBase?: string
   currentCommunity?: string
   asGroupId?: string
+  currentPrependCount?: number
+  currentIsBlock?: boolean
+  newPrependCount?: number
+  newIsBlock?: boolean
 }
 
 export const getBatchPrependCliPreviewForDevice = (
   dev: Device,
   targets: BatchPrependTarget[],
-  prependCountChoice: number,
-  isBlockChoice: boolean
+  prependCountChoice = 0,
+  isBlockChoice = false
 ): string => {
   if (!targets || targets.length === 0) return ''
   const isHuawei = dev.vendor === 'huawei'
@@ -514,7 +518,9 @@ export const getBatchPrependCliPreviewForDevice = (
         else base = '2003'
       }
 
-      const newComm = isBlockChoice ? `0:${base}0` : `1:${base}${prependCountChoice}`
+      const pCount = t.newPrependCount !== undefined ? t.newPrependCount : prependCountChoice
+      const pBlock = t.newIsBlock !== undefined ? t.newIsBlock : isBlockChoice
+      const newComm = pBlock ? `0:${base}0` : `1:${base}${pCount}`
 
       if (!prefixMap.has(pfx)) {
         prefixMap.set(pfx, { nodeNum, comms: [] })
@@ -545,17 +551,20 @@ export const getBatchPrependCliPreviewForDevice = (
     ]
 
     targets.forEach((t) => {
+      const pCount = t.newPrependCount !== undefined ? t.newPrependCount : prependCountChoice
+      const pBlock = t.newIsBlock !== undefined ? t.newIsBlock : isBlockChoice
+
       if (dev.vendor === 'mikrotik_v7') {
-        if (isBlockChoice) {
+        if (pBlock) {
           lines.push(`/routing/filter/rule/set [find where rule~"${t.prefix}"] rule="if (dst == ${t.prefix}) { reject; }"`)
         } else {
-          lines.push(`/routing/filter/rule/set [find where rule~"${t.prefix}"] rule="if (dst == ${t.prefix}) { set bgp-path.prepend ${prependCountChoice}; accept; }"`)
+          lines.push(`/routing/filter/rule/set [find where rule~"${t.prefix}"] rule="if (dst == ${t.prefix}) { set bgp-path.prepend ${pCount}; accept; }"`)
         }
       } else {
-        if (isBlockChoice) {
+        if (pBlock) {
           lines.push(`/routing filter set [find prefix="${t.prefix}"] action=discard`)
         } else {
-          lines.push(`/routing filter set [find prefix="${t.prefix}"] action=accept set-bgp-prepend=${prependCountChoice}`)
+          lines.push(`/routing filter set [find prefix="${t.prefix}"] action=accept set-bgp-prepend=${pCount}`)
         }
       }
     })

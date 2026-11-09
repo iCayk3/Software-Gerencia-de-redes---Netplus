@@ -19,6 +19,7 @@ import {
   Edit3,
   Crown,
   Layers,
+  Save,
 } from 'lucide-react'
 import type {
   Device,
@@ -85,6 +86,8 @@ export const TrafficDownloadTab: React.FC<TrafficDownloadTabProps> = ({
 }) => {
   const [selectedTargets, setSelectedTargets] = useState<Map<string, BatchPrependTarget>>(new Map())
   const [isBatchModalOpen, setIsBatchModalOpen] = useState(false)
+  const [batchModalMode, setBatchModalMode] = useState<'save_preview' | 'edit_batch'>('save_preview')
+  const [openGroupMenuId, setOpenGroupMenuId] = useState<string | null>(null)
 
   // Automatic perception of the Central BGP Master Router
   const masterDevice = useMemo(() => getBGPMasterDevice(devices), [devices])
@@ -102,6 +105,86 @@ export const TrafficDownloadTab: React.FC<TrafficDownloadTabProps> = ({
     })
   }
 
+  // Handler for modifying prepend directly on a specific block
+  const handleTargetPrependChange = (
+    pfx: PrefixPrependState,
+    grp: ASPrependGroup,
+    value: string
+  ) => {
+    const isBlock = value === 'deny'
+    const count = isBlock ? 0 : parseInt(value, 10)
+    const targetId = `${pfx.peer_ip}_${pfx.prefix}`
+
+    setSelectedTargets((prev) => {
+      const next = new Map(prev)
+      next.set(targetId, {
+        id: targetId,
+        prefix: pfx.prefix,
+        peerIp: pfx.peer_ip,
+        peerName: grp.group_name || pfx.peer_name,
+        remoteAs: grp.remote_as,
+        communityBase: grp.community_base,
+        currentCommunity: pfx.community,
+        asGroupId: grp.id,
+        currentPrependCount: pfx.prepend_count,
+        currentIsBlock: pfx.is_blocked,
+        newPrependCount: count,
+        newIsBlock: isBlock,
+      })
+      return next
+    })
+  }
+
+  // Handler for applying batch prepend to selected items of a specific AS group
+  const applyGroupBatchPrepend = (
+    grp: ASPrependGroup,
+    prependCount: number,
+    isBlock: boolean
+  ) => {
+    setSelectedTargets((prev) => {
+      const next = new Map(prev)
+      const hasSelectedInGroup = grp.prefixes.some((pfx) => next.has(`${pfx.peer_ip}_${pfx.prefix}`))
+      const targetsToApply = hasSelectedInGroup
+        ? grp.prefixes.filter((pfx) => next.has(`${pfx.peer_ip}_${pfx.prefix}`))
+        : grp.prefixes
+
+      targetsToApply.forEach((pfx) => {
+        const id = `${pfx.peer_ip}_${pfx.prefix}`
+        next.set(id, {
+          id,
+          prefix: pfx.prefix,
+          peerIp: pfx.peer_ip,
+          peerName: grp.group_name || pfx.peer_name,
+          remoteAs: grp.remote_as,
+          communityBase: grp.community_base,
+          currentCommunity: pfx.community,
+          asGroupId: grp.id,
+          currentPrependCount: pfx.prepend_count,
+          currentIsBlock: pfx.is_blocked,
+          newPrependCount: prependCount,
+          newIsBlock: isBlock,
+        })
+      })
+      return next
+    })
+    setOpenGroupMenuId(null)
+  }
+
+  // Handler for overriding prepends for all currently selected targets
+  const handleBatchOverride = (count: number, isBlock: boolean) => {
+    setSelectedTargets((prev) => {
+      const next = new Map(prev)
+      next.forEach((target, key) => {
+        next.set(key, {
+          ...target,
+          newPrependCount: count,
+          newIsBlock: isBlock,
+        })
+      })
+      return next
+    })
+  }
+
   const toggleGroupTargets = (grp: ASPrependGroup) => {
     setSelectedTargets((prev) => {
       const next = new Map(prev)
@@ -111,6 +194,7 @@ export const TrafficDownloadTab: React.FC<TrafficDownloadTabProps> = ({
       } else {
         grp.prefixes.forEach((pfx) => {
           const id = `${pfx.peer_ip}_${pfx.prefix}`
+          const existing = next.get(id)
           next.set(id, {
             id,
             prefix: pfx.prefix,
@@ -120,6 +204,10 @@ export const TrafficDownloadTab: React.FC<TrafficDownloadTabProps> = ({
             communityBase: grp.community_base,
             currentCommunity: pfx.community,
             asGroupId: grp.id,
+            currentPrependCount: pfx.prepend_count,
+            currentIsBlock: pfx.is_blocked,
+            newPrependCount: existing?.newPrependCount !== undefined ? existing.newPrependCount : pfx.prepend_count,
+            newIsBlock: existing?.newIsBlock !== undefined ? existing.newIsBlock : pfx.is_blocked,
           })
         })
       }
@@ -140,6 +228,7 @@ export const TrafficDownloadTab: React.FC<TrafficDownloadTabProps> = ({
         const matchingGroup = prependOverview.as_groups?.find(
           (g) => g.peers.some((pr) => pr.peer_ip === pfx.peer_ip) || g.peer_ips.includes(pfx.peer_ip)
         )
+        const existing = next.get(id)
         next.set(id, {
           id,
           prefix: pfx.prefix,
@@ -149,6 +238,10 @@ export const TrafficDownloadTab: React.FC<TrafficDownloadTabProps> = ({
           communityBase: matchingGroup?.community_base,
           currentCommunity: pfx.community,
           asGroupId: matchingGroup?.id,
+          currentPrependCount: pfx.prepend_count,
+          currentIsBlock: pfx.is_blocked,
+          newPrependCount: existing?.newPrependCount !== undefined ? existing.newPrependCount : pfx.prepend_count,
+          newIsBlock: existing?.newIsBlock !== undefined ? existing.newIsBlock : pfx.is_blocked,
         })
       })
       return next
@@ -157,13 +250,6 @@ export const TrafficDownloadTab: React.FC<TrafficDownloadTabProps> = ({
 
   const clearSelection = () => {
     setSelectedTargets(new Map())
-  }
-
-  const handleQuickBatchApply = async (count: number, isBlock: boolean) => {
-    if (onApplyBatchPrepend && selectedTargets.size > 0) {
-      await onApplyBatchPrepend(Array.from(selectedTargets.values()), count, isBlock)
-      clearSelection()
-    }
   }
   return (
     <div className="space-y-6">
@@ -517,17 +603,94 @@ export const TrafficDownloadTab: React.FC<TrafficDownloadTabProps> = ({
                               </div>
                             </div>
 
-                            {/* SuperAdmin Edit Button */}
-                            {isSuperAdmin && onOpenCustomizeAS && (
-                              <button
-                                type="button"
-                                onClick={() => onOpenCustomizeAS(grp)}
-                                className="p-1.5 rounded-lg bg-[#1E2330] hover:bg-[#252C3D] text-slate-400 hover:text-white border border-[#2D3345] transition cursor-pointer shrink-0"
-                                title="Editar Nome e Imagem do AS (Super Admin)"
-                              >
-                                <Edit3 className="h-3.5 w-3.5" />
-                              </button>
-                            )}
+                            <div className="flex items-center gap-2 shrink-0">
+                              {/* Additional Button for Multi-block selection in this AS */}
+                              {(() => {
+                                const selectedInGroup = grp.prefixes.filter((p) =>
+                                  selectedTargets.has(`${p.peer_ip}_${p.prefix}`)
+                                )
+                                if (selectedInGroup.length === 0) return null
+
+                                return (
+                                  <div className="relative">
+                                    <button
+                                      type="button"
+                                      onClick={() =>
+                                        setOpenGroupMenuId(
+                                          openGroupMenuId === grp.id ? null : grp.id
+                                        )
+                                      }
+                                      className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-[#25334D] hover:bg-[#3B5B8C] text-slate-200 hover:text-white text-xs font-semibold border border-[#3B5B8C]/40 shadow-xs transition cursor-pointer"
+                                      title="Ajustar prepends dos blocos selecionados deste AS"
+                                    >
+                                      <SlidersHorizontal className="h-3.5 w-3.5 text-[#93B4E6]" />
+                                      <span>Ajustar ({selectedInGroup.length})</span>
+                                      <ChevronDown className="h-3 w-3 text-slate-400" />
+                                    </button>
+
+                                    {openGroupMenuId === grp.id && (
+                                      <div className="absolute right-0 mt-1.5 w-60 rounded-xl bg-[#1C202C] border border-[#2D3345] shadow-2xl p-1.5 z-40 space-y-1 animate-in fade-in duration-150">
+                                        <div className="px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wider text-slate-400 border-b border-[#242836] pb-1">
+                                          Definir para {selectedInGroup.length} {selectedInGroup.length === 1 ? 'bloco' : 'blocos'}:
+                                        </div>
+                                        <button
+                                          type="button"
+                                          onClick={() => applyGroupBatchPrepend(grp, 0, false)}
+                                          className="w-full text-left px-2.5 py-1.5 rounded-lg text-xs text-[#2E9E6B] hover:bg-[#161922] transition flex items-center justify-between cursor-pointer"
+                                        >
+                                          <span>0P (Primário / Sem Prepend)</span>
+                                          <span className="text-[10px] bg-[#161922] px-1.5 py-0.5 rounded text-emerald-400">0P</span>
+                                        </button>
+                                        <button
+                                          type="button"
+                                          onClick={() => applyGroupBatchPrepend(grp, 1, false)}
+                                          className="w-full text-left px-2.5 py-1.5 rounded-lg text-xs text-[#D99B26] hover:bg-[#161922] transition flex items-center justify-between cursor-pointer"
+                                        >
+                                          <span>1x Prepend (+1 Salto AS)</span>
+                                          <span className="text-[10px] bg-[#161922] px-1.5 py-0.5 rounded text-amber-400">1P</span>
+                                        </button>
+                                        <button
+                                          type="button"
+                                          onClick={() => applyGroupBatchPrepend(grp, 2, false)}
+                                          className="w-full text-left px-2.5 py-1.5 rounded-lg text-xs text-[#D99B26] hover:bg-[#161922] transition flex items-center justify-between cursor-pointer"
+                                        >
+                                          <span>2x Prepend (+2 Saltos AS)</span>
+                                          <span className="text-[10px] bg-[#161922] px-1.5 py-0.5 rounded text-amber-400">2P</span>
+                                        </button>
+                                        <button
+                                          type="button"
+                                          onClick={() => applyGroupBatchPrepend(grp, 3, false)}
+                                          className="w-full text-left px-2.5 py-1.5 rounded-lg text-xs text-[#D99B26] hover:bg-[#161922] transition flex items-center justify-between cursor-pointer"
+                                        >
+                                          <span>3x Prepend (+3 Saltos AS)</span>
+                                          <span className="text-[10px] bg-[#161922] px-1.5 py-0.5 rounded text-amber-400">3P</span>
+                                        </button>
+                                        <button
+                                          type="button"
+                                          onClick={() => applyGroupBatchPrepend(grp, 0, true)}
+                                          className="w-full text-left px-2.5 py-1.5 rounded-lg text-xs text-[#D9534F] hover:bg-[#161922] transition flex items-center justify-between cursor-pointer"
+                                        >
+                                          <span>Bloquear Anúncio (Deny)</span>
+                                          <span className="text-[10px] bg-[#161922] px-1.5 py-0.5 rounded text-rose-400">Deny</span>
+                                        </button>
+                                      </div>
+                                    )}
+                                  </div>
+                                )
+                              })()}
+
+                              {/* SuperAdmin Edit Button */}
+                              {isSuperAdmin && onOpenCustomizeAS && (
+                                <button
+                                  type="button"
+                                  onClick={() => onOpenCustomizeAS(grp)}
+                                  className="p-1.5 rounded-lg bg-[#1E2330] hover:bg-[#252C3D] text-slate-400 hover:text-white border border-[#2D3345] transition cursor-pointer shrink-0"
+                                  title="Editar Nome e Imagem do AS (Super Admin)"
+                                >
+                                  <Edit3 className="h-3.5 w-3.5" />
+                                </button>
+                              )}
+                            </div>
                           </div>
 
                           {/* Unified Sessions Bar */}
@@ -614,7 +777,22 @@ export const TrafficDownloadTab: React.FC<TrafficDownloadTabProps> = ({
                               <div className="mt-3 space-y-2 animate-in fade-in duration-150">
                                 {grp.prefixes.map((pfx) => {
                                   const targetId = `${pfx.peer_ip}_${pfx.prefix}`
+                                  const target = selectedTargets.get(targetId)
                                   const isSelected = selectedTargets.has(targetId)
+                                  const currentPrependCount =
+                                    target?.newPrependCount !== undefined
+                                      ? target.newPrependCount
+                                      : pfx.prepend_count
+                                  const currentIsBlock =
+                                    target?.newIsBlock !== undefined ? target.newIsBlock : pfx.is_blocked
+                                  const isModified =
+                                    target !== undefined &&
+                                    ((target.newPrependCount !== undefined &&
+                                      target.newPrependCount !== pfx.prepend_count) ||
+                                      (target.newIsBlock !== undefined &&
+                                        target.newIsBlock !== pfx.is_blocked))
+                                  const selectValue = currentIsBlock ? 'deny' : String(currentPrependCount)
+
                                   return (
                                     <div
                                       key={pfx.id}
@@ -625,7 +803,7 @@ export const TrafficDownloadTab: React.FC<TrafficDownloadTabProps> = ({
                                       }`}
                                     >
                                       <div className="space-y-1">
-                                        <div className="flex items-center gap-3">
+                                        <div className="flex flex-wrap items-center gap-3">
                                           <input
                                             type="checkbox"
                                             checked={isSelected}
@@ -639,6 +817,10 @@ export const TrafficDownloadTab: React.FC<TrafficDownloadTabProps> = ({
                                                 communityBase: grp.community_base,
                                                 currentCommunity: pfx.community,
                                                 asGroupId: grp.id,
+                                                currentPrependCount: pfx.prepend_count,
+                                                currentIsBlock: pfx.is_blocked,
+                                                newPrependCount: currentPrependCount,
+                                                newIsBlock: currentIsBlock,
                                               })
                                             }
                                             className="h-4 w-4 rounded border-[#2D3345] bg-[#161922] text-[#3B5B8C] focus:ring-0 cursor-pointer shrink-0"
@@ -647,29 +829,42 @@ export const TrafficDownloadTab: React.FC<TrafficDownloadTabProps> = ({
                                           <span className="font-mono font-semibold text-slate-100 text-xs">
                                             {pfx.prefix}
                                           </span>
-                                          {pfx.is_blocked ? (
-                                            <span className="text-xs font-medium text-[#D9534F] inline-flex items-center gap-1.5">
-                                              <span className="w-1.5 h-1.5 rounded-full bg-[#D9534F]"></span>
-                                              Bloqueado (Deny)
-                                            </span>
-                                          ) : pfx.prepend_count === 0 ? (
-                                            <span className="text-xs font-medium text-[#2E9E6B] inline-flex items-center gap-1.5">
-                                              <span className="w-1.5 h-1.5 rounded-full bg-[#2E9E6B]"></span>
-                                              0P (Primário)
-                                            </span>
-                                          ) : (
-                                            <span className="text-xs font-medium text-[#D99B26] inline-flex items-center gap-1.5">
-                                              <span className="w-1.5 h-1.5 rounded-full bg-[#D99B26]"></span>
-                                              {pfx.prepend_count}x Prepend ({pfx.prepend_count}P)
-                                            </span>
-                                          )}
+
+                                          {/* Prepend selector directly on the block */}
+                                          <div className="flex items-center gap-2">
+                                            <select
+                                              value={selectValue}
+                                              onChange={(e) => handleTargetPrependChange(pfx, grp, e.target.value)}
+                                              className={`text-xs font-semibold rounded-lg px-2.5 py-1 transition cursor-pointer border focus:ring-1 focus:ring-[#3B5B8C] focus:outline-none ${
+                                                currentIsBlock
+                                                  ? 'bg-rose-950/40 text-rose-300 border-rose-800/60'
+                                                  : currentPrependCount === 0
+                                                  ? 'bg-emerald-950/40 text-emerald-300 border-emerald-800/60'
+                                                  : 'bg-amber-950/40 text-amber-300 border-amber-800/60'
+                                              }`}
+                                              title="Clique para alterar o prepend diretamente neste bloco"
+                                            >
+                                              <option value="0" className="bg-[#161922] text-emerald-300">0P (Primário / Sem Prepend)</option>
+                                              <option value="1" className="bg-[#161922] text-amber-300">1x Prepend (1P)</option>
+                                              <option value="2" className="bg-[#161922] text-amber-300">2x Prepend (2P)</option>
+                                              <option value="3" className="bg-[#161922] text-amber-300">3x Prepend (3P)</option>
+                                              <option value="deny" className="bg-[#161922] text-rose-300">Bloqueado (Deny)</option>
+                                            </select>
+
+                                            {isModified && (
+                                              <span className="text-[10px] text-[#93B4E6] font-medium flex items-center gap-1 bg-[#161922] px-1.5 py-0.5 rounded border border-[#3B5B8C]/40">
+                                                <span className="w-1.5 h-1.5 rounded-full bg-[#93B4E6] animate-pulse"></span>
+                                                Modificado
+                                              </span>
+                                            )}
+                                          </div>
                                         </div>
                                       </div>
 
                                       <button
                                         type="button"
                                         onClick={() => onOpenPrependModal(pfx, grp)}
-                                        className="inline-flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-lg bg-[#3B5B8C] hover:bg-[#4A72B2] text-white text-xs font-medium shadow-xs transition cursor-pointer self-start sm:self-auto"
+                                        className="inline-flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-lg bg-[#25334D] hover:bg-[#3B5B8C] text-slate-300 hover:text-white text-xs font-medium border border-[#3B5B8C]/40 transition cursor-pointer self-start sm:self-auto shrink-0"
                                       >
                                         <SlidersHorizontal className="h-3.5 w-3.5" />
                                         <span>Ajustar Prepend</span>
@@ -801,6 +996,7 @@ export const TrafficDownloadTab: React.FC<TrafficDownloadTabProps> = ({
                       {prependOverview.prefixes.map((p) => {
                         const targetId = `${p.peer_ip}_${p.prefix}`
                         const isSelected = selectedTargets.has(targetId)
+                        const target = selectedTargets.get(targetId)
                         const matchingGroup = prependOverview.as_groups?.find(
                           (g) =>
                             g.peers.some((pr) => pr.peer_ip === p.peer_ip) ||
@@ -846,40 +1042,88 @@ export const TrafficDownloadTab: React.FC<TrafficDownloadTabProps> = ({
                               </span>
                             </td>
                             <td className="py-3 px-4">
-                              {p.is_blocked ? (
-                                <span className="text-xs font-medium text-[#D9534F] inline-flex items-center gap-1.5">
-                                  <span className="w-1.5 h-1.5 rounded-full bg-[#D9534F]"></span>
-                                  Bloqueado (Deny)
-                                </span>
-                              ) : (
-                                <span className="text-xs font-medium text-[#D99B26] inline-flex items-center gap-1.5">
-                                  <span className="w-1.5 h-1.5 rounded-full bg-[#D99B26]"></span>
-                                  {p.prepend_count === 0
-                                    ? 'Nenhum (0P / Primário)'
-                                    : `${p.prepend_count}x Prepend (${p.prepend_count}P)`}
-                                </span>
-                              )}
+                              {(() => {
+                                const currentPrependCount =
+                                  target?.newPrependCount !== undefined ? target.newPrependCount : p.prepend_count
+                                const currentIsBlock =
+                                  target?.newIsBlock !== undefined ? target.newIsBlock : p.is_blocked
+                                const isModified =
+                                  target !== undefined &&
+                                  ((target.newPrependCount !== undefined &&
+                                    target.newPrependCount !== p.prepend_count) ||
+                                    (target.newIsBlock !== undefined &&
+                                      target.newIsBlock !== p.is_blocked))
+                                const selectValue = currentIsBlock ? 'deny' : String(currentPrependCount)
+
+                                return (
+                                  <div className="flex items-center gap-2">
+                                    <select
+                                      value={selectValue}
+                                      onChange={(e) => {
+                                        const matchingGrp = matchingGroup || {
+                                          id: `grp-${p.peer_ip}`,
+                                          group_name: p.peer_name,
+                                          remote_as: '',
+                                          role: 'transit' as const,
+                                          community_base: '',
+                                          peer_count: 1,
+                                          peers: [],
+                                          peer_ips: [p.peer_ip],
+                                          prefixes: [p],
+                                        }
+                                        handleTargetPrependChange(p, matchingGrp, e.target.value)
+                                      }}
+                                      className={`text-xs font-semibold rounded-lg px-2.5 py-1 transition cursor-pointer border focus:ring-1 focus:ring-[#3B5B8C] focus:outline-none ${
+                                        currentIsBlock
+                                          ? 'bg-rose-950/40 text-rose-300 border-rose-800/60'
+                                          : currentPrependCount === 0
+                                          ? 'bg-emerald-950/40 text-emerald-300 border-emerald-800/60'
+                                          : 'bg-amber-950/40 text-amber-300 border-amber-800/60'
+                                      }`}
+                                      title="Alterar prepend diretamente neste bloco"
+                                    >
+                                      <option value="0" className="bg-[#161922] text-emerald-300">0P (Primário / Sem Prepend)</option>
+                                      <option value="1" className="bg-[#161922] text-amber-300">1x Prepend (1P)</option>
+                                      <option value="2" className="bg-[#161922] text-amber-300">2x Prepend (2P)</option>
+                                      <option value="3" className="bg-[#161922] text-amber-300">3x Prepend (3P)</option>
+                                      <option value="deny" className="bg-[#161922] text-rose-300">Bloqueado (Deny)</option>
+                                    </select>
+                                    {isModified && (
+                                      <span className="text-[10px] text-[#93B4E6] font-medium flex items-center gap-1 bg-[#161922] px-1.5 py-0.5 rounded border border-[#3B5B8C]/40">
+                                        <span className="w-1.5 h-1.5 rounded-full bg-[#93B4E6] animate-pulse"></span>
+                                        Modificado
+                                      </span>
+                                    )}
+                                  </div>
+                                )
+                              })()}
                             </td>
                             <td className="py-3 px-4 text-slate-300">
                               {p.community || '-'}
                             </td>
                             <td className="py-3 px-4 font-sans">
-                              {p.is_blocked ? (
-                                <span className="inline-flex items-center gap-1.5 text-xs font-medium text-[#D9534F]">
-                                  <span className="w-1.5 h-1.5 rounded-full bg-[#D9534F]"></span>
-                                  Anúncio Interrompido
-                                </span>
-                              ) : p.prepend_count > 0 ? (
-                                <span className="inline-flex items-center gap-1.5 text-xs font-medium text-[#D99B26]">
-                                  <span className="w-1.5 h-1.5 rounded-full bg-[#D99B26]"></span>
-                                  Despriorizado (+{p.prepend_count} saltos AS)
-                                </span>
-                              ) : (
-                                <span className="inline-flex items-center gap-1.5 text-xs font-medium text-[#2E9E6B]">
-                                  <span className="w-1.5 h-1.5 rounded-full bg-[#2E9E6B]"></span>
-                                  Prioritário (Caminho Mais Curto)
-                                </span>
-                              )}
+                              {(() => {
+                                const currentPrependCount =
+                                  target?.newPrependCount !== undefined ? target.newPrependCount : p.prepend_count
+                                const currentIsBlock =
+                                  target?.newIsBlock !== undefined ? target.newIsBlock : p.is_blocked
+                                return currentIsBlock ? (
+                                  <span className="inline-flex items-center gap-1.5 text-xs font-medium text-[#D9534F]">
+                                    <span className="w-1.5 h-1.5 rounded-full bg-[#D9534F]"></span>
+                                    Anúncio Interrompido
+                                  </span>
+                                ) : currentPrependCount > 0 ? (
+                                  <span className="inline-flex items-center gap-1.5 text-xs font-medium text-[#D99B26]">
+                                    <span className="w-1.5 h-1.5 rounded-full bg-[#D99B26]"></span>
+                                    Despriorizado (+{currentPrependCount} saltos AS)
+                                  </span>
+                                ) : (
+                                  <span className="inline-flex items-center gap-1.5 text-xs font-medium text-[#2E9E6B]">
+                                    <span className="w-1.5 h-1.5 rounded-full bg-[#2E9E6B]"></span>
+                                    Prioritário (Caminho Mais Curto)
+                                  </span>
+                                )
+                              })()}
                             </td>
                             <td className="py-3 px-4 font-sans text-right">
                               <button
@@ -924,9 +1168,10 @@ export const TrafficDownloadTab: React.FC<TrafficDownloadTabProps> = ({
           </div>
 
           <div className="flex flex-wrap items-center gap-2">
+            <span className="text-[11px] text-slate-400 mr-1 hidden sm:inline">Definir todos para:</span>
             <button
               type="button"
-              onClick={() => handleQuickBatchApply(0, false)}
+              onClick={() => handleBatchOverride(0, false)}
               className="px-3 py-1.5 rounded-lg bg-[#161922] hover:bg-[#202738] text-[#2E9E6B] border border-[#242836] hover:border-[#2E9E6B]/50 text-xs font-semibold transition cursor-pointer"
               title="Definir 0 Prepend (Caminho Primário) para todos selecionados"
             >
@@ -934,7 +1179,7 @@ export const TrafficDownloadTab: React.FC<TrafficDownloadTabProps> = ({
             </button>
             <button
               type="button"
-              onClick={() => handleQuickBatchApply(1, false)}
+              onClick={() => handleBatchOverride(1, false)}
               className="px-3 py-1.5 rounded-lg bg-[#161922] hover:bg-[#202738] text-[#D99B26] border border-[#242836] hover:border-[#D99B26]/50 text-xs font-semibold transition cursor-pointer"
               title="Adicionar 1 Salto AS para todos selecionados"
             >
@@ -942,7 +1187,7 @@ export const TrafficDownloadTab: React.FC<TrafficDownloadTabProps> = ({
             </button>
             <button
               type="button"
-              onClick={() => handleQuickBatchApply(2, false)}
+              onClick={() => handleBatchOverride(2, false)}
               className="px-3 py-1.5 rounded-lg bg-[#161922] hover:bg-[#202738] text-[#D99B26] border border-[#242836] hover:border-[#D99B26]/50 text-xs font-semibold transition cursor-pointer"
               title="Adicionar 2 Saltos AS para todos selecionados"
             >
@@ -950,7 +1195,7 @@ export const TrafficDownloadTab: React.FC<TrafficDownloadTabProps> = ({
             </button>
             <button
               type="button"
-              onClick={() => handleQuickBatchApply(3, false)}
+              onClick={() => handleBatchOverride(3, false)}
               className="px-3 py-1.5 rounded-lg bg-[#161922] hover:bg-[#202738] text-[#D99B26] border border-[#242836] hover:border-[#D99B26]/50 text-xs font-semibold transition cursor-pointer"
               title="Adicionar 3 Saltos AS para todos selecionados"
             >
@@ -958,20 +1203,26 @@ export const TrafficDownloadTab: React.FC<TrafficDownloadTabProps> = ({
             </button>
             <button
               type="button"
-              onClick={() => handleQuickBatchApply(0, true)}
+              onClick={() => handleBatchOverride(0, true)}
               className="px-3 py-1.5 rounded-lg bg-[#161922] hover:bg-[#202738] text-[#D9534F] border border-[#242836] hover:border-[#D9534F]/50 text-xs font-semibold transition cursor-pointer"
               title="Bloquear anúncio (Deny) para todos selecionados"
             >
               Bloquear
             </button>
+
+            <div className="h-4 w-px bg-[#242836] mx-1 hidden sm:block"></div>
+
             <button
               type="button"
-              onClick={() => setIsBatchModalOpen(true)}
-              className="px-4 py-1.5 rounded-lg bg-[#3B5B8C] hover:bg-[#4A72B2] text-white text-xs font-bold transition cursor-pointer flex items-center gap-1.5 shadow-sm"
-              title="Abrir modal para revisar comandos CLI consolidados do Master e aplicar em lote"
+              onClick={() => {
+                setBatchModalMode('save_preview')
+                setIsBatchModalOpen(true)
+              }}
+              className="px-4 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold transition cursor-pointer flex items-center gap-1.5 shadow-sm"
+              title="Salvar alterações e exibir prévia dos comandos CLI para o roteador master"
             >
-              <SlidersHorizontal className="h-3.5 w-3.5" />
-              <span>Configurar em Lote</span>
+              <Save className="h-3.5 w-3.5" />
+              <span>Salvar ({selectedTargets.size})</span>
             </button>
             <button
               type="button"
@@ -989,6 +1240,7 @@ export const TrafficDownloadTab: React.FC<TrafficDownloadTabProps> = ({
       {isBatchModalOpen && (
         <BatchPrependModal
           isOpen={isBatchModalOpen}
+          mode={batchModalMode}
           onClose={() => setIsBatchModalOpen(false)}
           targets={Array.from(selectedTargets.values())}
           devices={devices}
