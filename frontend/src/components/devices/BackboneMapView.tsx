@@ -1,0 +1,687 @@
+import React, { useEffect, useRef, useState, useMemo } from 'react'
+import L from 'leaflet'
+import {
+  Server,
+  Network,
+  Radio,
+  Layers,
+  Crown,
+  MapPin,
+  Search,
+  Terminal,
+  ArrowUpDown,
+  CheckCircle2,
+  Compass,
+  Edit2,
+  Plus,
+} from 'lucide-react'
+import type { Device, DeviceRole } from '../../services/api'
+import { isBGPMasterDevice } from '../../utils/bgpMaster'
+
+export interface BackboneMapViewProps {
+  devices: Device[]
+  onEditDevice?: (dev: Device) => void
+  onSelectDeviceForTerminal?: (dev: Device) => void
+  onSelectDeviceForBGP?: (dev: Device) => void
+  onAddDevice?: () => void
+  onUpdateCoordinates?: (deviceId: string, lat: number, lng: number) => Promise<void>
+}
+
+// Visual color tokens per backbone role
+const ROLE_CONFIG: Record<
+  DeviceRole,
+  { label: string; bg: string; text: string; border: string; markerColor: string; icon: string }
+> = {
+  bgp: {
+    label: 'BGP (Borda)',
+    bg: 'bg-blue-950/70',
+    text: 'text-blue-400',
+    border: 'border-blue-500/40',
+    markerColor: '#3B82F6',
+    icon: 'BGP',
+  },
+  pe: {
+    label: 'PE (Distribuição)',
+    bg: 'bg-purple-950/70',
+    text: 'text-purple-400',
+    border: 'border-purple-500/40',
+    markerColor: '#A855F7',
+    icon: 'PE',
+  },
+  sw: {
+    label: 'SW (Switch Core)',
+    bg: 'bg-emerald-950/70',
+    text: 'text-emerald-400',
+    border: 'border-emerald-500/40',
+    markerColor: '#10B981',
+    icon: 'SW',
+  },
+  olt: {
+    label: 'OLT (Óptica)',
+    bg: 'bg-amber-950/70',
+    text: 'text-amber-400',
+    border: 'border-amber-500/40',
+    markerColor: '#F59E0B',
+    icon: 'OLT',
+  },
+  other: {
+    label: 'Backbone / Outro',
+    bg: 'bg-slate-900/80',
+    text: 'text-slate-300',
+    border: 'border-slate-700',
+    markerColor: '#64748B',
+    icon: 'DEV',
+  },
+}
+
+export const BackboneMapView: React.FC<BackboneMapViewProps> = ({
+  devices,
+  onEditDevice,
+  onSelectDeviceForTerminal,
+  onSelectDeviceForBGP,
+  onAddDevice,
+  onUpdateCoordinates,
+}) => {
+  const mapContainerRef = useRef<HTMLDivElement>(null)
+  const mapInstanceRef = useRef<L.Map | null>(null)
+  const markersLayerRef = useRef<L.LayerGroup | null>(null)
+
+  // Filters state
+  const [roleFilter, setRoleFilter] = useState<'all' | DeviceRole>('all')
+  const [statusFilter, setStatusFilter] = useState<'all' | 'online' | 'offline'>('all')
+  const [search, setSearch] = useState('')
+  const [selectedDevice, setSelectedDevice] = useState<Device | null>(null)
+
+  // Device coordinate placement mode
+  const [placingDeviceId, setPlacingDeviceId] = useState<string | null>(null)
+  const [savingLocation, setSavingLocation] = useState(false)
+
+  // Classify devices into placed on map vs unplaced
+  const placedDevices = useMemo(() => {
+    return devices.filter(
+      (d) =>
+        d.latitude !== undefined &&
+        d.latitude !== null &&
+        d.longitude !== undefined &&
+        d.longitude !== null &&
+        !isNaN(Number(d.latitude)) &&
+        !isNaN(Number(d.longitude))
+    )
+  }, [devices])
+
+  const unplacedDevices = useMemo(() => {
+    return devices.filter(
+      (d) =>
+        d.latitude === undefined ||
+        d.latitude === null ||
+        d.longitude === undefined ||
+        d.longitude === null ||
+        isNaN(Number(d.latitude)) ||
+        isNaN(Number(d.longitude))
+    )
+  }, [devices])
+
+  // Filtered devices to display on map
+  const visibleDevices = useMemo(() => {
+    return placedDevices.filter((dev) => {
+      const role = dev.device_role || (dev.is_bgp ? 'bgp' : 'sw')
+      if (roleFilter !== 'all' && role !== roleFilter) return false
+      if (statusFilter !== 'all' && dev.status !== statusFilter) return false
+      if (search.trim()) {
+        const q = search.toLowerCase()
+        const matches =
+          dev.name.toLowerCase().includes(q) ||
+          dev.host.toLowerCase().includes(q) ||
+          (dev.site && dev.site.toLowerCase().includes(q)) ||
+          (dev.city && dev.city.toLowerCase().includes(q)) ||
+          (dev.model && dev.model.toLowerCase().includes(q))
+        if (!matches) return false
+      }
+      return true
+    })
+  }, [placedDevices, roleFilter, statusFilter, search])
+
+  // Backbone KPI counts
+  const counts = useMemo(() => {
+    const res = {
+      total: devices.length,
+      bgp: 0,
+      pe: 0,
+      sw: 0,
+      olt: 0,
+      online: 0,
+      offline: 0,
+      placed: placedDevices.length,
+      unplaced: unplacedDevices.length,
+    }
+    devices.forEach((d) => {
+      const r = d.device_role || (d.is_bgp ? 'bgp' : 'sw')
+      if (r === 'bgp') res.bgp++
+      else if (r === 'pe') res.pe++
+      else if (r === 'sw') res.sw++
+      else if (r === 'olt') res.olt++
+
+      if (d.status === 'online') res.online++
+      else res.offline++
+    })
+    return res
+  }, [devices, placedDevices, unplacedDevices])
+
+  // Initialize Leaflet Map once
+  useEffect(() => {
+    if (!mapContainerRef.current || mapInstanceRef.current) return
+
+    // Default center in Northern/Eastern Brazil (Pará/Belém region or central Brazil)
+    const initialLat = placedDevices.length > 0 ? Number(placedDevices[0].latitude) : -1.4558
+    const initialLng = placedDevices.length > 0 ? Number(placedDevices[0].longitude) : -48.4902
+
+    const map = L.map(mapContainerRef.current, {
+      center: [initialLat, initialLng],
+      zoom: placedDevices.length > 0 ? 10 : 5,
+      zoomControl: false,
+      attributionControl: false,
+    })
+
+    // CartoDB Dark Matter tiles (Official NetPulse dark theme matching #13151D)
+    L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
+      maxZoom: 19,
+      subdomains: 'abcd',
+    }).addTo(map)
+
+    // Custom positioned zoom control at top-right
+    L.control.zoom({ position: 'topright' }).addTo(map)
+
+    // Layer group to hold dynamic markers
+    const markersGroup = L.layerGroup().addTo(map)
+    markersLayerRef.current = markersGroup
+    mapInstanceRef.current = map
+
+    // Handle click on map when placing a device
+    map.on('click', async (e: L.LeafletMouseEvent) => {
+      const activePlacingId = placingDeviceIdRef.current
+      if (!activePlacingId || !onUpdateCoordinates) return
+
+      const { lat, lng } = e.latlng
+      setSavingLocation(true)
+      try {
+        await onUpdateCoordinates(activePlacingId, Number(lat.toFixed(6)), Number(lng.toFixed(6)))
+        setPlacingDeviceId(null)
+      } finally {
+        setSavingLocation(false)
+      }
+    })
+
+    return () => {
+      map.remove()
+      mapInstanceRef.current = null
+    }
+  }, [])
+
+  // Keep a ref to placingDeviceId for the Leaflet event listener
+  const placingDeviceIdRef = useRef<string | null>(placingDeviceId)
+  useEffect(() => {
+    placingDeviceIdRef.current = placingDeviceId
+  }, [placingDeviceId])
+
+  // Update markers when visibleDevices changes
+  useEffect(() => {
+    const map = mapInstanceRef.current
+    const layer = markersLayerRef.current
+    if (!map || !layer) return
+
+    layer.clearLayers()
+
+    const bounds = L.latLngBounds([])
+
+    visibleDevices.forEach((dev) => {
+      const lat = Number(dev.latitude)
+      const lng = Number(dev.longitude)
+      if (isNaN(lat) || isNaN(lng)) return
+
+      const role = dev.device_role || (dev.is_bgp ? 'bgp' : 'sw')
+      const config = ROLE_CONFIG[role] || ROLE_CONFIG.other
+      const isMaster = isBGPMasterDevice(dev, devices)
+      const isOnline = dev.status === 'online'
+
+      // Custom HTML Marker Pin
+      const markerHtml = `
+        <div class="relative flex items-center justify-center cursor-pointer group" style="width: 44px; height: 44px;">
+          ${
+            isOnline
+              ? '<span class="absolute w-9 h-9 rounded-full bg-emerald-400/25 animate-ping"></span>'
+              : '<span class="absolute w-9 h-9 rounded-full bg-rose-500/20"></span>'
+          }
+          <div class="relative z-10 w-9 h-9 rounded-2xl flex flex-col items-center justify-center font-bold text-[10px] shadow-2xl transition-transform transform group-hover:scale-110"
+               style="background-color: #161922; border: 2px solid ${config.markerColor}; color: ${config.markerColor};">
+            ${
+              isMaster
+                ? '<span class="absolute -top-2.5 bg-amber-500 text-black px-1 rounded text-[8px] font-black uppercase tracking-widest shadow">MASTER</span>'
+                : ''
+            }
+            <span class="tracking-tighter">${config.icon}</span>
+            <span class="w-1.5 h-1.5 rounded-full ${isOnline ? 'bg-emerald-400' : 'bg-rose-500'} mt-0.5"></span>
+          </div>
+        </div>
+      `
+
+      const customIcon = L.divIcon({
+        html: markerHtml,
+        className: 'netpulse-map-marker',
+        iconSize: [44, 44],
+        iconAnchor: [22, 22],
+        popupAnchor: [0, -20],
+      })
+
+      const marker = L.marker([lat, lng], { icon: customIcon }).addTo(layer)
+      bounds.extend([lat, lng])
+
+      // Click event selects device for quick actions flyout
+      marker.on('click', () => {
+        setSelectedDevice(dev)
+      })
+    })
+
+    // If there are placed markers, fit bounds smoothly
+    if (visibleDevices.length > 0 && bounds.isValid()) {
+      map.fitBounds(bounds, { padding: [50, 50], maxZoom: 14 })
+    }
+  }, [visibleDevices, devices])
+
+  // Center on entire backbone bounds
+  const handleResetView = () => {
+    const map = mapInstanceRef.current
+    if (!map || visibleDevices.length === 0) return
+    const bounds = L.latLngBounds(
+      visibleDevices.map((d) => [Number(d.latitude), Number(d.longitude)])
+    )
+    if (bounds.isValid()) {
+      map.fitBounds(bounds, { padding: [60, 60], maxZoom: 14 })
+    }
+  }
+
+  return (
+    <div className="space-y-4">
+      {/* Top Backbone KPI Summary */}
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
+        <div className="p-3.5 rounded-2xl bg-[#1C202C] border border-[#242836] shadow-sm flex items-center gap-3">
+          <div className="h-10 w-10 rounded-xl bg-[#25334D] border border-[#3B5B8C]/40 flex items-center justify-center text-[#93B4E6] shrink-0">
+            <Server className="h-5 w-5" />
+          </div>
+          <div>
+            <span className="text-[11px] font-medium text-slate-400 block uppercase tracking-wider">Backbone Total</span>
+            <span className="text-lg font-bold text-white">{counts.total}</span>
+          </div>
+        </div>
+
+        <div className="p-3.5 rounded-2xl bg-[#1C202C] border border-[#242836] shadow-sm flex items-center gap-3">
+          <div className="h-10 w-10 rounded-xl bg-blue-950/70 border border-blue-500/40 flex items-center justify-center text-blue-400 shrink-0">
+            <ArrowUpDown className="h-5 w-5" />
+          </div>
+          <div>
+            <span className="text-[11px] font-medium text-slate-400 block uppercase tracking-wider">Bordas BGP</span>
+            <span className="text-lg font-bold text-blue-300">{counts.bgp}</span>
+          </div>
+        </div>
+
+        <div className="p-3.5 rounded-2xl bg-[#1C202C] border border-[#242836] shadow-sm flex items-center gap-3">
+          <div className="h-10 w-10 rounded-xl bg-purple-950/70 border border-purple-500/40 flex items-center justify-center text-purple-400 shrink-0">
+            <Network className="h-5 w-5" />
+          </div>
+          <div>
+            <span className="text-[11px] font-medium text-slate-400 block uppercase tracking-wider">Roteadores PE</span>
+            <span className="text-lg font-bold text-purple-300">{counts.pe}</span>
+          </div>
+        </div>
+
+        <div className="p-3.5 rounded-2xl bg-[#1C202C] border border-[#242836] shadow-sm flex items-center gap-3">
+          <div className="h-10 w-10 rounded-xl bg-emerald-950/70 border border-emerald-500/40 flex items-center justify-center text-emerald-400 shrink-0">
+            <Layers className="h-5 w-5" />
+          </div>
+          <div>
+            <span className="text-[11px] font-medium text-slate-400 block uppercase tracking-wider">Switches Core</span>
+            <span className="text-lg font-bold text-emerald-300">{counts.sw}</span>
+          </div>
+        </div>
+
+        <div className="p-3.5 rounded-2xl bg-[#1C202C] border border-[#242836] shadow-sm flex items-center gap-3">
+          <div className="h-10 w-10 rounded-xl bg-amber-950/70 border border-amber-500/40 flex items-center justify-center text-amber-400 shrink-0">
+            <Radio className="h-5 w-5" />
+          </div>
+          <div>
+            <span className="text-[11px] font-medium text-slate-400 block uppercase tracking-wider">OLTs Ópticas</span>
+            <span className="text-lg font-bold text-amber-300">{counts.olt}</span>
+          </div>
+        </div>
+
+        <div className="p-3.5 rounded-2xl bg-[#1C202C] border border-[#242836] shadow-sm flex items-center gap-3">
+          <div className="h-10 w-10 rounded-xl bg-[#161922] border border-[#242836] flex items-center justify-center text-emerald-400 shrink-0">
+            <CheckCircle2 className="h-5 w-5" />
+          </div>
+          <div>
+            <span className="text-[11px] font-medium text-slate-400 block uppercase tracking-wider">Status Online</span>
+            <span className="text-lg font-bold text-white">
+              {counts.online} <span className="text-xs font-normal text-slate-400">/ {counts.total}</span>
+            </span>
+          </div>
+        </div>
+      </div>
+
+      {/* Map Control Bar & Filters */}
+      <div className="flex flex-col lg:flex-row items-stretch lg:items-center justify-between gap-3 bg-[#1C202C] border border-[#242836] p-3.5 rounded-2xl shadow-sm">
+        {/* Role Pills */}
+        <div className="flex flex-wrap items-center gap-1.5">
+          <button
+            type="button"
+            onClick={() => setRoleFilter('all')}
+            className={`px-3 py-1.5 rounded-xl text-xs font-semibold transition cursor-pointer border ${
+              roleFilter === 'all'
+                ? 'bg-[#25334D] text-[#93B4E6] border-[#3B5B8C]'
+                : 'bg-[#161922] text-slate-400 border-[#242836] hover:text-white'
+            }`}
+          >
+            Todos ({counts.total})
+          </button>
+          <button
+            type="button"
+            onClick={() => setRoleFilter('bgp')}
+            className={`px-3 py-1.5 rounded-xl text-xs font-semibold transition cursor-pointer border flex items-center gap-1.5 ${
+              roleFilter === 'bgp'
+                ? 'bg-blue-950 border-blue-500 text-blue-300'
+                : 'bg-[#161922] text-slate-400 border-[#242836] hover:text-white'
+            }`}
+          >
+            <span className="w-2 h-2 rounded-full bg-blue-500"></span>
+            <span>BGP ({counts.bgp})</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => setRoleFilter('pe')}
+            className={`px-3 py-1.5 rounded-xl text-xs font-semibold transition cursor-pointer border flex items-center gap-1.5 ${
+              roleFilter === 'pe'
+                ? 'bg-purple-950 border-purple-500 text-purple-300'
+                : 'bg-[#161922] text-slate-400 border-[#242836] hover:text-white'
+            }`}
+          >
+            <span className="w-2 h-2 rounded-full bg-purple-500"></span>
+            <span>PE ({counts.pe})</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => setRoleFilter('sw')}
+            className={`px-3 py-1.5 rounded-xl text-xs font-semibold transition cursor-pointer border flex items-center gap-1.5 ${
+              roleFilter === 'sw'
+                ? 'bg-emerald-950 border-emerald-500 text-emerald-300'
+                : 'bg-[#161922] text-slate-400 border-[#242836] hover:text-white'
+            }`}
+          >
+            <span className="w-2 h-2 rounded-full bg-emerald-500"></span>
+            <span>SW ({counts.sw})</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => setRoleFilter('olt')}
+            className={`px-3 py-1.5 rounded-xl text-xs font-semibold transition cursor-pointer border flex items-center gap-1.5 ${
+              roleFilter === 'olt'
+                ? 'bg-amber-950 border-amber-500 text-amber-300'
+                : 'bg-[#161922] text-slate-400 border-[#242836] hover:text-white'
+            }`}
+          >
+            <span className="w-2 h-2 rounded-full bg-amber-500"></span>
+            <span>OLT ({counts.olt})</span>
+          </button>
+        </div>
+
+        {/* Right Search & Controls */}
+        <div className="flex flex-wrap items-center gap-2">
+          {/* Status selector */}
+          <select
+            value={statusFilter}
+            onChange={(e) => setStatusFilter(e.target.value as any)}
+            className="px-3 py-1.5 rounded-xl bg-[#161922] border border-[#242836] text-slate-300 text-xs font-medium focus:outline-none focus:border-[#3B5B8C] cursor-pointer"
+          >
+            <option value="all">Status: Todos</option>
+            <option value="online">Apenas Online</option>
+            <option value="offline">Apenas Offline</option>
+          </select>
+
+          {/* Search */}
+          <div className="relative">
+            <Search className="absolute left-3 top-2.5 h-3.5 w-3.5 text-slate-500" />
+            <input
+              type="text"
+              placeholder="Buscar por Nome, IP, POP, Cidade..."
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              className="bg-[#161922] border border-[#242836] text-slate-200 text-xs rounded-xl pl-9 pr-3 py-1.5 focus:border-[#3B5B8C] focus:outline-none w-52 sm:w-64"
+            />
+          </div>
+
+          {/* Reset Zoom */}
+          <button
+            type="button"
+            onClick={handleResetView}
+            className="px-3 py-1.5 rounded-xl bg-[#161922] hover:bg-[#202738] text-slate-300 hover:text-white border border-[#242836] text-xs font-medium transition cursor-pointer flex items-center gap-1.5"
+            title="Ajustar visualização para enquadrar todos os equipamentos"
+          >
+            <Compass className="h-3.5 w-3.5 text-[#93B4E6]" />
+            <span className="hidden sm:inline">Centralizar</span>
+          </button>
+
+          {/* Add Device */}
+          {onAddDevice && (
+            <button
+              type="button"
+              onClick={onAddDevice}
+              className="px-3.5 py-1.5 rounded-xl bg-[#3B5B8C] hover:bg-[#4A72B2] text-white text-xs font-bold transition cursor-pointer flex items-center gap-1.5 shadow-sm"
+            >
+              <Plus className="h-4 w-4" />
+              <span>Cadastrar</span>
+            </button>
+          )}
+        </div>
+      </div>
+
+      {/* Positioning Alert Mode */}
+      {placingDeviceId && (
+        <div className="p-3.5 rounded-2xl bg-amber-950/60 border border-amber-600/70 text-amber-200 text-xs flex items-center justify-between shadow-lg animate-in fade-in duration-150">
+          <div className="flex items-center gap-2.5">
+            <MapPin className="h-4 w-4 text-amber-400 animate-bounce" />
+            <span>
+              <strong>Modo de Posicionamento Ativo:</strong>{' '}
+              {savingLocation
+                ? 'Salvando coordenadas geográficas no equipamento...'
+                : 'Clique em qualquer ponto do mapa para definir a localização do equipamento selecionado.'}
+            </span>
+          </div>
+          <button
+            type="button"
+            disabled={savingLocation}
+            onClick={() => setPlacingDeviceId(null)}
+            className="px-3 py-1 rounded-lg bg-amber-900/60 hover:bg-amber-800 text-amber-100 text-xs font-bold transition cursor-pointer border border-amber-600/50 disabled:opacity-50"
+          >
+            Cancelar
+          </button>
+        </div>
+      )}
+
+      {/* Main Map Box & Lateral Overlay */}
+      <div className="relative rounded-2xl border border-[#242836] overflow-hidden bg-[#13151D] shadow-2xl h-[620px] sm:h-[680px]">
+        {/* Leaflet DOM container */}
+        <div ref={mapContainerRef} className="w-full h-full z-0" />
+
+        {/* Floating Unplaced Devices Drawer (if any devices lack coordinates) */}
+        {unplacedDevices.length > 0 && !placingDeviceId && (
+          <div className="absolute top-4 left-4 z-20 max-w-xs w-full bg-[#1C202C]/95 border border-[#242836] rounded-2xl p-3.5 shadow-2xl backdrop-blur-md space-y-2">
+            <div className="flex items-center justify-between border-b border-[#242836] pb-2">
+              <span className="text-xs font-bold text-slate-200 flex items-center gap-1.5">
+                <MapPin className="h-3.5 w-3.5 text-amber-400" />
+                <span>Sem Localização ({unplacedDevices.length})</span>
+              </span>
+              <span className="text-[10px] text-slate-500 font-mono">Clique para posicionar</span>
+            </div>
+            <div className="max-h-40 overflow-y-auto space-y-1.5 pr-1">
+              {unplacedDevices.map((d) => {
+                const role = d.device_role || (d.is_bgp ? 'bgp' : 'sw')
+                const cfg = ROLE_CONFIG[role] || ROLE_CONFIG.other
+                return (
+                  <div
+                    key={d.id}
+                    className="p-2 rounded-xl bg-[#161922] border border-[#242836] hover:border-[#3B5B8C] transition flex items-center justify-between gap-2 text-xs"
+                  >
+                    <div className="min-w-0">
+                      <div className="flex items-center gap-1.5">
+                        <span className={`text-[9px] font-black px-1 rounded ${cfg.bg} ${cfg.text}`}>
+                          {cfg.icon}
+                        </span>
+                        <strong className="text-white truncate block text-[11px]">{d.name}</strong>
+                      </div>
+                      <span className="text-[10px] text-slate-400 font-mono block truncate">{d.host}</span>
+                    </div>
+                    <div className="flex items-center gap-1 shrink-0">
+                      {onUpdateCoordinates && (
+                        <button
+                          type="button"
+                          onClick={() => setPlacingDeviceId(d.id)}
+                          className="px-2 py-1 rounded-lg bg-[#25334D] hover:bg-[#3B5B8C] text-[#93B4E6] hover:text-white text-[10px] font-bold transition cursor-pointer"
+                          title="Clique no mapa para posicionar este equipamento"
+                        >
+                          Posicionar
+                        </button>
+                      )}
+                      {onEditDevice && (
+                        <button
+                          type="button"
+                          onClick={() => onEditDevice(d)}
+                          className="p-1 rounded-lg text-slate-400 hover:text-white hover:bg-[#252C3D] transition cursor-pointer"
+                          title="Editar"
+                        >
+                          <Edit2 className="h-3 w-3" />
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+          </div>
+        )}
+
+        {/* Selected Device Popup Flyout */}
+        {selectedDevice && (
+          <div className="absolute bottom-4 left-4 right-4 sm:right-auto sm:max-w-md bg-[#1C202C] border border-[#3B5B8C] rounded-2xl p-4 shadow-2xl z-20 space-y-3 animate-in fade-in slide-in-from-bottom-2 duration-150">
+            <div className="flex items-start justify-between gap-3 border-b border-[#242836] pb-3">
+              <div className="flex items-center gap-2.5">
+                <div
+                  className="h-10 w-10 rounded-xl flex items-center justify-center font-bold text-xs shrink-0"
+                  style={{
+                    backgroundColor: '#161922',
+                    border: `2px solid ${
+                      ROLE_CONFIG[selectedDevice.device_role || (selectedDevice.is_bgp ? 'bgp' : 'sw')].markerColor
+                    }`,
+                    color:
+                      ROLE_CONFIG[selectedDevice.device_role || (selectedDevice.is_bgp ? 'bgp' : 'sw')].markerColor,
+                  }}
+                >
+                  {ROLE_CONFIG[selectedDevice.device_role || (selectedDevice.is_bgp ? 'bgp' : 'sw')].icon}
+                </div>
+                <div>
+                  <div className="flex items-center gap-2">
+                    <h4 className="text-sm font-bold text-white leading-snug">{selectedDevice.name}</h4>
+                    {isBGPMasterDevice(selectedDevice, devices) && (
+                      <span className="flex items-center gap-1 text-[9px] bg-amber-500/20 text-amber-300 border border-amber-500/40 px-1.5 py-0.5 rounded-md font-bold">
+                        <Crown className="h-2.5 w-2.5 text-amber-400" />
+                        MASTER
+                      </span>
+                    )}
+                  </div>
+                  <div className="flex items-center gap-2 mt-0.5">
+                    <span className="text-[11px] font-mono text-slate-400">{selectedDevice.host}</span>
+                    <span className="text-slate-600">&bull;</span>
+                    <span
+                      className={`text-[10px] font-semibold flex items-center gap-1 ${
+                        selectedDevice.status === 'online' ? 'text-emerald-400' : 'text-rose-400'
+                      }`}
+                    >
+                      <span
+                        className={`w-1.5 h-1.5 rounded-full ${
+                          selectedDevice.status === 'online' ? 'bg-emerald-400' : 'bg-rose-500'
+                        }`}
+                      ></span>
+                      {selectedDevice.status === 'online' ? 'Online' : 'Offline'}
+                    </span>
+                  </div>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setSelectedDevice(null)}
+                className="text-slate-400 hover:text-white p-1 rounded-lg hover:bg-[#161922] transition cursor-pointer"
+                title="Fechar"
+              >
+                &times;
+              </button>
+            </div>
+
+            {/* Geographical details */}
+            <div className="grid grid-cols-2 gap-2 text-xs font-mono bg-[#161922] p-2.5 rounded-xl border border-[#242836]">
+              <div>
+                <span className="text-slate-500 font-sans text-[10px] block">Site / POP:</span>
+                <span className="text-slate-200 font-semibold">{selectedDevice.site || 'Não especificado'}</span>
+              </div>
+              <div>
+                <span className="text-slate-500 font-sans text-[10px] block">Cidade / UF:</span>
+                <span className="text-slate-200 font-semibold">{selectedDevice.city || 'Não especificado'}</span>
+              </div>
+              <div>
+                <span className="text-slate-500 font-sans text-[10px] block">Fabricante & Modelo:</span>
+                <span className="text-[#93B4E6] uppercase">{selectedDevice.vendor} {selectedDevice.model || ''}</span>
+              </div>
+              <div>
+                <span className="text-slate-500 font-sans text-[10px] block">Coordenadas:</span>
+                <span className="text-slate-400 text-[11px]">
+                  {selectedDevice.latitude?.toFixed(4)}, {selectedDevice.longitude?.toFixed(4)}
+                </span>
+              </div>
+            </div>
+
+            {/* Action buttons */}
+            <div className="flex items-center gap-2 pt-1">
+              {onSelectDeviceForTerminal && (
+                <button
+                  type="button"
+                  onClick={() => onSelectDeviceForTerminal(selectedDevice)}
+                  className="flex-1 py-1.5 px-2.5 rounded-xl bg-[#25334D] hover:bg-[#3B5B8C] text-slate-200 hover:text-white text-xs font-semibold border border-[#3B5B8C]/40 transition cursor-pointer flex items-center justify-center gap-1.5"
+                >
+                  <Terminal className="h-3.5 w-3.5 text-[#93B4E6]" />
+                  <span>SSH Terminal</span>
+                </button>
+              )}
+
+              {selectedDevice.is_bgp && onSelectDeviceForBGP && (
+                <button
+                  type="button"
+                  onClick={() => onSelectDeviceForBGP(selectedDevice)}
+                  className="flex-1 py-1.5 px-2.5 rounded-xl bg-blue-950/70 hover:bg-blue-900 text-blue-200 text-xs font-semibold border border-blue-500/40 transition cursor-pointer flex items-center justify-center gap-1.5"
+                >
+                  <ArrowUpDown className="h-3.5 w-3.5 text-blue-400" />
+                  <span>Rotas BGP</span>
+                </button>
+              )}
+
+              {onEditDevice && (
+                <button
+                  type="button"
+                  onClick={() => onEditDevice(selectedDevice)}
+                  className="p-1.5 rounded-xl bg-[#161922] hover:bg-[#202738] text-slate-300 hover:text-white border border-[#242836] transition cursor-pointer"
+                  title="Editar dados e coordenadas deste equipamento"
+                >
+                  <Edit2 className="h-3.5 w-3.5" />
+                </button>
+              )}
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}

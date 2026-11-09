@@ -14,7 +14,10 @@ import {
   Activity,
   Building2,
   Layers,
-  Crown
+  Crown,
+  MapPin,
+  Locate,
+  LayoutGrid,
 } from 'lucide-react'
 import {
   fetchDevices,
@@ -25,13 +28,15 @@ import {
   auditDeviceCompliance,
   type Device,
   type VendorType,
+  type DeviceRole,
   type SSHTestResult,
-  type DeviceComplianceAudit
+  type DeviceComplianceAudit,
 } from '../services/api'
 import { useAuth } from '../context/AuthContext'
 import { DeviceCardSkeleton } from './common/Skeleton'
 import { DeviceComplianceModal } from './DeviceComplianceModal'
 import { isBGPMasterDevice, setBGPMasterDeviceId } from '../utils/bgpMaster'
+import { BackboneMapView } from './devices/BackboneMapView'
 
 interface DeviceManagerProps {
   onSelectDeviceForTerminal?: (device: Device) => void
@@ -46,6 +51,13 @@ const VENDOR_OPTIONS: { id: VendorType; label: string; badge: string; color: str
   { id: 'mikrotik_v6', label: 'MikroTik (RouterOS v6)', badge: 'MikroTik v6', color: 'bg-indigo-500/10 text-indigo-400 border-indigo-500/30' },
 ]
 
+const ROLE_OPTIONS: { id: DeviceRole; label: string; badge: string; color: string; desc: string }[] = [
+  { id: 'bgp', label: 'BGP (Borda)', badge: 'BGP', color: 'bg-blue-500/10 text-blue-400 border-blue-500/30', desc: 'Roteador de Borda com varredura BGP' },
+  { id: 'pe', label: 'PE (Distribuição)', badge: 'PE', color: 'bg-purple-500/10 text-purple-400 border-purple-500/30', desc: 'Provider Edge / Agregação' },
+  { id: 'sw', label: 'SW (Switch)', badge: 'SW', color: 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30', desc: 'Switch Core / Backbone' },
+  { id: 'olt', label: 'OLT (Óptica)', badge: 'OLT', color: 'bg-amber-500/10 text-amber-400 border-amber-500/30', desc: 'Terminal Óptico GPON/PON' },
+]
+
 export const DeviceManager: React.FC<DeviceManagerProps> = ({
   onSelectDeviceForTerminal,
   onSelectDeviceForBGP,
@@ -56,6 +68,9 @@ export const DeviceManager: React.FC<DeviceManagerProps> = ({
   const [devices, setDevices] = useState<Device[]>([])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+
+  // View Mode: 'cards' | 'map'
+  const [viewMode, setViewMode] = useState<'cards' | 'map'>('cards')
 
   // Modal State
   const [isModalOpen, setIsModalOpen] = useState(false)
@@ -70,6 +85,11 @@ export const DeviceManager: React.FC<DeviceManagerProps> = ({
   const [formPassword, setFormPassword] = useState('')
   const [formIsBGP, setFormIsBGP] = useState(true)
   const [formIsMaster, setFormIsMaster] = useState(false)
+  const [formDeviceRole, setFormDeviceRole] = useState<DeviceRole>('bgp')
+  const [formLatitude, setFormLatitude] = useState('')
+  const [formLongitude, setFormLongitude] = useState('')
+  const [formSite, setFormSite] = useState('')
+  const [formCity, setFormCity] = useState('')
   const [, setMasterTrigger] = useState(0)
 
   useEffect(() => {
@@ -77,6 +97,37 @@ export const DeviceManager: React.FC<DeviceManagerProps> = ({
     window.addEventListener('bgp_master_changed', handler)
     return () => window.removeEventListener('bgp_master_changed', handler)
   }, [])
+
+  // Geolocation capture via browser API
+  const handleCaptureLocation = () => {
+    if (typeof navigator === 'undefined' || !navigator.geolocation) {
+      alert('Geolocalização não suportada pelo navegador')
+      return
+    }
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        setFormLatitude(pos.coords.latitude.toFixed(6))
+        setFormLongitude(pos.coords.longitude.toFixed(6))
+      },
+      (err) => {
+        alert('Não foi possível obter sua localização: ' + err.message)
+      },
+      { enableHighAccuracy: true, timeout: 10000 }
+    )
+  }
+
+  // Update coordinates directly from map placement
+  const handleUpdateCoordinates = async (deviceId: string, lat: number, lng: number) => {
+    try {
+      await updateDevice(deviceId, { latitude: lat, longitude: lng })
+      setDevices((prev) =>
+        prev.map((d) => (d.id === deviceId ? { ...d, latitude: lat, longitude: lng } : d))
+      )
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'Erro ao atualizar coordenadas'
+      setError(msg)
+    }
+  }
 
   // Testing SSH state per device
   const [testingId, setTestingId] = useState<string | null>(null)
@@ -134,6 +185,11 @@ export const DeviceManager: React.FC<DeviceManagerProps> = ({
     setFormPassword('')
     setFormIsBGP(true)
     setFormIsMaster(false)
+    setFormDeviceRole('bgp')
+    setFormLatitude('')
+    setFormLongitude('')
+    setFormSite('')
+    setFormCity('')
     setIsModalOpen(true)
   }
 
@@ -149,12 +205,28 @@ export const DeviceManager: React.FC<DeviceManagerProps> = ({
     setFormPassword('')
     setFormIsBGP(dev.is_bgp ?? true)
     setFormIsMaster(isBGPMasterDevice(dev, devices))
+    setFormDeviceRole(dev.device_role || (dev.is_bgp ? 'bgp' : 'sw'))
+    setFormLatitude(
+      dev.latitude !== undefined && dev.latitude !== null && !isNaN(Number(dev.latitude))
+        ? String(dev.latitude)
+        : ''
+    )
+    setFormLongitude(
+      dev.longitude !== undefined && dev.longitude !== null && !isNaN(Number(dev.longitude))
+        ? String(dev.longitude)
+        : ''
+    )
+    setFormSite(dev.site || '')
+    setFormCity(dev.city || '')
     setIsModalOpen(true)
   }
 
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault()
     try {
+      const latVal = formLatitude.trim() ? parseFloat(formLatitude.trim()) : undefined
+      const lngVal = formLongitude.trim() ? parseFloat(formLongitude.trim()) : undefined
+
       if (editingDevice) {
         await updateDevice(editingDevice.id, {
           tenant_id: isSuperAdmin ? formTenantId : undefined,
@@ -167,6 +239,11 @@ export const DeviceManager: React.FC<DeviceManagerProps> = ({
           password: formPassword || undefined,
           is_bgp: formIsBGP,
           is_master: formIsMaster,
+          device_role: formDeviceRole,
+          latitude: latVal !== undefined && !isNaN(latVal) ? latVal : undefined,
+          longitude: lngVal !== undefined && !isNaN(lngVal) ? lngVal : undefined,
+          site: formSite.trim() || undefined,
+          city: formCity.trim() || undefined,
         })
         if (formIsMaster) {
           setBGPMasterDeviceId(editingDevice.id)
@@ -184,6 +261,11 @@ export const DeviceManager: React.FC<DeviceManagerProps> = ({
           auth_type: 'password',
           is_bgp: formIsBGP,
           is_master: formIsMaster,
+          device_role: formDeviceRole,
+          latitude: latVal !== undefined && !isNaN(latVal) ? latVal : undefined,
+          longitude: lngVal !== undefined && !isNaN(lngVal) ? lngVal : undefined,
+          site: formSite.trim() || undefined,
+          city: formCity.trim() || undefined,
         })
         if (formIsMaster && created?.id) {
           setBGPMasterDeviceId(created.id)
@@ -232,14 +314,42 @@ export const DeviceManager: React.FC<DeviceManagerProps> = ({
         <div>
           <h2 className="text-lg font-semibold text-slate-100 flex items-center gap-2">
             <Server className="h-5 w-5 text-[#4A72B2]" />
-            <span>Inventário de Equipamentos (Bordas, Cores e Switches)</span>
+            <span>Infraestrutura & Backbone (Bordas, PEs, Switches e OLTs)</span>
           </h2>
           <p className="text-xs text-slate-400 mt-1">
-            Gerenciamento e credenciais SSH para Huawei (NE8000, NE40, S6730), Datacom DmOS e MikroTik
+            Gerenciamento, credenciais SSH e visualização geográfica do backbone (Huawei, Datacom, MikroTik)
           </p>
         </div>
 
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-3 flex-wrap">
+          {/* View Mode Toggle */}
+          <div className="flex items-center bg-[#161922] p-1 rounded-xl border border-[#242836]">
+            <button
+              type="button"
+              onClick={() => setViewMode('cards')}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition cursor-pointer ${
+                viewMode === 'cards'
+                  ? 'bg-[#25334D] text-[#93B4E6] border border-[#3B5B8C]/40 shadow-xs'
+                  : 'text-slate-400 hover:text-white'
+              }`}
+            >
+              <LayoutGrid className="h-3.5 w-3.5" />
+              <span>Inventário ({devices.length})</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setViewMode('map')}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition cursor-pointer ${
+                viewMode === 'map'
+                  ? 'bg-[#25334D] text-[#93B4E6] border border-[#3B5B8C]/40 shadow-xs'
+                  : 'text-slate-400 hover:text-white'
+              }`}
+            >
+              <MapPin className="h-3.5 w-3.5 text-[#E5A93C]" />
+              <span>Mapa do Backbone</span>
+            </button>
+          </div>
+
           <button
             onClick={loadDevices}
             disabled={loading}
@@ -265,8 +375,17 @@ export const DeviceManager: React.FC<DeviceManagerProps> = ({
         </div>
       )}
 
-      {/* Grid of Devices */}
-      {loading && devices.length === 0 ? (
+      {/* Main View: Geographic Map or Inventory Cards */}
+      {viewMode === 'map' ? (
+        <BackboneMapView
+          devices={devices}
+          onEditDevice={openEditModal}
+          onSelectDeviceForTerminal={onSelectDeviceForTerminal}
+          onSelectDeviceForBGP={onSelectDeviceForBGP}
+          onAddDevice={openAddModal}
+          onUpdateCoordinates={handleUpdateCoordinates}
+        />
+      ) : loading && devices.length === 0 ? (
         <div className={`grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 ${density === 'compact' ? 'gap-3.5' : 'gap-5'}`}>
           {Array.from({ length: 3 }).map((_, i) => (
             <DeviceCardSkeleton key={i} compact={density === 'compact'} />
@@ -277,14 +396,14 @@ export const DeviceManager: React.FC<DeviceManagerProps> = ({
           <Network className="h-12 w-12 text-slate-600 mx-auto mb-3" />
           <h3 className="text-base font-semibold text-slate-300">Nenhum equipamento cadastrado ainda</h3>
           <p className="text-xs text-slate-500 max-w-md mx-auto mt-1 mb-6">
-            Cadastre seus roteadores de borda (NE8000, NE40), switches de core (S6730), Datacom DmOS ou MikroTiks para começar a inspecionar BGP e OSPF.
+            Cadastre seus roteadores de borda (BGP), PEs de distribuição, switches de core ou OLTs para começar a visualizar e operar seu backbone.
           </p>
           <button
             onClick={openAddModal}
             className="inline-flex items-center gap-2 px-4 py-2 bg-[#3B5B8C] hover:bg-[#4A72B2] text-white font-medium rounded-lg text-xs cursor-pointer shadow-xs"
           >
             <Plus className="h-4 w-4" />
-            <span>Cadastrar Primeiro Roteador</span>
+            <span>Cadastrar Primeiro Equipamento</span>
           </button>
         </div>
       ) : (
@@ -297,6 +416,8 @@ export const DeviceManager: React.FC<DeviceManagerProps> = ({
             const testResult = testResults[dev.id]
             const isTesting = testingId === dev.id
             const isMaster = isBGPMasterDevice(dev, devices)
+            const role = dev.device_role || (dev.is_bgp ? 'bgp' : 'sw')
+            const roleCfg = ROLE_OPTIONS.find((r) => r.id === role) || ROLE_OPTIONS[0]
 
             return (
               <div
@@ -325,7 +446,7 @@ export const DeviceManager: React.FC<DeviceManagerProps> = ({
                         <span className="text-[11px] text-slate-400 font-mono tracking-tight">{dev.model}</span>
                       )}
                     </div>
-                    <div className="flex items-center gap-2.5 flex-wrap justify-end">
+                    <div className="flex items-center gap-2 flex-wrap justify-end">
                       {isSuperAdmin && dev.tenant_id && (
                         <span
                           className="text-[11px] text-slate-400 flex items-center gap-1"
@@ -337,19 +458,12 @@ export const DeviceManager: React.FC<DeviceManagerProps> = ({
                           </span>
                         </span>
                       )}
+                      <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded border ${roleCfg.color}`}>
+                        {roleCfg.badge}
+                      </span>
                       <span className="text-[11px] font-semibold uppercase tracking-wider text-slate-400">
                         {vendorInfo.badge}
                       </span>
-                      {dev.is_bgp ? (
-                        <span className="text-[11px] font-medium text-slate-400 flex items-center gap-1.5" title="Roteador BGP / Borda com varredura ativa">
-                          <span className="w-1.5 h-1.5 rounded-full bg-[#4A72B2]"></span>
-                          BGP
-                        </span>
-                      ) : (
-                        <span className="text-[11px] font-medium text-slate-500" title="Equipamento interno ou de acesso (sem varredura BGP)">
-                          Não-BGP
-                        </span>
-                      )}
                     </div>
                   </div>
 
@@ -379,6 +493,30 @@ export const DeviceManager: React.FC<DeviceManagerProps> = ({
                         <span className="text-[11px] text-slate-500">Não testado</span>
                       )}
                     </div>
+                    {dev.site && (
+                      <div className="flex items-center justify-between">
+                        <span className="text-slate-500">Site / POP:</span>
+                        <span className="text-slate-200 text-right truncate max-w-[170px]" title={dev.site}>
+                          {dev.site}
+                        </span>
+                      </div>
+                    )}
+                    {dev.city && (
+                      <div className="flex items-center justify-between">
+                        <span className="text-slate-500">Cidade:</span>
+                        <span className="text-slate-300 text-right truncate max-w-[170px]" title={dev.city}>
+                          {dev.city}
+                        </span>
+                      </div>
+                    )}
+                    {dev.latitude != null && dev.longitude != null && (
+                      <div className="flex items-center justify-between">
+                        <span className="text-slate-500">Coordenadas:</span>
+                        <span className="font-mono text-[11px] text-[#93B4E6]" title={`${dev.latitude}, ${dev.longitude}`}>
+                          {dev.latitude.toFixed(4)}, {dev.longitude.toFixed(4)}
+                        </span>
+                      </div>
+                    )}
                     {auditResults[dev.id] && (
                       <div className="flex items-center justify-between pt-1 border-t border-[#242836]">
                         <span className="text-slate-500">Padrão NetPulse:</span>
@@ -545,6 +683,45 @@ export const DeviceManager: React.FC<DeviceManagerProps> = ({
                 </div>
               )}
 
+              {/* Papel no Backbone */}
+              <div className="space-y-1.5">
+                <label className="block text-xs font-medium text-slate-300">
+                  Papel no Backbone *
+                </label>
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                  {ROLE_OPTIONS.map((r) => (
+                    <button
+                      key={r.id}
+                      type="button"
+                      onClick={() => {
+                        setFormDeviceRole(r.id)
+                        if (r.id === 'bgp') {
+                          setFormIsBGP(true)
+                        } else if (!editingDevice) {
+                          setFormIsBGP(false)
+                          setFormIsMaster(false)
+                        }
+                      }}
+                      className={`p-2.5 rounded-xl border text-left transition cursor-pointer flex flex-col gap-0.5 ${
+                        formDeviceRole === r.id
+                          ? 'bg-[#25334D] border-[#3B5B8C] text-white ring-1 ring-[#3B5B8C]'
+                          : 'bg-slate-950/70 border-slate-700 text-slate-400 hover:text-slate-200'
+                      }`}
+                    >
+                      <div className="flex items-center justify-between">
+                        <span className="font-bold text-xs">{r.badge}</span>
+                        {formDeviceRole === r.id && (
+                          <span className="w-1.5 h-1.5 rounded-full bg-cyan-400"></span>
+                        )}
+                      </div>
+                      <span className="text-[10px] text-slate-400 leading-tight truncate">
+                        {r.label}
+                      </span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <label className="block text-xs font-medium text-slate-400 mb-1">
@@ -647,6 +824,72 @@ export const DeviceManager: React.FC<DeviceManagerProps> = ({
                     placeholder="••••••••"
                     className="w-full px-3 py-2 bg-slate-950/70 border border-slate-700 rounded-lg text-xs text-slate-100 placeholder-slate-500 focus:outline-none focus:border-cyan-500"
                   />
+                </div>
+              </div>
+
+              {/* Localização no Mapa do Backbone */}
+              <div className="p-3.5 bg-slate-950/80 border border-slate-800 rounded-xl space-y-3">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <MapPin className="h-4 w-4 text-[#4A72B2]" />
+                    <label className="text-xs font-semibold text-slate-200">
+                      Localização no Mapa do Backbone
+                    </label>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={handleCaptureLocation}
+                    className="text-[11px] text-[#93B4E6] hover:text-white flex items-center gap-1 cursor-pointer bg-[#25334D] hover:bg-[#3B5B8C] px-2 py-0.5 rounded-lg border border-[#3B5B8C]/40 transition"
+                    title="Capturar coordenadas GPS atuais"
+                  >
+                    <Locate className="h-3 w-3" />
+                    <span>Usar Meu GPS</span>
+                  </button>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-[11px] text-slate-400 mb-1">Site / POP (Opcional)</label>
+                    <input
+                      type="text"
+                      value={formSite}
+                      onChange={(e) => setFormSite(e.target.value)}
+                      placeholder="ex: POP Castanhal Central, DC Matriz"
+                      className="w-full px-3 py-1.5 bg-slate-950/70 border border-slate-700 rounded-lg text-xs text-slate-100 placeholder-slate-500 focus:outline-none focus:border-cyan-500"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[11px] text-slate-400 mb-1">Cidade / UF (Opcional)</label>
+                    <input
+                      type="text"
+                      value={formCity}
+                      onChange={(e) => setFormCity(e.target.value)}
+                      placeholder="ex: Castanhal - PA"
+                      className="w-full px-3 py-1.5 bg-slate-950/70 border border-slate-700 rounded-lg text-xs text-slate-100 placeholder-slate-500 focus:outline-none focus:border-cyan-500"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[11px] text-slate-400 mb-1">Latitude</label>
+                    <input
+                      type="number"
+                      step="any"
+                      value={formLatitude}
+                      onChange={(e) => setFormLatitude(e.target.value)}
+                      placeholder="ex: -1.2974"
+                      className="w-full px-3 py-1.5 bg-slate-950/70 border border-slate-700 rounded-lg text-xs text-slate-100 placeholder-slate-500 focus:outline-none focus:border-cyan-500 font-mono"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[11px] text-slate-400 mb-1">Longitude</label>
+                    <input
+                      type="number"
+                      step="any"
+                      value={formLongitude}
+                      onChange={(e) => setFormLongitude(e.target.value)}
+                      placeholder="ex: -47.9205"
+                      className="w-full px-3 py-1.5 bg-slate-950/70 border border-slate-700 rounded-lg text-xs text-slate-100 placeholder-slate-500 focus:outline-none focus:border-cyan-500 font-mono"
+                    />
+                  </div>
                 </div>
               </div>
 

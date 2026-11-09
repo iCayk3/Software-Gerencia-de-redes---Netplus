@@ -207,6 +207,13 @@ func (s *DeviceStore) Create(d models.Device) (*models.Device, error) {
 	if d.Status == "" {
 		d.Status = "untested"
 	}
+	if d.DeviceRole == "" {
+		if d.IsBGP {
+			d.DeviceRole = models.RoleBGP
+		} else {
+			d.DeviceRole = models.RoleSW
+		}
+	}
 	d.CreatedAt = time.Now()
 
 	s.devices[d.ID] = d
@@ -235,6 +242,21 @@ func (s *DeviceStore) Update(d models.Device) error {
 	}
 	if d.Port <= 0 {
 		d.Port = 22
+	}
+	if d.DeviceRole == "" {
+		d.DeviceRole = existing.DeviceRole
+	}
+	if d.Latitude == nil {
+		d.Latitude = existing.Latitude
+	}
+	if d.Longitude == nil {
+		d.Longitude = existing.Longitude
+	}
+	if d.Site == "" {
+		d.Site = existing.Site
+	}
+	if d.City == "" {
+		d.City = existing.City
 	}
 	d.CreatedAt = existing.CreatedAt
 	d.LastSeen = existing.LastSeen

@@ -60,6 +60,7 @@ export interface DNSLookupResponse {
 // --- Network Equipment & Routing Types ---
 
 export type VendorType = 'huawei' | 'datacom' | 'mikrotik_v6' | 'mikrotik_v7'
+export type DeviceRole = 'bgp' | 'pe' | 'sw' | 'olt' | 'other'
 
 export interface Device {
   id: string
@@ -76,6 +77,11 @@ export interface Device {
   auth_type: string
   is_bgp?: boolean
   is_master?: boolean
+  device_role?: DeviceRole
+  latitude?: number
+  longitude?: number
+  site?: string
+  city?: string
   created_at: string
   last_seen?: string
   status: 'online' | 'offline' | 'untested'

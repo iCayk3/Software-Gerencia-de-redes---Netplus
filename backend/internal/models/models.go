@@ -87,22 +87,38 @@ const (
 	VendorMikrotikV7 VendorType = "mikrotik_v7"
 )
 
+// DeviceRole defines the backbone role/function of a device in the infrastructure.
+type DeviceRole string
+
+const (
+	RoleBGP   DeviceRole = "bgp"   // BGP Edge Router / Roteador de Borda
+	RolePE    DeviceRole = "pe"    // Provider Edge / Agregação & Distribuição
+	RoleSW    DeviceRole = "sw"    // Backbone Core / Switch de Distribuição / Acesso
+	RoleOLT   DeviceRole = "olt"   // Optical Line Terminal / Concentrador PON
+	RoleOther DeviceRole = "other" // Outro equipamento de infraestrutura
+)
+
 // Device represents a network router or switch in the inventory.
 type Device struct {
-	ID        string     `json:"id"`
-	TenantID  string     `json:"tenant_id"` // Client company / tenant owner
-	Name      string     `json:"name"`
-	Host      string     `json:"host"`
-	Port      int        `json:"port"`
-	Vendor    VendorType `json:"vendor"`
-	Model     string     `json:"model,omitempty"` // e.g., "NE8000 F1A", "NE40", "S6730", "DmOS", "CCR2004"
-	Username  string     `json:"username"`
-	Password  string     `json:"password,omitempty"`
-	AuthType  string     `json:"auth_type"` // "password" | "key"
-	IsBGP     bool       `json:"is_bgp"`    // If true, device is polled for BGP sessions, routes and traffic engineering
-	CreatedAt time.Time  `json:"created_at"`
-	LastSeen  *time.Time `json:"last_seen,omitempty"`
-	Status    string     `json:"status"` // "online", "offline", "untested"
+	ID         string     `json:"id"`
+	TenantID   string     `json:"tenant_id"` // Client company / tenant owner
+	Name       string     `json:"name"`
+	Host       string     `json:"host"`
+	Port       int        `json:"port"`
+	Vendor     VendorType `json:"vendor"`
+	Model      string     `json:"model,omitempty"` // e.g., "NE8000 F1A", "NE40", "S6730", "DmOS", "CCR2004"
+	Username   string     `json:"username"`
+	Password   string     `json:"password,omitempty"`
+	AuthType   string     `json:"auth_type"` // "password" | "key"
+	IsBGP      bool       `json:"is_bgp"`    // If true, device is polled for BGP sessions, routes and traffic engineering
+	DeviceRole DeviceRole `json:"device_role,omitempty"` // "bgp", "pe", "sw", "olt", "other"
+	Latitude   *float64   `json:"latitude,omitempty"`
+	Longitude  *float64   `json:"longitude,omitempty"`
+	Site       string     `json:"site,omitempty"`        // POP / Data Center name (e.g. "POP Castanhal")
+	City       string     `json:"city,omitempty"`        // e.g. "Castanhal - PA"
+	CreatedAt  time.Time  `json:"created_at"`
+	LastSeen   *time.Time `json:"last_seen,omitempty"`
+	Status     string     `json:"status"` // "online", "offline", "untested"
 }
 
 // SafeDevice is the version of Device returned to the frontend (with sensitive fields masked).
@@ -118,6 +134,11 @@ type SafeDevice struct {
 	HasPassword bool       `json:"has_password"`
 	AuthType    string     `json:"auth_type"`
 	IsBGP       bool       `json:"is_bgp"`
+	DeviceRole  DeviceRole `json:"device_role,omitempty"`
+	Latitude    *float64   `json:"latitude,omitempty"`
+	Longitude   *float64   `json:"longitude,omitempty"`
+	Site        string     `json:"site,omitempty"`
+	City        string     `json:"city,omitempty"`
 	CreatedAt   time.Time  `json:"created_at"`
 	LastSeen    *time.Time `json:"last_seen,omitempty"`
 	Status      string     `json:"status"`
@@ -125,6 +146,14 @@ type SafeDevice struct {
 
 // ToSafe converts Device to SafeDevice.
 func (d *Device) ToSafe() SafeDevice {
+	role := d.DeviceRole
+	if role == "" {
+		if d.IsBGP {
+			role = RoleBGP
+		} else {
+			role = RoleSW
+		}
+	}
 	return SafeDevice{
 		ID:          d.ID,
 		TenantID:    d.TenantID,
@@ -137,6 +166,11 @@ func (d *Device) ToSafe() SafeDevice {
 		HasPassword: d.Password != "",
 		AuthType:    d.AuthType,
 		IsBGP:       d.IsBGP,
+		DeviceRole:  role,
+		Latitude:    d.Latitude,
+		Longitude:   d.Longitude,
+		Site:        d.Site,
+		City:        d.City,
 		CreatedAt:   d.CreatedAt,
 		LastSeen:    d.LastSeen,
 		Status:      d.Status,
