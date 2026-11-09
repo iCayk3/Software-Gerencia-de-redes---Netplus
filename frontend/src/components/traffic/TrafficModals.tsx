@@ -23,6 +23,7 @@ import {
   CheckCircle,
   Sliders,
   Lock,
+  Crown,
 } from 'lucide-react'
 import type {
   Device,
@@ -36,6 +37,7 @@ import type {
   ApplyProfileResult,
 } from '../../services/api'
 import { getProfileTagBadge } from './trafficHelpers'
+import { isBGPMasterDevice } from '../../utils/bgpMaster'
 
 export interface TrafficModalsProps {
   // Add Route Modal
@@ -1101,6 +1103,18 @@ export const TrafficModals: React.FC<TrafficModalsProps> = ({
               </div>
             )}
 
+            {targetPrependGroup?.device_name && (
+              <div className="p-3 rounded-xl bg-[#25334D]/60 border border-[#3B5B8C]/40 text-slate-200 text-xs flex items-start gap-2.5">
+                <Crown className="h-4 w-4 text-[#E5A93C] shrink-0 mt-0.5" />
+                <div className="text-[11px] leading-relaxed">
+                  <strong>Topologia Centralizada:</strong> Comandos gerados prioritariamente para o{' '}
+                  <strong className="text-white">BGP Master</strong>. Políticas aplicadas no Master
+                  são propagadas automaticamente via iBGP para a sessão em{' '}
+                  <strong className="text-[#93B4E6]">{targetPrependGroup.device_name}</strong>.
+                </div>
+              </div>
+            )}
+
             <div className="space-y-4 text-xs font-sans">
               <div>
                 <label className="block text-slate-300 font-semibold mb-2">
@@ -1245,20 +1259,29 @@ export const TrafficModals: React.FC<TrafficModalsProps> = ({
                   <div className="flex bg-slate-950 p-0.5 rounded-xl border border-slate-800 text-[11px] overflow-x-auto">
                     {devices
                       .filter((d) => d.is_bgp !== false)
-                      .map((d) => (
-                        <button
-                          key={d.id}
-                          type="button"
-                          onClick={() => setCliTargetRouter(d.id)}
-                          className={`px-3 py-1 rounded-lg font-medium transition cursor-pointer whitespace-nowrap ${
-                            cliTargetRouter === d.id
-                              ? 'bg-indigo-600 text-white shadow-sm'
-                              : 'text-slate-400 hover:text-white'
-                          }`}
-                        >
-                          {d.name}
-                        </button>
-                      ))}
+                      .map((d) => {
+                        const isMaster = isBGPMasterDevice(d, devices)
+                        return (
+                          <button
+                            key={d.id}
+                            type="button"
+                            onClick={() => setCliTargetRouter(d.id)}
+                            className={`px-3 py-1 rounded-lg font-medium transition cursor-pointer whitespace-nowrap flex items-center gap-1.5 ${
+                              cliTargetRouter === d.id
+                                ? 'bg-[#3B5B8C] text-white shadow-sm'
+                                : 'text-slate-400 hover:text-white'
+                            }`}
+                          >
+                            {isMaster && <Crown className="h-3 w-3 text-[#E5A93C]" />}
+                            <span>{d.name}</span>
+                            {isMaster && (
+                              <span className="text-[10px] text-[#E5A93C] font-semibold">
+                                (Master)
+                              </span>
+                            )}
+                          </button>
+                        )
+                      })}
 
                     <button
                       type="button"

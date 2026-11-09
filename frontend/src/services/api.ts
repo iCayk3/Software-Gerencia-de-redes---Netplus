@@ -75,6 +75,7 @@ export interface Device {
   has_password?: boolean
   auth_type: string
   is_bgp?: boolean
+  is_master?: boolean
   created_at: string
   last_seen?: string
   status: 'online' | 'offline' | 'untested'

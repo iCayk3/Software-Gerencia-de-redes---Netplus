@@ -13,7 +13,8 @@ import {
   Network,
   Activity,
   Building2,
-  Layers
+  Layers,
+  Crown
 } from 'lucide-react'
 import {
   fetchDevices,
@@ -30,6 +31,7 @@ import {
 import { useAuth } from '../context/AuthContext'
 import { DeviceCardSkeleton } from './common/Skeleton'
 import { DeviceComplianceModal } from './DeviceComplianceModal'
+import { isBGPMasterDevice, setBGPMasterDeviceId } from '../utils/bgpMaster'
 
 interface DeviceManagerProps {
   onSelectDeviceForTerminal?: (device: Device) => void
@@ -67,6 +69,14 @@ export const DeviceManager: React.FC<DeviceManagerProps> = ({
   const [formUsername, setFormUsername] = useState('')
   const [formPassword, setFormPassword] = useState('')
   const [formIsBGP, setFormIsBGP] = useState(true)
+  const [formIsMaster, setFormIsMaster] = useState(false)
+  const [, setMasterTrigger] = useState(0)
+
+  useEffect(() => {
+    const handler = () => setMasterTrigger((prev) => prev + 1)
+    window.addEventListener('bgp_master_changed', handler)
+    return () => window.removeEventListener('bgp_master_changed', handler)
+  }, [])
 
   // Testing SSH state per device
   const [testingId, setTestingId] = useState<string | null>(null)
@@ -123,6 +133,7 @@ export const DeviceManager: React.FC<DeviceManagerProps> = ({
     setFormUsername('admin')
     setFormPassword('')
     setFormIsBGP(true)
+    setFormIsMaster(false)
     setIsModalOpen(true)
   }
 
@@ -137,6 +148,7 @@ export const DeviceManager: React.FC<DeviceManagerProps> = ({
     setFormUsername(dev.username)
     setFormPassword('')
     setFormIsBGP(dev.is_bgp ?? true)
+    setFormIsMaster(isBGPMasterDevice(dev, devices))
     setIsModalOpen(true)
   }
 
@@ -154,9 +166,13 @@ export const DeviceManager: React.FC<DeviceManagerProps> = ({
           username: formUsername,
           password: formPassword || undefined,
           is_bgp: formIsBGP,
+          is_master: formIsMaster,
         })
+        if (formIsMaster) {
+          setBGPMasterDeviceId(editingDevice.id)
+        }
       } else {
-        await createDevice({
+        const created = await createDevice({
           tenant_id: isSuperAdmin ? formTenantId : (activeTenantId || undefined),
           name: formName,
           host: formHost,
@@ -167,7 +183,11 @@ export const DeviceManager: React.FC<DeviceManagerProps> = ({
           password: formPassword,
           auth_type: 'password',
           is_bgp: formIsBGP,
+          is_master: formIsMaster,
         })
+        if (formIsMaster && created?.id) {
+          setBGPMasterDeviceId(created.id)
+        }
       }
       setIsModalOpen(false)
       loadDevices()
@@ -276,11 +296,12 @@ export const DeviceManager: React.FC<DeviceManagerProps> = ({
             }
             const testResult = testResults[dev.id]
             const isTesting = testingId === dev.id
+            const isMaster = isBGPMasterDevice(dev, devices)
 
             return (
               <div
                 key={dev.id}
-                className={`bg-[#1C202C] border border-[#242836] hover:border-[#2D3345] rounded-xl shadow-md flex flex-col justify-between transition-all ${
+                className={`bg-[#1C202C] border ${isMaster ? 'border-[#E5A93C]/50 ring-1 ring-[#E5A93C]/20' : 'border-[#242836]'} hover:border-[#3B5B8C]/40 rounded-xl shadow-md flex flex-col justify-between transition-all ${
                   density === 'compact' ? 'p-3.5' : 'p-5'
                 }`}
               >
@@ -288,8 +309,17 @@ export const DeviceManager: React.FC<DeviceManagerProps> = ({
                   {/* Top card header */}
                   <div className={`flex items-start justify-between gap-2 ${density === 'compact' ? 'mb-2' : 'mb-3'}`}>
                     <div>
-                      <h3 className="font-semibold text-slate-100 text-base flex items-center gap-1.5">
+                      <h3 className="font-semibold text-slate-100 text-base flex items-center gap-2">
                         <span>{dev.name}</span>
+                        {isMaster && (
+                          <span
+                            className="text-[10px] font-bold text-[#E5A93C] bg-[#E5A93C]/10 border border-[#E5A93C]/30 px-1.5 py-0.5 rounded-md flex items-center gap-1 shadow-xs"
+                            title="Roteador BGP Master / Controlador Principal de Tráfego: Todas as alterações de Prepend e políticas de exportação serão geradas e tratadas neste equipamento"
+                          >
+                            <Crown className="h-3 w-3 text-[#E5A93C]" />
+                            MASTER
+                          </span>
+                        )}
                       </h3>
                       {dev.model && (
                         <span className="text-[11px] text-slate-400 font-mono tracking-tight">{dev.model}</span>
@@ -438,6 +468,18 @@ export const DeviceManager: React.FC<DeviceManagerProps> = ({
                         title="Ver Sessões BGP"
                       >
                         <Activity className="h-3.5 w-3.5" />
+                      </button>
+                    )}
+
+                    {dev.is_bgp && !isMaster && (
+                      <button
+                        type="button"
+                        onClick={() => setBGPMasterDeviceId(dev.id)}
+                        className="flex items-center gap-1 px-2.5 py-1.5 bg-[#1E2330] hover:bg-[#282F40] text-slate-300 hover:text-[#E5A93C] text-xs rounded-lg border border-[#2D3345] cursor-pointer transition"
+                        title="Definir este roteador como o BGP Master / Controlador Principal da Rede"
+                      >
+                        <Crown className="h-3.5 w-3.5 text-[#E5A93C]" />
+                        <span className="text-[11px] font-medium hidden sm:inline">Definir Master</span>
                       </button>
                     )}
                   </div>
@@ -625,10 +667,37 @@ export const DeviceManager: React.FC<DeviceManagerProps> = ({
                   id="isBGPCheckbox"
                   type="checkbox"
                   checked={formIsBGP}
-                  onChange={(e) => setFormIsBGP(e.target.checked)}
+                  onChange={(e) => {
+                    setFormIsBGP(e.target.checked)
+                    if (!e.target.checked) setFormIsMaster(false)
+                  }}
                   className="mt-1 h-4 w-4 rounded border-slate-700 bg-slate-900 text-purple-600 focus:ring-purple-500 cursor-pointer"
                 />
               </div>
+
+              {/* BGP Master Controller Flag */}
+              {formIsBGP && (
+                <div className="p-3 bg-amber-950/20 border border-amber-800/40 rounded-lg flex items-start justify-between gap-3 animate-in fade-in duration-150">
+                  <div className="space-y-0.5">
+                    <div className="flex items-center gap-2">
+                      <Crown className="h-4 w-4 text-amber-400" />
+                      <label htmlFor="isMasterCheckbox" className="text-xs font-semibold text-slate-200 cursor-pointer">
+                        Roteador BGP Master / Controlador Principal
+                      </label>
+                    </div>
+                    <p className="text-[11px] text-slate-400">
+                      Define este equipamento como o controlador central de políticas BGP. Todas as alterações de Prepend e comunidades de export serão tratadas nele (ex: <code>BGP-RT.01.PA.PIRB.01</code>).
+                    </p>
+                  </div>
+                  <input
+                    id="isMasterCheckbox"
+                    type="checkbox"
+                    checked={formIsMaster}
+                    onChange={(e) => setFormIsMaster(e.target.checked)}
+                    className="mt-1 h-4 w-4 rounded border-slate-700 bg-slate-900 text-amber-500 focus:ring-amber-500 cursor-pointer"
+                  />
+                </div>
+              )}
 
               <div className="p-3 bg-cyan-950/30 border border-cyan-900/50 rounded-lg flex items-start gap-2 text-[11px] text-cyan-300">
                 <AlertCircle className="h-4 w-4 shrink-0 text-cyan-400 mt-0.5" />

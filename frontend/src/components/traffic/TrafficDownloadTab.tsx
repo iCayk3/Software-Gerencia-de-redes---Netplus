@@ -1,4 +1,4 @@
-import React from 'react'
+import React, { useState, useMemo } from 'react'
 import {
   Server,
   LayoutGrid,
@@ -17,6 +17,8 @@ import {
   Route as RouteIcon,
   SlidersHorizontal,
   Edit3,
+  Crown,
+  Layers,
 } from 'lucide-react'
 import type {
   Device,
@@ -26,6 +28,9 @@ import type {
   ASMetadata,
 } from '../../services/api'
 import { CardSkeleton } from '../common/Skeleton'
+import { getBGPMasterDevice } from '../../utils/bgpMaster'
+import { BatchPrependModal } from './BatchPrependModal'
+import type { BatchPrependTarget } from './trafficHelpers'
 
 export interface TrafficDownloadTabProps {
   selectedPrependDevice: string
@@ -46,6 +51,7 @@ export interface TrafficDownloadTabProps {
   togglePrefixGroup: (groupId: string) => void
   onRefresh: () => void
   onOpenPrependModal: (prefixState: PrefixPrependState, group?: ASPrependGroup) => void
+  onApplyBatchPrepend?: (targets: BatchPrependTarget[], prependCount: number, isBlock: boolean) => Promise<void>
   density?: 'comfortable' | 'compact'
   asMetadata?: Record<string, ASMetadata>
   isSuperAdmin?: boolean
@@ -71,11 +77,94 @@ export const TrafficDownloadTab: React.FC<TrafficDownloadTabProps> = ({
   togglePrefixGroup,
   onRefresh,
   onOpenPrependModal,
+  onApplyBatchPrepend,
   density = 'comfortable',
   asMetadata = {},
   isSuperAdmin = false,
   onOpenCustomizeAS,
 }) => {
+  const [selectedTargets, setSelectedTargets] = useState<Map<string, BatchPrependTarget>>(new Map())
+  const [isBatchModalOpen, setIsBatchModalOpen] = useState(false)
+
+  // Automatic perception of the Central BGP Master Router
+  const masterDevice = useMemo(() => getBGPMasterDevice(devices), [devices])
+
+  // Selection handlers
+  const toggleTarget = (target: BatchPrependTarget) => {
+    setSelectedTargets((prev) => {
+      const next = new Map(prev)
+      if (next.has(target.id)) {
+        next.delete(target.id)
+      } else {
+        next.set(target.id, target)
+      }
+      return next
+    })
+  }
+
+  const toggleGroupTargets = (grp: ASPrependGroup) => {
+    setSelectedTargets((prev) => {
+      const next = new Map(prev)
+      const allSelected = grp.prefixes.length > 0 && grp.prefixes.every((pfx) => next.has(`${pfx.peer_ip}_${pfx.prefix}`))
+      if (allSelected) {
+        grp.prefixes.forEach((pfx) => next.delete(`${pfx.peer_ip}_${pfx.prefix}`))
+      } else {
+        grp.prefixes.forEach((pfx) => {
+          const id = `${pfx.peer_ip}_${pfx.prefix}`
+          next.set(id, {
+            id,
+            prefix: pfx.prefix,
+            peerIp: pfx.peer_ip,
+            peerName: grp.group_name || pfx.peer_name,
+            remoteAs: grp.remote_as,
+            communityBase: grp.community_base,
+            currentCommunity: pfx.community,
+            asGroupId: grp.id,
+          })
+        })
+      }
+      return next
+    })
+  }
+
+  const toggleAllTargets = () => {
+    if (!prependOverview) return
+    setSelectedTargets((prev) => {
+      const next = new Map(prev)
+      const allCount = prependOverview.prefixes.length
+      if (next.size === allCount && allCount > 0) {
+        return new Map()
+      }
+      prependOverview.prefixes.forEach((pfx) => {
+        const id = `${pfx.peer_ip}_${pfx.prefix}`
+        const matchingGroup = prependOverview.as_groups?.find(
+          (g) => g.peers.some((pr) => pr.peer_ip === pfx.peer_ip) || g.peer_ips.includes(pfx.peer_ip)
+        )
+        next.set(id, {
+          id,
+          prefix: pfx.prefix,
+          peerIp: pfx.peer_ip,
+          peerName: pfx.peer_name,
+          remoteAs: matchingGroup?.remote_as,
+          communityBase: matchingGroup?.community_base,
+          currentCommunity: pfx.community,
+          asGroupId: matchingGroup?.id,
+        })
+      })
+      return next
+    })
+  }
+
+  const clearSelection = () => {
+    setSelectedTargets(new Map())
+  }
+
+  const handleQuickBatchApply = async (count: number, isBlock: boolean) => {
+    if (onApplyBatchPrepend && selectedTargets.size > 0) {
+      await onApplyBatchPrepend(Array.from(selectedTargets.values()), count, isBlock)
+      clearSelection()
+    }
+  }
   return (
     <div className="space-y-6">
       {/* Controls Bar for Download */}
@@ -174,6 +263,40 @@ export const TrafficDownloadTab: React.FC<TrafficDownloadTabProps> = ({
               className={`h-4 w-4 ${prependsLoading ? 'animate-spin text-[#4A72B2]' : ''}`}
             />
           </button>
+        </div>
+      </div>
+
+      {/* BGP Master Controller Perception Banner */}
+      <div className="p-4 rounded-2xl bg-[#1C202C] border border-[#242836] shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-3">
+        <div className="flex items-start sm:items-center gap-3">
+          <div className="h-10 w-10 rounded-xl bg-[#25334D] border border-[#3B5B8C]/40 flex items-center justify-center text-[#E5A93C] shrink-0">
+            <Crown className="h-5 w-5" />
+          </div>
+          <div className="space-y-0.5">
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="font-bold text-white text-xs">
+                Roteador BGP Master / Controlador:
+              </span>
+              <span className="font-mono font-semibold text-xs text-[#93B4E6] bg-[#161922] px-2 py-0.5 rounded-md border border-[#242836]">
+                {masterDevice?.name || 'BGP-RT.01.PA.PIRB.01'}
+              </span>
+              {masterDevice?.host && (
+                <span className="text-[11px] text-slate-400 font-mono">
+                  ({masterDevice.host})
+                </span>
+              )}
+            </div>
+            <p className="text-[11px] text-slate-400 leading-relaxed">
+              Políticas de anúncio BGP, prepends e communities de origem são centralizadas neste equipamento e distribuídas via iBGP.
+            </p>
+          </div>
+        </div>
+
+        <div className="flex items-center gap-2 self-start md:self-auto shrink-0">
+          <span className="text-[11px] text-[#2E9E6B] font-medium flex items-center gap-1.5 bg-[#161922] px-3 py-1.5 rounded-xl border border-[#242836]">
+            <span className="w-1.5 h-1.5 rounded-full bg-[#2E9E6B]"></span>
+            Percepção Automática Ativa
+          </span>
         </div>
       </div>
 
@@ -289,6 +412,16 @@ export const TrafficDownloadTab: React.FC<TrafficDownloadTabProps> = ({
                       const meta = asMetadata[grp.remote_as]
                       const asTitle = meta?.alias || grp.group_name
                       const asImageUrl = meta?.image_url
+                      const isAllGroupSelected =
+                        grp.prefixes.length > 0 &&
+                        grp.prefixes.every((pfx) =>
+                          selectedTargets.has(`${pfx.peer_ip}_${pfx.prefix}`)
+                        )
+                      const isSomeGroupSelected = grp.prefixes.some((pfx) =>
+                        selectedTargets.has(`${pfx.peer_ip}_${pfx.prefix}`)
+                      )
+                      const isGroupOnSecondary =
+                        masterDevice && grp.device_name && grp.device_name !== masterDevice.name
 
                       return (
                       <div
@@ -298,7 +431,23 @@ export const TrafficDownloadTab: React.FC<TrafficDownloadTabProps> = ({
                         {/* AS Card Header */}
                         <div className={`border-b border-[#242836] bg-[#181C26] ${density === 'compact' ? 'p-3.5' : 'p-5'}`}>
                           <div className="flex items-start justify-between gap-3">
-                            <div className="flex items-center gap-3.5">
+                            <div className="flex items-center gap-3">
+                              {/* Checkbox to select entire AS group */}
+                              <input
+                                type="checkbox"
+                                checked={isAllGroupSelected}
+                                ref={(el) => {
+                                  if (el) el.indeterminate = isSomeGroupSelected && !isAllGroupSelected
+                                }}
+                                onChange={() => toggleGroupTargets(grp)}
+                                className="h-4 w-4 rounded border-[#2D3345] bg-[#161922] text-[#3B5B8C] focus:ring-0 cursor-pointer shrink-0"
+                                title={
+                                  isAllGroupSelected
+                                    ? 'Desmarcar todos os prefixos deste AS'
+                                    : 'Selecionar todos os prefixos deste AS para alteração em lote'
+                                }
+                              />
+
                               {/* Dedicated Image Area */}
                               <div
                                 onClick={() => isSuperAdmin && onOpenCustomizeAS && onOpenCustomizeAS(grp)}
@@ -344,10 +493,24 @@ export const TrafficDownloadTab: React.FC<TrafficDownloadTabProps> = ({
                                   <div className="flex flex-wrap items-center gap-1.5 mt-1">
                                     <span
                                       className="font-mono text-[11px] text-slate-400 flex items-center gap-1.5"
-                                      title={`Roteador BGP: ${grp.device_name}`}
+                                      title={
+                                        isGroupOnSecondary
+                                          ? `Sessão física no roteador ${grp.device_name}, gerenciada centralmente no Master ${masterDevice?.name}`
+                                          : `Roteador BGP: ${grp.device_name}`
+                                      }
                                     >
                                       <Server className="h-3 w-3 text-slate-500" />
                                       {grp.device_name}
+                                      {isGroupOnSecondary ? (
+                                        <>
+                                          <span className="text-slate-600">&bull;</span>
+                                          <span className="text-[#93B4E6] text-[10px] font-sans font-medium">
+                                            Controlado no Master
+                                          </span>
+                                        </>
+                                      ) : (
+                                        <Crown className="h-3 w-3 text-[#E5A93C]" />
+                                      )}
                                     </span>
                                   </div>
                                 )}
@@ -449,45 +612,71 @@ export const TrafficDownloadTab: React.FC<TrafficDownloadTabProps> = ({
 
                             {expandedPrefixGroups[grp.id] && (
                               <div className="mt-3 space-y-2 animate-in fade-in duration-150">
-                                {grp.prefixes.map((pfx) => (
-                                  <div
-                                    key={pfx.id}
-                                    className="p-3 rounded-xl bg-[#161922] border border-[#242836] hover:border-[#2D3345] transition flex flex-col sm:flex-row sm:items-center justify-between gap-2.5"
-                                  >
-                                    <div className="space-y-1">
-                                      <div className="flex items-center gap-3">
-                                        <span className="font-mono font-semibold text-slate-100 text-xs">
-                                          {pfx.prefix}
-                                        </span>
-                                        {pfx.is_blocked ? (
-                                          <span className="text-xs font-medium text-[#D9534F] inline-flex items-center gap-1.5">
-                                            <span className="w-1.5 h-1.5 rounded-full bg-[#D9534F]"></span>
-                                            Bloqueado (Deny)
-                                          </span>
-                                        ) : pfx.prepend_count === 0 ? (
-                                          <span className="text-xs font-medium text-[#2E9E6B] inline-flex items-center gap-1.5">
-                                            <span className="w-1.5 h-1.5 rounded-full bg-[#2E9E6B]"></span>
-                                            0P (Primário)
-                                          </span>
-                                        ) : (
-                                          <span className="text-xs font-medium text-[#D99B26] inline-flex items-center gap-1.5">
-                                            <span className="w-1.5 h-1.5 rounded-full bg-[#D99B26]"></span>
-                                            {pfx.prepend_count}x Prepend ({pfx.prepend_count}P)
-                                          </span>
-                                        )}
-                                      </div>
-                                    </div>
-
-                                    <button
-                                      type="button"
-                                      onClick={() => onOpenPrependModal(pfx, grp)}
-                                      className="inline-flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-lg bg-[#3B5B8C] hover:bg-[#4A72B2] text-white text-xs font-medium shadow-xs transition cursor-pointer self-start sm:self-auto"
+                                {grp.prefixes.map((pfx) => {
+                                  const targetId = `${pfx.peer_ip}_${pfx.prefix}`
+                                  const isSelected = selectedTargets.has(targetId)
+                                  return (
+                                    <div
+                                      key={pfx.id}
+                                      className={`p-3 rounded-xl border transition flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 ${
+                                        isSelected
+                                          ? 'bg-[#1E2536] border-[#3B5B8C]'
+                                          : 'bg-[#161922] border-[#242836] hover:border-[#2D3345]'
+                                      }`}
                                     >
-                                      <SlidersHorizontal className="h-3.5 w-3.5" />
-                                      <span>Ajustar Prepend</span>
-                                    </button>
-                                  </div>
-                                ))}
+                                      <div className="space-y-1">
+                                        <div className="flex items-center gap-3">
+                                          <input
+                                            type="checkbox"
+                                            checked={isSelected}
+                                            onChange={() =>
+                                              toggleTarget({
+                                                id: targetId,
+                                                prefix: pfx.prefix,
+                                                peerIp: pfx.peer_ip,
+                                                peerName: grp.group_name || pfx.peer_name,
+                                                remoteAs: grp.remote_as,
+                                                communityBase: grp.community_base,
+                                                currentCommunity: pfx.community,
+                                                asGroupId: grp.id,
+                                              })
+                                            }
+                                            className="h-4 w-4 rounded border-[#2D3345] bg-[#161922] text-[#3B5B8C] focus:ring-0 cursor-pointer shrink-0"
+                                            title="Selecionar para alteração em lote"
+                                          />
+                                          <span className="font-mono font-semibold text-slate-100 text-xs">
+                                            {pfx.prefix}
+                                          </span>
+                                          {pfx.is_blocked ? (
+                                            <span className="text-xs font-medium text-[#D9534F] inline-flex items-center gap-1.5">
+                                              <span className="w-1.5 h-1.5 rounded-full bg-[#D9534F]"></span>
+                                              Bloqueado (Deny)
+                                            </span>
+                                          ) : pfx.prepend_count === 0 ? (
+                                            <span className="text-xs font-medium text-[#2E9E6B] inline-flex items-center gap-1.5">
+                                              <span className="w-1.5 h-1.5 rounded-full bg-[#2E9E6B]"></span>
+                                              0P (Primário)
+                                            </span>
+                                          ) : (
+                                            <span className="text-xs font-medium text-[#D99B26] inline-flex items-center gap-1.5">
+                                              <span className="w-1.5 h-1.5 rounded-full bg-[#D99B26]"></span>
+                                              {pfx.prepend_count}x Prepend ({pfx.prepend_count}P)
+                                            </span>
+                                          )}
+                                        </div>
+                                      </div>
+
+                                      <button
+                                        type="button"
+                                        onClick={() => onOpenPrependModal(pfx, grp)}
+                                        className="inline-flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-lg bg-[#3B5B8C] hover:bg-[#4A72B2] text-white text-xs font-medium shadow-xs transition cursor-pointer self-start sm:self-auto"
+                                      >
+                                        <SlidersHorizontal className="h-3.5 w-3.5" />
+                                        <span>Ajustar Prepend</span>
+                                      </button>
+                                    </div>
+                                  )
+                                })}
                               </div>
                             )}
                           </div>
@@ -588,6 +777,18 @@ export const TrafficDownloadTab: React.FC<TrafficDownloadTabProps> = ({
                   <table className="w-full text-left border-collapse text-xs">
                     <thead>
                       <tr className="border-b border-[#242836] text-slate-400 font-semibold bg-[#161922]">
+                        <th className="py-3 px-4 w-10">
+                          <input
+                            type="checkbox"
+                            checked={
+                              prependOverview.prefixes.length > 0 &&
+                              selectedTargets.size === prependOverview.prefixes.length
+                            }
+                            onChange={toggleAllTargets}
+                            className="h-4 w-4 rounded border-[#2D3345] bg-[#161922] text-[#3B5B8C] focus:ring-0 cursor-pointer shrink-0"
+                            title="Selecionar / Desmarcar todos os prefixos"
+                          />
+                        </th>
                         <th className="py-3 px-4">Prefixo Anunciado</th>
                         <th className="py-3 px-4">Destino / Upstream</th>
                         <th className="py-3 px-4">Prepend Aplicado</th>
@@ -598,6 +799,8 @@ export const TrafficDownloadTab: React.FC<TrafficDownloadTabProps> = ({
                     </thead>
                     <tbody className="divide-y divide-[#242836] font-mono">
                       {prependOverview.prefixes.map((p) => {
+                        const targetId = `${p.peer_ip}_${p.prefix}`
+                        const isSelected = selectedTargets.has(targetId)
                         const matchingGroup = prependOverview.as_groups?.find(
                           (g) =>
                             g.peers.some((pr) => pr.peer_ip === p.peer_ip) ||
@@ -605,7 +808,32 @@ export const TrafficDownloadTab: React.FC<TrafficDownloadTabProps> = ({
                         )
 
                         return (
-                          <tr key={p.id} className="hover:bg-[#1E2330]/50 transition">
+                          <tr
+                            key={p.id}
+                            className={`transition ${
+                              isSelected ? 'bg-[#1E2536]/80' : 'hover:bg-[#1E2330]/50'
+                            }`}
+                          >
+                            <td className="py-3 px-4">
+                              <input
+                                type="checkbox"
+                                checked={isSelected}
+                                onChange={() =>
+                                  toggleTarget({
+                                    id: targetId,
+                                    prefix: p.prefix,
+                                    peerIp: p.peer_ip,
+                                    peerName: p.peer_name,
+                                    remoteAs: matchingGroup?.remote_as,
+                                    communityBase: matchingGroup?.community_base,
+                                    currentCommunity: p.community,
+                                    asGroupId: matchingGroup?.id,
+                                  })
+                                }
+                                className="h-4 w-4 rounded border-[#2D3345] bg-[#161922] text-[#3B5B8C] focus:ring-0 cursor-pointer shrink-0"
+                                title="Selecionar para alteração em lote"
+                              />
+                            </td>
                             <td className="py-3 px-4">
                               <span className="font-mono font-semibold text-slate-100 text-xs">
                                 {p.prefix}
@@ -676,6 +904,102 @@ export const TrafficDownloadTab: React.FC<TrafficDownloadTabProps> = ({
         <div className="p-12 text-center text-slate-400 text-xs bg-slate-900/60 border border-slate-800 rounded-2xl">
           Nenhum dado de prepend disponível.
         </div>
+      )}
+
+      {/* Floating Sticky Batch Action Toolbar */}
+      {selectedTargets.size > 0 && (
+        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-40 max-w-4xl w-[94%] sm:w-auto bg-[#1C202C]/95 backdrop-blur-md border border-[#3B5B8C] shadow-2xl rounded-2xl px-5 py-3.5 flex flex-wrap items-center justify-between gap-4 animate-in slide-in-from-bottom-4 duration-200">
+          <div className="flex items-center gap-3">
+            <div className="h-8 w-8 rounded-xl bg-[#25334D] border border-[#3B5B8C]/40 flex items-center justify-center text-[#93B4E6] shrink-0">
+              <Layers className="h-4 w-4" />
+            </div>
+            <div>
+              <span className="text-xs font-bold text-white block">
+                {selectedTargets.size} {selectedTargets.size === 1 ? 'sessão/bloco selecionado' : 'sessões/blocos selecionados'}
+              </span>
+              <span className="text-[11px] text-slate-400">
+                Alvo de Configuração: Master BGP ({masterDevice?.name || 'BGP-RT.01.PA.PIRB.01'})
+              </span>
+            </div>
+          </div>
+
+          <div className="flex flex-wrap items-center gap-2">
+            <button
+              type="button"
+              onClick={() => handleQuickBatchApply(0, false)}
+              className="px-3 py-1.5 rounded-lg bg-[#161922] hover:bg-[#202738] text-[#2E9E6B] border border-[#242836] hover:border-[#2E9E6B]/50 text-xs font-semibold transition cursor-pointer"
+              title="Definir 0 Prepend (Caminho Primário) para todos selecionados"
+            >
+              0P (Primário)
+            </button>
+            <button
+              type="button"
+              onClick={() => handleQuickBatchApply(1, false)}
+              className="px-3 py-1.5 rounded-lg bg-[#161922] hover:bg-[#202738] text-[#D99B26] border border-[#242836] hover:border-[#D99B26]/50 text-xs font-semibold transition cursor-pointer"
+              title="Adicionar 1 Salto AS para todos selecionados"
+            >
+              1P
+            </button>
+            <button
+              type="button"
+              onClick={() => handleQuickBatchApply(2, false)}
+              className="px-3 py-1.5 rounded-lg bg-[#161922] hover:bg-[#202738] text-[#D99B26] border border-[#242836] hover:border-[#D99B26]/50 text-xs font-semibold transition cursor-pointer"
+              title="Adicionar 2 Saltos AS para todos selecionados"
+            >
+              2P
+            </button>
+            <button
+              type="button"
+              onClick={() => handleQuickBatchApply(3, false)}
+              className="px-3 py-1.5 rounded-lg bg-[#161922] hover:bg-[#202738] text-[#D99B26] border border-[#242836] hover:border-[#D99B26]/50 text-xs font-semibold transition cursor-pointer"
+              title="Adicionar 3 Saltos AS para todos selecionados"
+            >
+              3P
+            </button>
+            <button
+              type="button"
+              onClick={() => handleQuickBatchApply(0, true)}
+              className="px-3 py-1.5 rounded-lg bg-[#161922] hover:bg-[#202738] text-[#D9534F] border border-[#242836] hover:border-[#D9534F]/50 text-xs font-semibold transition cursor-pointer"
+              title="Bloquear anúncio (Deny) para todos selecionados"
+            >
+              Bloquear
+            </button>
+            <button
+              type="button"
+              onClick={() => setIsBatchModalOpen(true)}
+              className="px-4 py-1.5 rounded-lg bg-[#3B5B8C] hover:bg-[#4A72B2] text-white text-xs font-bold transition cursor-pointer flex items-center gap-1.5 shadow-sm"
+              title="Abrir modal para revisar comandos CLI consolidados do Master e aplicar em lote"
+            >
+              <SlidersHorizontal className="h-3.5 w-3.5" />
+              <span>Configurar em Lote</span>
+            </button>
+            <button
+              type="button"
+              onClick={clearSelection}
+              className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-[#161922] transition cursor-pointer"
+              title="Limpar Seleção"
+            >
+              <X className="h-4 w-4" />
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Batch Prepend Modal */}
+      {isBatchModalOpen && (
+        <BatchPrependModal
+          isOpen={isBatchModalOpen}
+          onClose={() => setIsBatchModalOpen(false)}
+          targets={Array.from(selectedTargets.values())}
+          devices={devices}
+          masterDevice={masterDevice}
+          onApplyBatch={async (targets, prependCount, isBlock) => {
+            if (onApplyBatchPrepend) {
+              await onApplyBatchPrepend(targets, prependCount, isBlock)
+              clearSelection()
+            }
+          }}
+        />
       )}
     </div>
   )

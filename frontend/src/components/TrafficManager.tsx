@@ -23,6 +23,7 @@ import {
   captureCurrentProfile,
   diffTrafficProfile,
   applyTrafficProfile,
+  applyPrepend,
   type Device,
   type StaticRoute,
   type StaticRouteRequest,
@@ -46,7 +47,9 @@ import {
   getDeleteStaticRouteCliPreview,
   getLocalPrefCliPreview,
   getPrependCliPreviewForDevice,
+  type BatchPrependTarget,
 } from './traffic/trafficHelpers'
+import { getBGPMasterDevice } from '../utils/bgpMaster'
 import { TrafficProfilesBar } from './traffic/TrafficProfilesBar'
 import { TrafficUploadTab } from './traffic/TrafficUploadTab'
 import { TrafficDownloadTab } from './traffic/TrafficDownloadTab'
@@ -640,9 +643,76 @@ export const TrafficManager: React.FC<TrafficManagerProps> = ({
     setIsBlockChoice(prefixState.is_blocked)
     setPrependModalError(null)
     setPrependSuccessMsg(null)
-    const targetDevId = group?.device_id || prefixState.device_id || (selectedPrependDevice !== 'all' ? selectedPrependDevice : 'all')
+    const masterDev = getBGPMasterDevice(devices)
+    const targetDevId = masterDev?.id || group?.device_id || prefixState.device_id || (selectedPrependDevice !== 'all' ? selectedPrependDevice : 'all')
     setCliTargetRouter(targetDevId)
     setIsPrependModalOpen(true)
+  }
+
+  // Batch Prepend Handler: applies prepends targeting the BGP Master Router
+  const handleApplyBatchPrepend = async (
+    targets: BatchPrependTarget[],
+    prependCountChoice: number,
+    isBlockChoice: boolean
+  ) => {
+    if (!canOperate) {
+      alert('Operação restrita: Apenas Administrador e Operador NOC podem alterar prepends BGP.')
+      return
+    }
+    const masterDev = getBGPMasterDevice(devices)
+    const targetDevId = masterDev?.id || devices[0]?.id
+    if (!targetDevId) throw new Error('Nenhum roteador BGP disponível')
+
+    // Execute prepend calls for each target, all targeting the Master router
+    for (const target of targets) {
+      await applyPrepend({
+        device_id: targetDevId,
+        peer_ip: target.peerIp,
+        prefix: target.prefix,
+        prepend_count: prependCountChoice,
+        block: isBlockChoice,
+      })
+    }
+
+    // Optimistic update of prependOverview
+    setPrependOverview((prev) => {
+      if (!prev) return prev
+      const targetIds = new Set(targets.map((t) => `${t.peerIp}_${t.prefix}`))
+      const updatedPrefixes = prev.prefixes.map((pfx) => {
+        if (targetIds.has(`${pfx.peer_ip}_${pfx.prefix}`)) {
+          return {
+            ...pfx,
+            prepend_count: isBlockChoice ? 0 : prependCountChoice,
+            is_blocked: isBlockChoice,
+          }
+        }
+        return pfx
+      })
+
+      const updatedGroups = (prev.as_groups || []).map((grp) => ({
+        ...grp,
+        prefixes: grp.prefixes.map((pfx) => {
+          if (targetIds.has(`${pfx.peer_ip}_${pfx.prefix}`)) {
+            return {
+              ...pfx,
+              prepend_count: isBlockChoice ? 0 : prependCountChoice,
+              is_blocked: isBlockChoice,
+            }
+          }
+          return pfx
+        }),
+      }))
+
+      return {
+        ...prev,
+        prefixes: updatedPrefixes,
+        as_groups: updatedGroups,
+      }
+    })
+
+    setProfileActionMsg(
+      `Prepend em lote (${targets.length} ${targets.length === 1 ? 'alvo' : 'alvos'}) aplicado com sucesso no BGP Master ${masterDev?.name || ''}!`
+    )
   }
 
   // Prepend CLI Preview Calculator
@@ -664,8 +734,10 @@ export const TrafficManager: React.FC<TrafficManagerProps> = ({
         )
         .join('\n\n')
     }
+    const masterDev = getBGPMasterDevice(devices)
     const currentDevice =
       devices.find((d) => d.id === cliTargetRouter) ||
+      masterDev ||
       (targetPrependGroup?.device_id ? devices.find((d) => d.id === targetPrependGroup.device_id) : undefined) ||
       devices.find((d) => d.id === targetPrependPrefix.device_id) ||
       devices.find((d) => d.is_bgp !== false) ||
@@ -820,6 +892,7 @@ export const TrafficManager: React.FC<TrafficManagerProps> = ({
           togglePrefixGroup={togglePrefixGroup}
           onRefresh={() => loadPrepends(selectedPrependDevice, true)}
           onOpenPrependModal={openPrependModal}
+          onApplyBatchPrepend={handleApplyBatchPrepend}
           density={density}
           asMetadata={asMetadata}
           isSuperAdmin={canCustomizeAS}

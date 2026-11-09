@@ -460,3 +460,114 @@ export const getPrependCliPreviewForDevice = (
 
   return `# [${dev.name}] Vendor não suportado diretamente para comandos CLI`
 }
+
+export interface BatchPrependTarget {
+  id: string
+  prefix: string
+  peerIp: string
+  peerName: string
+  remoteAs?: string
+  communityBase?: string
+  currentCommunity?: string
+  asGroupId?: string
+}
+
+export const getBatchPrependCliPreviewForDevice = (
+  dev: Device,
+  targets: BatchPrependTarget[],
+  prependCountChoice: number,
+  isBlockChoice: boolean
+): string => {
+  if (!targets || targets.length === 0) return ''
+  const isHuawei = dev.vendor === 'huawei'
+  const isMikrotik = dev.vendor?.startsWith('mikrotik')
+
+  if (isHuawei) {
+    const lines: string[] = [
+      `# [${dev.name}] ${dev.host} (${dev.model || 'Huawei'}) - Controlador BGP Master`,
+      `# Alteração em Lote de Prepend (${targets.length} sessões/rotas selecionadas)`,
+      'system-view',
+    ]
+
+    const prefixMap = new Map<string, { nodeNum: number; comms: string[] }>()
+
+    targets.forEach((t) => {
+      const pfx = t.prefix || ''
+      let nodeNum = 10
+      if (pfx.endsWith('/22')) nodeNum = 10
+      else if (pfx.includes('.28.') && pfx.endsWith('/23')) nodeNum = 20
+      else if (pfx.includes('.30.') && pfx.endsWith('/23')) nodeNum = 30
+      else if (pfx.includes('.28.') && pfx.endsWith('/24')) nodeNum = 40
+      else if (pfx.includes('.29.') && pfx.endsWith('/24')) nodeNum = 50
+      else if (pfx.includes('.30.') && pfx.endsWith('/24')) nodeNum = 60
+      else if (pfx.includes('.31.') && pfx.endsWith('/24')) nodeNum = 70
+
+      let base = t.communityBase || ''
+      if (!base) {
+        const peerNameLower = (t.peerName || '').toLowerCase()
+        if (peerNameLower.includes('wiki')) base = '2002'
+        else if (peerNameLower.includes('sea') || t.peerIp?.includes('170.82.')) base = '2003'
+        else if (peerNameLower.includes('bel') || peerNameLower.includes('belem')) base = '4500'
+        else if (peerNameLower.includes('ce') || peerNameLower.includes('fortaleza') || peerNameLower.includes('ceara')) base = '4400'
+        else if (peerNameLower.includes('sp') || peerNameLower.includes('sao paulo')) base = '4100'
+        else if (peerNameLower.includes('ptt') || peerNameLower.includes('brasilia') || peerNameLower.includes('bsb')) base = '4000'
+        else base = '2003'
+      }
+
+      const newComm = isBlockChoice ? `0:${base}0` : `1:${base}${prependCountChoice}`
+
+      if (!prefixMap.has(pfx)) {
+        prefixMap.set(pfx, { nodeNum, comms: [] })
+      }
+      const existingComms = prefixMap.get(pfx)!.comms
+      if (!existingComms.includes(newComm)) {
+        existingComms.push(newComm)
+      }
+    })
+
+    prefixMap.forEach((entry, pfx) => {
+      lines.push(`route-policy RP-TAG-V4-ORIGIN permit node ${entry.nodeNum}`)
+      lines.push(` # Prefixo: ${pfx}`)
+      lines.push(` apply community 267943:1000 ${entry.comms.join(' ')} additive`)
+    })
+
+    lines.push('commit')
+    lines.push('return')
+    lines.push('refresh bgp all export')
+
+    return lines.join('\n')
+  }
+
+  if (isMikrotik) {
+    const lines: string[] = [
+      `# [${dev.name}] ${dev.host} (MikroTik RouterOS)`,
+      `# Alteração em Lote de Prepend (${targets.length} sessões)`,
+    ]
+
+    targets.forEach((t) => {
+      if (dev.vendor === 'mikrotik_v7') {
+        if (isBlockChoice) {
+          lines.push(`/routing/filter/rule/set [find where rule~"${t.prefix}"] rule="if (dst == ${t.prefix}) { reject; }"`)
+        } else {
+          lines.push(`/routing/filter/rule/set [find where rule~"${t.prefix}"] rule="if (dst == ${t.prefix}) { set bgp-path.prepend ${prependCountChoice}; accept; }"`)
+        }
+      } else {
+        if (isBlockChoice) {
+          lines.push(`/routing filter set [find prefix="${t.prefix}"] action=discard`)
+        } else {
+          lines.push(`/routing filter set [find prefix="${t.prefix}"] action=accept set-bgp-prepend=${prependCountChoice}`)
+        }
+      }
+    })
+
+    if (dev.vendor === 'mikrotik_v7') {
+      lines.push('/routing/bgp/connection/refresh')
+    } else {
+      lines.push('/routing bgp peer refresh-all')
+    }
+
+    return lines.join('\n')
+  }
+
+  return `# [${dev.name}] Alteração em Lote (${targets.length} alvos)`
+}
