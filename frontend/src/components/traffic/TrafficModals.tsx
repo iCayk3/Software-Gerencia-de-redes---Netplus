@@ -1023,7 +1023,7 @@ export const TrafficModals: React.FC<TrafficModalsProps> = ({
 
       {/* ===================== MODAL 4: AJUSTAR AS-PATH PREPEND ===================== */}
       {isPrependModalOpen && targetPrependPrefix && (
-        <div className="fixed inset-0 bg-black/80 backdrop-blur-xs flex items-center justify-center p-4 z-50 animate-in fade-in duration-200">
+        <div className="fixed inset-0 bg-black/80 backdrop-blur-xs flex items-center justify-center p-4 z-[100] animate-in fade-in duration-200">
           <div className="bg-slate-900 border border-slate-800 rounded-2xl max-w-xl w-full p-6 shadow-2xl space-y-4 max-h-[92vh] overflow-y-auto">
             <div className="flex items-center justify-between border-b border-slate-800 pb-3">
               <div className="flex items-center gap-3">

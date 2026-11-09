@@ -60,6 +60,7 @@ export interface TrafficManagerProps {
   onSubTabChange?: (tab: 'upload' | 'download') => void
   hideInternalSubTabs?: boolean
   density?: 'comfortable' | 'compact'
+  navStyle?: 'dock' | 'sidebar' | 'both'
 }
 
 export const TrafficManager: React.FC<TrafficManagerProps> = ({
@@ -67,6 +68,7 @@ export const TrafficManager: React.FC<TrafficManagerProps> = ({
   onSubTabChange,
   hideInternalSubTabs = false,
   density = 'comfortable',
+  navStyle,
 }) => {
   const { canOperate, isSuperAdmin, user } = useAuth()
   const canCustomizeAS = isSuperAdmin || user?.role === 'admin'
@@ -874,6 +876,7 @@ export const TrafficManager: React.FC<TrafficManagerProps> = ({
       {/* ===================== ABA 2: DOWNLOAD ===================== */}
       {activeSubTab === 'download' && (
         <TrafficDownloadTab
+          navStyle={navStyle}
           selectedPrependDevice={selectedPrependDevice}
           onPrependDeviceChange={handlePrependDeviceChange}
           downloadViewMode={downloadViewMode}

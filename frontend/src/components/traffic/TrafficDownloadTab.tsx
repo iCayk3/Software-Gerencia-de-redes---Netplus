@@ -57,6 +57,7 @@ export interface TrafficDownloadTabProps {
   asMetadata?: Record<string, ASMetadata>
   isSuperAdmin?: boolean
   onOpenCustomizeAS?: (group: ASPrependGroup) => void
+  navStyle?: 'dock' | 'sidebar' | 'both'
 }
 
 export const TrafficDownloadTab: React.FC<TrafficDownloadTabProps> = ({
@@ -83,11 +84,17 @@ export const TrafficDownloadTab: React.FC<TrafficDownloadTabProps> = ({
   asMetadata = {},
   isSuperAdmin = false,
   onOpenCustomizeAS,
+  navStyle,
 }) => {
   const [selectedTargets, setSelectedTargets] = useState<Map<string, BatchPrependTarget>>(new Map())
   const [isBatchModalOpen, setIsBatchModalOpen] = useState(false)
   const [batchModalMode, setBatchModalMode] = useState<'save_preview' | 'edit_batch'>('save_preview')
   const [openGroupMenuId, setOpenGroupMenuId] = useState<string | null>(null)
+
+  // Determine if Apple Dock navigation is currently active to position floating controls
+  const isDockActive = navStyle
+    ? navStyle !== 'sidebar'
+    : typeof window !== 'undefined' && localStorage.getItem('netpulse_nav_style') !== 'sidebar'
 
   // Automatic perception of the Central BGP Master Router
   const masterDevice = useMemo(() => getBGPMasterDevice(devices), [devices])
@@ -252,7 +259,7 @@ export const TrafficDownloadTab: React.FC<TrafficDownloadTabProps> = ({
     setSelectedTargets(new Map())
   }
   return (
-    <div className="space-y-6">
+    <div className={`space-y-6 ${isDockActive ? 'pb-36 sm:pb-44' : 'pb-16'}`}>
       {/* Controls Bar for Download */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-[#1C202C] border border-[#242836] rounded-2xl p-4 shadow-sm">
         <div className="flex flex-wrap items-center gap-3">
@@ -1152,7 +1159,11 @@ export const TrafficDownloadTab: React.FC<TrafficDownloadTabProps> = ({
 
       {/* Floating Sticky Batch Action Toolbar */}
       {selectedTargets.size > 0 && (
-        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-40 max-w-4xl w-[94%] sm:w-auto bg-[#1C202C]/95 backdrop-blur-md border border-[#3B5B8C] shadow-2xl rounded-2xl px-5 py-3.5 flex flex-wrap items-center justify-between gap-4 animate-in slide-in-from-bottom-4 duration-200">
+        <div
+          className={`fixed ${
+            isDockActive ? 'bottom-26 sm:bottom-30' : 'bottom-6'
+          } left-1/2 -translate-x-1/2 z-45 max-w-4xl w-[94%] sm:w-auto bg-[#1C202C]/95 backdrop-blur-md border border-[#3B5B8C] shadow-2xl rounded-2xl px-5 py-3.5 flex flex-wrap items-center justify-between gap-4 animate-in slide-in-from-bottom-4 duration-200`}
+        >
           <div className="flex items-center gap-3">
             <div className="h-8 w-8 rounded-xl bg-[#25334D] border border-[#3B5B8C]/40 flex items-center justify-center text-[#93B4E6] shrink-0">
               <Layers className="h-4 w-4" />
@@ -1218,11 +1229,11 @@ export const TrafficDownloadTab: React.FC<TrafficDownloadTabProps> = ({
                 setBatchModalMode('save_preview')
                 setIsBatchModalOpen(true)
               }}
-              className="px-4 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold transition cursor-pointer flex items-center gap-1.5 shadow-sm"
+              className="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold transition cursor-pointer flex items-center gap-2 shadow-lg shadow-emerald-950/40"
               title="Salvar alterações e exibir prévia dos comandos CLI para o roteador master"
             >
-              <Save className="h-3.5 w-3.5" />
-              <span>Salvar ({selectedTargets.size})</span>
+              <Save className="h-4 w-4" />
+              <span>Salvar & Ver Comandos CLI ({selectedTargets.size})</span>
             </button>
             <button
               type="button"

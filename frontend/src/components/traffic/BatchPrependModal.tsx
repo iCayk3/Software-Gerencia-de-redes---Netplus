@@ -87,7 +87,7 @@ export const BatchPrependModal: React.FC<BatchPrependModalProps> = ({
   const isSavePreview = mode === 'save_preview'
 
   return (
-    <div className="fixed inset-0 bg-black/80 backdrop-blur-xs flex items-center justify-center p-4 z-50 animate-in fade-in duration-200">
+    <div className="fixed inset-0 bg-black/80 backdrop-blur-xs flex items-center justify-center p-4 z-[100] animate-in fade-in duration-200">
       <div className="bg-[#1C202C] border border-[#242836] rounded-2xl max-w-2xl w-full p-6 shadow-2xl space-y-4 max-h-[92vh] overflow-y-auto">
         {/* Header */}
         <div className="flex items-center justify-between border-b border-[#242836] pb-3">

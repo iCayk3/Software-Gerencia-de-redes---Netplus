@@ -270,10 +270,10 @@ function AppContent() {
             {(activeSection === 'bgp' || activeSection === 'traffic') && (
               <>
                 {activeSubTab === 'download' && (
-                  <TrafficManager activeSubTab="download" hideInternalSubTabs={true} density={density} />
+                  <TrafficManager activeSubTab="download" hideInternalSubTabs={true} density={density} navStyle={navStyle} />
                 )}
                 {activeSubTab === 'upload' && (
-                  <TrafficManager activeSubTab="upload" hideInternalSubTabs={true} density={density} />
+                  <TrafficManager activeSubTab="upload" hideInternalSubTabs={true} density={density} navStyle={navStyle} />
                 )}
                 {(activeSubTab === 'sessions' || activeSubTab === 'bgp') && <BGPManager />}
                 {activeSubTab === 'churn' && <BGPChurnView density={density} />}
