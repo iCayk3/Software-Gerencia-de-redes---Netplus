@@ -806,78 +806,79 @@ export const TrafficDownloadTab: React.FC<TrafficDownloadTabProps> = ({
                                   return (
                                     <div
                                       key={pfx.id}
-                                      className={`p-3 rounded-xl border transition flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 ${
+                                      className={`p-2.5 sm:p-3 rounded-xl border transition flex items-center justify-between gap-2.5 ${
                                         isSelected
                                           ? 'bg-[#1E2536] border-[#3B5B8C]'
                                           : 'bg-[#161922] border-[#242836] hover:border-[#2D3345]'
                                       }`}
                                     >
-                                      <div className="space-y-1">
-                                        <div className="flex flex-wrap items-center gap-3">
-                                          <input
-                                            type="checkbox"
-                                            checked={isSelected}
-                                            onChange={() =>
-                                              toggleTarget({
-                                                id: targetId,
-                                                prefix: pfx.prefix,
-                                                peerIp: pfx.peer_ip,
-                                                peerName: grp.group_name || pfx.peer_name,
-                                                remoteAs: grp.remote_as,
-                                                communityBase: grp.community_base,
-                                                currentCommunity: pfx.community,
-                                                asGroupId: grp.id,
-                                                currentPrependCount: pfx.prepend_count,
-                                                currentIsBlock: pfx.is_blocked,
-                                                newPrependCount: currentPrependCount,
-                                                newIsBlock: currentIsBlock,
-                                              })
-                                            }
-                                            className="h-4 w-4 rounded border-[#2D3345] bg-[#161922] text-[#3B5B8C] focus:ring-0 cursor-pointer shrink-0"
-                                            title="Selecionar para alteração em lote"
-                                          />
-                                          <span className="font-mono font-semibold text-slate-100 text-xs">
-                                            {pfx.prefix}
-                                          </span>
+                                      <div className="flex items-center gap-2.5 sm:gap-3 min-w-0">
+                                        <input
+                                          type="checkbox"
+                                          checked={isSelected}
+                                          onChange={() =>
+                                            toggleTarget({
+                                              id: targetId,
+                                              prefix: pfx.prefix,
+                                              peerIp: pfx.peer_ip,
+                                              peerName: grp.group_name || pfx.peer_name,
+                                              remoteAs: grp.remote_as,
+                                              communityBase: grp.community_base,
+                                              currentCommunity: pfx.community,
+                                              asGroupId: grp.id,
+                                              currentPrependCount: pfx.prepend_count,
+                                              currentIsBlock: pfx.is_blocked,
+                                              newPrependCount: currentPrependCount,
+                                              newIsBlock: currentIsBlock,
+                                            })
+                                          }
+                                          className="h-4 w-4 rounded border-[#2D3345] bg-[#161922] text-[#3B5B8C] focus:ring-0 cursor-pointer shrink-0"
+                                          title="Selecionar para alteração em lote"
+                                        />
+                                        <span className="font-mono font-semibold text-slate-100 text-xs shrink-0">
+                                          {pfx.prefix}
+                                        </span>
 
-                                          {/* Prepend selector directly on the block */}
-                                          <div className="flex items-center gap-2">
-                                            <select
-                                              value={selectValue}
-                                              onChange={(e) => handleTargetPrependChange(pfx, grp, e.target.value)}
-                                              className={`text-xs font-semibold rounded-lg px-2.5 py-1 transition cursor-pointer border focus:ring-1 focus:ring-[#3B5B8C] focus:outline-none ${
-                                                currentIsBlock
-                                                  ? 'bg-rose-950/40 text-rose-300 border-rose-800/60'
-                                                  : currentPrependCount === 0
-                                                  ? 'bg-emerald-950/40 text-emerald-300 border-emerald-800/60'
-                                                  : 'bg-amber-950/40 text-amber-300 border-amber-800/60'
-                                              }`}
-                                              title="Clique para alterar o prepend diretamente neste bloco"
-                                            >
-                                              <option value="0" className="bg-[#161922] text-emerald-300">0P (Primário / Sem Prepend)</option>
-                                              <option value="1" className="bg-[#161922] text-amber-300">1x Prepend (1P)</option>
-                                              <option value="2" className="bg-[#161922] text-amber-300">2x Prepend (2P)</option>
-                                              <option value="3" className="bg-[#161922] text-amber-300">3x Prepend (3P)</option>
-                                              <option value="deny" className="bg-[#161922] text-rose-300">Bloqueado (Deny)</option>
-                                            </select>
+                                        {/* Prepend selector directly on the block */}
+                                        <div className="flex items-center gap-1.5 shrink-0">
+                                          <select
+                                            value={selectValue}
+                                            onChange={(e) => handleTargetPrependChange(pfx, grp, e.target.value)}
+                                            className={`text-xs font-semibold rounded-lg px-2 py-1 transition cursor-pointer border focus:ring-1 focus:ring-[#3B5B8C] focus:outline-none ${
+                                              isModified
+                                                ? 'bg-[#1E2738] text-[#93B4E6] border-[#3B5B8C] ring-1 ring-[#3B5B8C]'
+                                                : currentIsBlock
+                                                ? 'bg-rose-950/40 text-rose-300 border-rose-800/60'
+                                                : currentPrependCount === 0
+                                                ? 'bg-emerald-950/40 text-emerald-300 border-emerald-800/60'
+                                                : 'bg-amber-950/40 text-amber-300 border-amber-800/60'
+                                            }`}
+                                            title={isModified ? 'Prepend alterado (pronto para salvar)' : 'Alterar prepend diretamente neste bloco'}
+                                          >
+                                            <option value="0" className="bg-[#161922] text-emerald-300">0P (Primário)</option>
+                                            <option value="1" className="bg-[#161922] text-amber-300">1P</option>
+                                            <option value="2" className="bg-[#161922] text-amber-300">2P</option>
+                                            <option value="3" className="bg-[#161922] text-amber-300">3P</option>
+                                            <option value="deny" className="bg-[#161922] text-rose-300">Bloqueado</option>
+                                          </select>
 
-                                            {isModified && (
-                                              <span className="text-[10px] text-[#93B4E6] font-medium flex items-center gap-1 bg-[#161922] px-1.5 py-0.5 rounded border border-[#3B5B8C]/40">
-                                                <span className="w-1.5 h-1.5 rounded-full bg-[#93B4E6] animate-pulse"></span>
-                                                Modificado
-                                              </span>
-                                            )}
-                                          </div>
+                                          {isModified && (
+                                            <span
+                                              className="w-2 h-2 rounded-full bg-[#93B4E6] animate-pulse shrink-0"
+                                              title="Prepend modificado (pronto para salvar)"
+                                            />
+                                          )}
                                         </div>
                                       </div>
 
                                       <button
                                         type="button"
                                         onClick={() => onOpenPrependModal(pfx, grp)}
-                                        className="inline-flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-lg bg-[#25334D] hover:bg-[#3B5B8C] text-slate-300 hover:text-white text-xs font-medium border border-[#3B5B8C]/40 transition cursor-pointer self-start sm:self-auto shrink-0"
+                                        className="inline-flex items-center justify-center gap-1 px-2.5 py-1.5 rounded-lg bg-[#25334D] hover:bg-[#3B5B8C] text-slate-300 hover:text-white text-xs font-medium border border-[#3B5B8C]/40 transition cursor-pointer shrink-0"
+                                        title="Abrir detalhes e comandos individuais deste bloco"
                                       >
                                         <SlidersHorizontal className="h-3.5 w-3.5" />
-                                        <span>Ajustar Prepend</span>
+                                        <span className="hidden sm:inline">Ajustar Prepend</span>
                                       </button>
                                     </div>
                                   )
@@ -1084,25 +1085,27 @@ export const TrafficDownloadTab: React.FC<TrafficDownloadTabProps> = ({
                                         handleTargetPrependChange(p, matchingGrp, e.target.value)
                                       }}
                                       className={`text-xs font-semibold rounded-lg px-2.5 py-1 transition cursor-pointer border focus:ring-1 focus:ring-[#3B5B8C] focus:outline-none ${
-                                        currentIsBlock
+                                        isModified
+                                          ? 'bg-[#1E2738] text-[#93B4E6] border-[#3B5B8C] ring-1 ring-[#3B5B8C]'
+                                          : currentIsBlock
                                           ? 'bg-rose-950/40 text-rose-300 border-rose-800/60'
                                           : currentPrependCount === 0
                                           ? 'bg-emerald-950/40 text-emerald-300 border-emerald-800/60'
                                           : 'bg-amber-950/40 text-amber-300 border-amber-800/60'
                                       }`}
-                                      title="Alterar prepend diretamente neste bloco"
+                                      title={isModified ? 'Prepend alterado (pronto para salvar)' : 'Alterar prepend diretamente neste bloco'}
                                     >
-                                      <option value="0" className="bg-[#161922] text-emerald-300">0P (Primário / Sem Prepend)</option>
-                                      <option value="1" className="bg-[#161922] text-amber-300">1x Prepend (1P)</option>
-                                      <option value="2" className="bg-[#161922] text-amber-300">2x Prepend (2P)</option>
-                                      <option value="3" className="bg-[#161922] text-amber-300">3x Prepend (3P)</option>
-                                      <option value="deny" className="bg-[#161922] text-rose-300">Bloqueado (Deny)</option>
+                                      <option value="0" className="bg-[#161922] text-emerald-300">0P (Primário)</option>
+                                      <option value="1" className="bg-[#161922] text-amber-300">1P</option>
+                                      <option value="2" className="bg-[#161922] text-amber-300">2P</option>
+                                      <option value="3" className="bg-[#161922] text-amber-300">3P</option>
+                                      <option value="deny" className="bg-[#161922] text-rose-300">Bloqueado</option>
                                     </select>
                                     {isModified && (
-                                      <span className="text-[10px] text-[#93B4E6] font-medium flex items-center gap-1 bg-[#161922] px-1.5 py-0.5 rounded border border-[#3B5B8C]/40">
-                                        <span className="w-1.5 h-1.5 rounded-full bg-[#93B4E6] animate-pulse"></span>
-                                        Modificado
-                                      </span>
+                                      <span
+                                        className="w-2 h-2 rounded-full bg-[#93B4E6] animate-pulse shrink-0"
+                                        title="Prepend modificado (pronto para salvar)"
+                                      />
                                     )}
                                   </div>
                                 )
