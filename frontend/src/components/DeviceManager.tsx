@@ -52,6 +52,7 @@ const VENDOR_OPTIONS: { id: VendorType; label: string; badge: string; color: str
   { id: 'datacom', label: 'Datacom (DmOS Moderno)', badge: 'Datacom DmOS', color: 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30' },
   { id: 'mikrotik_v7', label: 'MikroTik (RouterOS v7)', badge: 'MikroTik v7', color: 'bg-cyan-500/10 text-cyan-400 border-cyan-500/30' },
   { id: 'mikrotik_v6', label: 'MikroTik (RouterOS v6)', badge: 'MikroTik v6', color: 'bg-indigo-500/10 text-indigo-400 border-indigo-500/30' },
+  { id: 'fiberhome', label: 'FiberHome (AN5516 / AN6000 OLT)', badge: 'FiberHome', color: 'bg-orange-500/10 text-orange-400 border-orange-500/30' },
 ]
 
 const ROLE_OPTIONS: { id: DeviceRole; label: string; badge: string; color: string; desc: string }[] = [
@@ -95,6 +96,7 @@ export const DeviceManager: React.FC<DeviceManagerProps> = ({
   const [formName, setFormName] = useState('')
   const [formHost, setFormHost] = useState('')
   const [formPort, setFormPort] = useState(22)
+  const [formProtocol, setFormProtocol] = useState<'ssh' | 'telnet'>('ssh')
   const [formVendor, setFormVendor] = useState<VendorType>('huawei')
   const [formModel, setFormModel] = useState('')
   const [formUsername, setFormUsername] = useState('')
@@ -223,6 +225,7 @@ export const DeviceManager: React.FC<DeviceManagerProps> = ({
     setFormName('')
     setFormHost('')
     setFormPort(22)
+    setFormProtocol('ssh')
     setFormVendor('huawei')
     setFormModel('NE8000 F1A')
     setFormUsername('admin')
@@ -238,11 +241,13 @@ export const DeviceManager: React.FC<DeviceManagerProps> = ({
   }
 
   const openEditModal = (dev: Device) => {
+    const isTel = dev.protocol === 'telnet' || dev.port === 23 || dev.device_role === 'olt' || dev.vendor === 'fiberhome'
     setEditingDevice(dev)
     setFormTenantId(dev.tenant_id || activeTenantId || tenants[0]?.id || 'default-tenant')
     setFormName(dev.name)
     setFormHost(dev.host)
     setFormPort(dev.port)
+    setFormProtocol(isTel ? 'telnet' : 'ssh')
     setFormVendor(dev.vendor || 'huawei')
     setFormModel(dev.model || (dev.vendor === 'huawei' || !dev.vendor ? 'NE8000 F1A' : ''))
     setFormUsername(dev.username)
@@ -277,6 +282,7 @@ export const DeviceManager: React.FC<DeviceManagerProps> = ({
           name: formName,
           host: formHost,
           port: Number(formPort),
+          protocol: formProtocol,
           vendor: formVendor,
           model: formModel,
           username: formUsername,
@@ -298,6 +304,7 @@ export const DeviceManager: React.FC<DeviceManagerProps> = ({
           name: formName,
           host: formHost,
           port: Number(formPort),
+          protocol: formProtocol,
           vendor: formVendor,
           model: formModel,
           username: formUsername,
@@ -515,28 +522,41 @@ export const DeviceManager: React.FC<DeviceManagerProps> = ({
                   <div className={`text-slate-300 bg-[#161922] rounded-lg border border-[#242836] ${
                     density === 'compact' ? 'space-y-1 text-[11px] p-2.5 mb-2.5' : 'space-y-1.5 text-xs p-3 mb-4'
                   }`}>
-                    <div className="flex items-center justify-between">
-                      <span className="text-slate-500">Host / IP:</span>
-                      <span className="font-mono text-slate-200 tracking-tight">{dev.host}:{dev.port}</span>
-                    </div>
-                    <div className="flex items-center justify-between">
-                      <span className="text-slate-500">Usuário SSH:</span>
-                      <span className="font-mono text-slate-300 tracking-tight">{dev.username}</span>
-                    </div>
-                    <div className="flex items-center justify-between">
-                      <span className="text-slate-500">Status SSH:</span>
-                      {dev.status === 'online' ? (
-                        <span className="inline-flex items-center gap-1.5 text-[11px] font-medium text-[#2E9E6B]">
-                          <span className="w-1.5 h-1.5 rounded-full bg-[#2E9E6B]"></span> Online
-                        </span>
-                      ) : dev.status === 'offline' ? (
-                        <span className="inline-flex items-center gap-1.5 text-[11px] font-medium text-[#D9534F]">
-                          <span className="w-1.5 h-1.5 rounded-full bg-[#D9534F]"></span> Inacessível
-                        </span>
-                      ) : (
-                        <span className="text-[11px] text-slate-500">Não testado</span>
-                      )}
-                    </div>
+                    {(() => {
+                      const isTel = dev.protocol === 'telnet' || dev.port === 23 || dev.device_role === 'olt' || dev.vendor === 'fiberhome'
+                      const protoBadge = isTel ? 'TELNET' : 'SSH'
+                      return (
+                        <>
+                          <div className="flex items-center justify-between">
+                            <span className="text-slate-500">Host / IP:</span>
+                            <div className="flex items-center gap-1.5 font-mono text-slate-200 tracking-tight">
+                              <span>{dev.host}:{dev.port}</span>
+                              <span className={`text-[9px] font-bold px-1 rounded border ${isTel ? 'bg-orange-500/10 text-orange-400 border-orange-500/30' : 'bg-cyan-500/10 text-cyan-400 border-cyan-500/30'}`}>
+                                {protoBadge}
+                              </span>
+                            </div>
+                          </div>
+                          <div className="flex items-center justify-between">
+                            <span className="text-slate-500">Usuário {protoBadge}:</span>
+                            <span className="font-mono text-slate-300 tracking-tight">{dev.username}</span>
+                          </div>
+                          <div className="flex items-center justify-between">
+                            <span className="text-slate-500">Status {protoBadge}:</span>
+                            {dev.status === 'online' ? (
+                              <span className="inline-flex items-center gap-1.5 text-[11px] font-medium text-[#2E9E6B]">
+                                <span className="w-1.5 h-1.5 rounded-full bg-[#2E9E6B]"></span> Online
+                              </span>
+                            ) : dev.status === 'offline' ? (
+                              <span className="inline-flex items-center gap-1.5 text-[11px] font-medium text-[#D9534F]">
+                                <span className="w-1.5 h-1.5 rounded-full bg-[#D9534F]"></span> Inacessível
+                              </span>
+                            ) : (
+                              <span className="text-[11px] text-slate-500">Não testado</span>
+                            )}
+                          </div>
+                        </>
+                      )
+                    })()}
                     {dev.site && (
                       <div className="flex items-center justify-between">
                         <span className="text-slate-500">Site / POP:</span>
@@ -797,7 +817,21 @@ export const DeviceManager: React.FC<DeviceManagerProps> = ({
                   </label>
                   <select
                     value={formVendor}
-                    onChange={(e) => setFormVendor(e.target.value as VendorType)}
+                    onChange={(e) => {
+                      const v = e.target.value as VendorType
+                      setFormVendor(v)
+                      if (v === 'fiberhome') {
+                        setFormProtocol('telnet')
+                        setFormPort(23)
+                        setFormDeviceRole('olt')
+                        setFormIsBGP(false)
+                        if (!formModel || formModel === 'NE8000 F1A') setFormModel('AN5516-04')
+                      } else if (v === 'huawei') {
+                        if (formProtocol === 'telnet') setFormProtocol('ssh')
+                        if (formPort === 23) setFormPort(22)
+                        if (!formModel || formModel.startsWith('AN')) setFormModel('NE8000 F1A')
+                      }
+                    }}
                     className="w-full px-3 py-2 bg-slate-950/70 border border-slate-700 rounded-lg text-xs text-slate-100 focus:outline-none focus:border-cyan-500 cursor-pointer"
                   >
                     {VENDOR_OPTIONS.map((v) => (
@@ -806,6 +840,44 @@ export const DeviceManager: React.FC<DeviceManagerProps> = ({
                       </option>
                     ))}
                   </select>
+                </div>
+              </div>
+
+              {/* Protocol Selector: SSH vs Telnet */}
+              <div>
+                <label className="block text-xs font-medium text-slate-400 mb-1.5">
+                  Protocolo de Conexão CLI
+                </label>
+                <div className="grid grid-cols-2 gap-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setFormProtocol('ssh')
+                      if (formPort === 23) setFormPort(22)
+                    }}
+                    className={`px-3 py-2 rounded-lg text-xs font-semibold border flex items-center justify-center gap-1.5 transition cursor-pointer ${
+                      formProtocol === 'ssh'
+                        ? 'bg-cyan-500/10 text-cyan-400 border-cyan-500/40 ring-1 ring-cyan-500/30'
+                        : 'bg-slate-950/70 text-slate-400 border-slate-800 hover:text-white'
+                    }`}
+                  >
+                    <span>SSH (Porta 22 - Roteadores)</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setFormProtocol('telnet')
+                      if (formPort === 22) setFormPort(23)
+                      if (formDeviceRole !== 'olt') setFormDeviceRole('olt')
+                    }}
+                    className={`px-3 py-2 rounded-lg text-xs font-semibold border flex items-center justify-center gap-1.5 transition cursor-pointer ${
+                      formProtocol === 'telnet'
+                        ? 'bg-orange-500/10 text-orange-400 border-orange-500/40 ring-1 ring-orange-500/30'
+                        : 'bg-slate-950/70 text-slate-400 border-slate-800 hover:text-white'
+                    }`}
+                  >
+                    <span>Telnet (Porta 23 - OLTs)</span>
+                  </button>
                 </div>
               </div>
 
@@ -826,7 +898,7 @@ export const DeviceManager: React.FC<DeviceManagerProps> = ({
 
                 <div>
                   <label className="block text-xs font-medium text-slate-400 mb-1">
-                    Porta SSH *
+                    Porta {formProtocol === 'telnet' ? 'Telnet' : 'SSH'} *
                   </label>
                   <input
                     type="number"
@@ -839,14 +911,30 @@ export const DeviceManager: React.FC<DeviceManagerProps> = ({
               </div>
 
               <div>
-                <label className="block text-xs font-medium text-slate-400 mb-1">
-                  Modelo do Equipamento (Opcional)
-                </label>
+                <div className="flex items-center justify-between mb-1">
+                  <label className="block text-xs font-medium text-slate-400">
+                    Modelo do Equipamento (Opcional)
+                  </label>
+                  {(formVendor === 'fiberhome' || formDeviceRole === 'olt') && (
+                    <div className="flex items-center gap-1">
+                      {['AN5516-04', 'AN6000-2', 'AN5516-06'].map((m) => (
+                        <button
+                          key={m}
+                          type="button"
+                          onClick={() => setFormModel(m)}
+                          className="px-1.5 py-0.5 rounded text-[10px] font-mono bg-orange-950/60 hover:bg-orange-900 text-orange-300 border border-orange-500/30 transition cursor-pointer"
+                        >
+                          {m}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
                 <input
                   type="text"
                   value={formModel}
                   onChange={(e) => setFormModel(e.target.value)}
-                  placeholder="ex: NE8000 F1A, NE40, CloudEngine S6730, CCR2004..."
+                  placeholder={formVendor === 'fiberhome' ? 'ex: AN5516-04 ou AN6000-2' : 'ex: NE8000 F1A, NE40, CloudEngine S6730, CCR2004...'}
                   className="w-full px-3 py-2 bg-slate-950/70 border border-slate-700 rounded-lg text-xs text-slate-100 placeholder-slate-500 focus:outline-none focus:border-cyan-500"
                 />
               </div>
@@ -854,7 +942,7 @@ export const DeviceManager: React.FC<DeviceManagerProps> = ({
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <label className="block text-xs font-medium text-slate-400 mb-1">
-                    Usuário SSH *
+                    Usuário {formProtocol === 'telnet' ? 'Telnet' : 'SSH'} *
                   </label>
                   <input
                     type="text"
@@ -868,7 +956,7 @@ export const DeviceManager: React.FC<DeviceManagerProps> = ({
 
                 <div>
                   <label className="block text-xs font-medium text-slate-400 mb-1">
-                    Senha SSH {editingDevice ? '(deixe em branco para manter)' : '*'}
+                    Senha {formProtocol === 'telnet' ? 'Telnet' : 'SSH'} {editingDevice ? '(deixe em branco para manter)' : '*'}
                   </label>
                   <input
                     type="password"

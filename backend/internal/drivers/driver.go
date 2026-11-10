@@ -59,6 +59,17 @@ func ResolveVendor(dev *models.Device) models.VendorType {
 		return models.VendorDatacom
 	}
 
+	// FiberHome detection (e.g. AN5516-04, AN6000-2, AN5516, AN6000, FiberHome, OLT)
+	if strings.Contains(modelUpper, "AN5516") ||
+		strings.Contains(modelUpper, "AN6000") ||
+		strings.Contains(modelUpper, "FIBERHOME") ||
+		strings.Contains(nameUpper, "AN5516") ||
+		strings.Contains(nameUpper, "AN6000") ||
+		strings.Contains(nameUpper, "FIBERHOME") ||
+		dev.Vendor == models.VendorFiberhome {
+		return models.VendorFiberhome
+	}
+
 	// Huawei detection (e.g. NE8000, NE40, S6730, S5700, CE6800, Huawei, VRP)
 	if strings.HasPrefix(modelUpper, "NE") ||
 		strings.HasPrefix(modelUpper, "S67") ||
@@ -91,7 +102,13 @@ func NewDriver(device *models.Device) (NetworkDriver, error) {
 		return NewMikrotikV6Driver(device, client), nil
 	case models.VendorMikrotikV7:
 		return NewMikrotikV7Driver(device, client), nil
+	case models.VendorFiberhome:
+		return NewFiberhomeDriver(device), nil
 	default:
+		// If protocol is explicitly telnet or role is OLT, use FiberHome/Telnet driver
+		if device.Protocol == "telnet" || device.Port == 23 || device.DeviceRole == models.RoleOLT {
+			return NewFiberhomeDriver(device), nil
+		}
 		return nil, fmt.Errorf("unsupported vendor '%s'", vendor)
 	}
 }

@@ -59,7 +59,7 @@ export interface DNSLookupResponse {
 
 // --- Network Equipment & Routing Types ---
 
-export type VendorType = 'huawei' | 'datacom' | 'mikrotik_v6' | 'mikrotik_v7'
+export type VendorType = 'huawei' | 'datacom' | 'mikrotik_v6' | 'mikrotik_v7' | 'fiberhome'
 export type DeviceRole = 'bgp' | 'pe' | 'sw' | 'olt' | 'other'
 
 export interface Device {
@@ -69,6 +69,7 @@ export interface Device {
   name: string
   host: string
   port: number
+  protocol?: 'ssh' | 'telnet'
   vendor: VendorType
   model?: string
   username: string

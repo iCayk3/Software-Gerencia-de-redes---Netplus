@@ -49,6 +49,16 @@ const VENDOR_PRESETS: Record<string, { label: string; cmd: string }[]> = {
     { label: 'Interfaces', cmd: '/interface print without-paging' },
     { label: 'Recursos de Hardware', cmd: '/system resource print' },
   ],
+  fiberhome: [
+    { label: 'Versão do Sistema', cmd: 'show version' },
+    { label: 'Placas e Slots', cmd: 'show card' },
+    { label: 'Interfaces Uplink', cmd: 'show interface brief' },
+    { label: 'Status de Portas PON', cmd: 'show pon power' },
+    { label: 'Informações de ONUs', cmd: 'show onu info' },
+    { label: 'Alarmes Ativos', cmd: 'show alarm history' },
+    { label: 'Temperatura / Hardware', cmd: 'show temperature' },
+    { label: 'Configuração em Execução', cmd: 'show running-config' },
+  ],
 }
 
 export const TerminalView: React.FC<TerminalViewProps> = ({ initialDevice }) => {
@@ -78,7 +88,9 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ initialDevice }) => 
 
     setExecuting(true)
     const timestamp = new Date().toLocaleTimeString()
-    setConsoleOutput((prev) => `${prev ? prev + '\n\n' : ''}[${timestamp}] ${selectedDevice.name}# ${targetCmd}\nExecutando via SSH...`)
+    const isTelnet = selectedDevice.protocol === 'telnet' || selectedDevice.port === 23 || selectedDevice.device_role === 'olt' || selectedDevice.vendor === 'fiberhome'
+    const protoLabel = isTelnet ? 'Telnet' : 'SSH'
+    setConsoleOutput((prev) => `${prev ? prev + '\n\n' : ''}[${timestamp}] ${selectedDevice.name}# ${targetCmd}\nExecutando via ${protoLabel}...`)
 
     try {
       const res = await execDeviceCommand(selectedDevice.id, targetCmd.trim())
@@ -86,7 +98,7 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ initialDevice }) => 
       setConsoleOutput((prev) => {
         // Replace the last executing notice with actual output
         const lines = prev.split('\n')
-        lines.pop() // remove "Executando via SSH..."
+        lines.pop() // remove "Executando via..."
         return lines.join('\n') + '\n' + (res.output || '(Comando executado sem retorno de texto)')
       })
     } catch (err: any) {
@@ -117,10 +129,10 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ initialDevice }) => 
         <div>
           <h2 className="text-lg font-semibold text-slate-100 flex items-center gap-2">
             <TerminalIcon className="h-5 w-5 text-cyan-400" />
-            <span>Terminal e Console SSH Direto</span>
+            <span>Terminal e Console CLI (SSH &amp; Telnet)</span>
           </h2>
           <p className="text-xs text-slate-400 mt-1">
-            Execute comandos diagnósticos ad-hoc em tempo real com desativação de paginação automática
+            Execute comandos diagnósticos ad-hoc em tempo real em Roteadores e OLTs com desativação de paginação automática
           </p>
         </div>
 
@@ -133,14 +145,17 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ initialDevice }) => 
               const d = devices.find((dev) => dev.id === e.target.value) || null
               setSelectedDevice(d)
             }}
-            className="w-full md:w-64 px-3.5 py-2 bg-slate-950/80 border border-slate-700 rounded-lg text-xs text-slate-100 focus:outline-none focus:border-cyan-500 cursor-pointer"
+            className="w-full md:w-72 px-3.5 py-2 bg-slate-950/80 border border-slate-700 rounded-lg text-xs text-slate-100 focus:outline-none focus:border-cyan-500 cursor-pointer"
           >
             {devices.length === 0 && <option value="">Nenhum equipamento cadastrado</option>}
-            {devices.map((d) => (
-              <option key={d.id} value={d.id}>
-                {d.name} ({d.host} &bull; {d.vendor})
-              </option>
-            ))}
+            {devices.map((d) => {
+              const isTel = d.protocol === 'telnet' || d.port === 23 || d.device_role === 'olt' || d.vendor === 'fiberhome'
+              return (
+                <option key={d.id} value={d.id}>
+                  {d.name} ({d.host}:{d.port} • {isTel ? 'TELNET' : 'SSH'})
+                </option>
+              )
+            })}
           </select>
         </div>
       </div>

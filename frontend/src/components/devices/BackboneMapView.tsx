@@ -2490,7 +2490,16 @@ export const BackboneMapView: React.FC<BackboneMapViewProps> = ({
               </div>
               <div>
                 <span className="text-slate-500 font-sans text-[10px] block">Fabricante & Modelo:</span>
-                <span className="text-[#93B4E6] uppercase">{selectedDevice.vendor} {selectedDevice.model || ''}</span>
+                <span className="text-[#93B4E6] uppercase">
+                  {selectedDevice.vendor} {selectedDevice.model || ''}
+                  <span className={`ml-1 text-[9px] font-bold px-1 rounded border ${
+                    selectedDevice.protocol === 'telnet' || selectedDevice.port === 23 || selectedDevice.device_role === 'olt' || selectedDevice.vendor === 'fiberhome'
+                      ? 'bg-orange-500/10 text-orange-400 border-orange-500/30'
+                      : 'bg-cyan-500/10 text-cyan-400 border-cyan-500/30'
+                  }`}>
+                    {selectedDevice.protocol === 'telnet' || selectedDevice.port === 23 || selectedDevice.device_role === 'olt' || selectedDevice.vendor === 'fiberhome' ? 'TELNET' : 'SSH'}
+                  </span>
+                </span>
               </div>
               <div>
                 <span className="text-slate-500 font-sans text-[10px] block">Coordenadas:</span>

@@ -85,6 +85,7 @@ const (
 	VendorDatacom    VendorType = "datacom"
 	VendorMikrotikV6 VendorType = "mikrotik_v6"
 	VendorMikrotikV7 VendorType = "mikrotik_v7"
+	VendorFiberhome  VendorType = "fiberhome"
 )
 
 // DeviceRole defines the backbone role/function of a device in the infrastructure.
@@ -105,8 +106,9 @@ type Device struct {
 	Name       string     `json:"name"`
 	Host       string     `json:"host"`
 	Port       int        `json:"port"`
+	Protocol   string     `json:"protocol,omitempty"` // "ssh" (port 22) | "telnet" (port 23, OLTs)
 	Vendor     VendorType `json:"vendor"`
-	Model      string     `json:"model,omitempty"` // e.g., "NE8000 F1A", "NE40", "S6730", "DmOS", "CCR2004"
+	Model      string     `json:"model,omitempty"` // e.g., "AN5516-04", "AN6000-2", "NE8000 F1A"
 	Username   string     `json:"username"`
 	Password   string     `json:"password,omitempty"`
 	AuthType   string     `json:"auth_type"` // "password" | "key"
@@ -128,6 +130,7 @@ type SafeDevice struct {
 	Name        string     `json:"name"`
 	Host        string     `json:"host"`
 	Port        int        `json:"port"`
+	Protocol    string     `json:"protocol,omitempty"`
 	Vendor      VendorType `json:"vendor"`
 	Model       string     `json:"model,omitempty"`
 	Username    string     `json:"username"`
@@ -154,12 +157,21 @@ func (d *Device) ToSafe() SafeDevice {
 			role = RoleSW
 		}
 	}
+	proto := d.Protocol
+	if proto == "" {
+		if d.Port == 23 || role == RoleOLT || d.Vendor == VendorFiberhome {
+			proto = "telnet"
+		} else {
+			proto = "ssh"
+		}
+	}
 	return SafeDevice{
 		ID:          d.ID,
 		TenantID:    d.TenantID,
 		Name:        d.Name,
 		Host:        d.Host,
 		Port:        d.Port,
+		Protocol:    proto,
 		Vendor:      d.Vendor,
 		Model:       d.Model,
 		Username:    d.Username,
