@@ -25,7 +25,7 @@ import {
 import type { Device, DeviceRole } from '../../services/api'
 import { isBGPMasterDevice } from '../../utils/bgpMaster'
 
-export type MapLayerType = 'dark' | 'satellite' | 'streets' | 'osm'
+export type MapLayerType = 'google_satellite' | 'google_streets' | 'esri_dark' | 'google_terrain'
 
 interface LayerOption {
   id: MapLayerType
@@ -36,59 +36,62 @@ interface LayerOption {
   url: (apiKey?: string) => string
   attribution: string
   maxZoom: number
-  subdomains?: string | string[]
+  subdomains?: string[]
 }
 
 const LAYER_PROVIDERS: Record<MapLayerType, LayerOption> = {
-  dark: {
-    id: 'dark',
-    name: 'NetPulse Dark (CartoDB)',
-    shortName: 'Escuro NOC',
-    icon: '🌑',
-    description: 'Tema escuro padrão NOC (gratuito, sem chave)',
-    url: () => 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',
-    attribution: '&copy; CartoDB &copy; OpenStreetMap',
-    maxZoom: 19,
-    subdomains: 'abcd',
-  },
-  satellite: {
-    id: 'satellite',
-    name: 'Google Satélite (Híbrido)',
+  google_satellite: {
+    id: 'google_satellite',
+    name: 'Google Maps Satélite (Híbrido)',
     shortName: 'Satélite',
     icon: '🛰️',
-    description: 'Imagens aéreas com nomes de cidades e rodovias',
+    description: 'Imagens aéreas de alta resolução com nomes de cidades e rodovias',
     url: (key) =>
       key
-        ? `https://mt1.google.com/vt/lyrs=y&x={x}&y={y}&z={z}&key=${encodeURIComponent(key)}`
-        : 'https://mt1.google.com/vt/lyrs=y&x={x}&y={y}&z={z}',
+        ? `https://mt{s}.google.com/vt/lyrs=y&x={x}&y={y}&z={z}&key=${encodeURIComponent(key)}`
+        : 'https://mt{s}.google.com/vt/lyrs=y&x={x}&y={y}&z={z}',
     attribution: '&copy; Google Maps',
     maxZoom: 20,
-    subdomains: ['mt0', 'mt1', 'mt2', 'mt3'],
+    subdomains: ['0', '1', '2', '3'],
   },
-  streets: {
-    id: 'streets',
-    name: 'Google Ruas (Roadmap)',
-    shortName: 'Google Ruas',
+  google_streets: {
+    id: 'google_streets',
+    name: 'Google Maps Ruas (Roadmap)',
+    shortName: 'Ruas',
     icon: '🗺️',
-    description: 'Mapa de tráfego e ruas clássico da Google',
+    description: 'Mapa rodoviário clássico do Google Maps',
     url: (key) =>
       key
-        ? `https://mt1.google.com/vt/lyrs=m&x={x}&y={y}&z={z}&key=${encodeURIComponent(key)}`
-        : 'https://mt1.google.com/vt/lyrs=m&x={x}&y={y}&z={z}',
+        ? `https://mt{s}.google.com/vt/lyrs=m&x={x}&y={y}&z={z}&key=${encodeURIComponent(key)}`
+        : 'https://mt{s}.google.com/vt/lyrs=m&x={x}&y={y}&z={z}',
     attribution: '&copy; Google Maps',
     maxZoom: 20,
-    subdomains: ['mt0', 'mt1', 'mt2', 'mt3'],
+    subdomains: ['0', '1', '2', '3'],
   },
-  osm: {
-    id: 'osm',
-    name: 'OpenStreetMap (Padrão)',
-    shortName: 'OSM Padrão',
-    icon: '🌐',
-    description: 'Cartografia colaborativa clara global',
-    url: () => 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',
-    attribution: '&copy; OpenStreetMap contributors',
-    maxZoom: 19,
-    subdomains: 'abc',
+  esri_dark: {
+    id: 'esri_dark',
+    name: 'NOC Dark Gray (Esri ArcGIS)',
+    shortName: 'NOC Escuro',
+    icon: '🌑',
+    description: 'Cartografia escura profissional para NOCs de telecomunicações',
+    url: () =>
+      'https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Dark_Gray_Base/MapServer/tile/{z}/{y}/{x}',
+    attribution: '&copy; Esri &mdash; Esri, DeLorme, NAVTEQ',
+    maxZoom: 16,
+  },
+  google_terrain: {
+    id: 'google_terrain',
+    name: 'Google Maps Terreno / Relevo',
+    shortName: 'Relevo',
+    icon: '⛰️',
+    description: 'Topografia e curvas de relevo geográfico',
+    url: (key) =>
+      key
+        ? `https://mt{s}.google.com/vt/lyrs=p&x={x}&y={y}&z={z}&key=${encodeURIComponent(key)}`
+        : 'https://mt{s}.google.com/vt/lyrs=p&x={x}&y={y}&z={z}',
+    attribution: '&copy; Google Maps',
+    maxZoom: 18,
+    subdomains: ['0', '1', '2', '3'],
   },
 }
 
@@ -169,7 +172,18 @@ export const BackboneMapView: React.FC<BackboneMapViewProps> = ({
 
   // Map Layer & Google Maps API configuration
   const [activeLayer, setActiveLayer] = useState<MapLayerType>(() => {
-    return (localStorage.getItem('netpulse_map_layer') as MapLayerType) || 'dark'
+    const stored = localStorage.getItem('netpulse_map_layer')
+    if (
+      stored === 'google_satellite' ||
+      stored === 'google_streets' ||
+      stored === 'esri_dark' ||
+      stored === 'google_terrain'
+    ) {
+      return stored as MapLayerType
+    }
+    // Auto-migrate from any legacy 'dark' or 'osm' that caused "API Required"
+    localStorage.setItem('netpulse_map_layer', 'google_satellite')
+    return 'google_satellite'
   })
 
   const [googleApiKey, setGoogleApiKey] = useState<string>(() => {
@@ -317,6 +331,20 @@ export const BackboneMapView: React.FC<BackboneMapViewProps> = ({
     mapInstanceRef.current = map
     setMapReady(true)
 
+    // Ensure map tiles calculate correct container dimensions immediately
+    setTimeout(() => {
+      map.invalidateSize()
+    }, 150)
+
+    // Resize observer to auto-adapt if window or layout flexbox changes
+    let resizeObserver: ResizeObserver | null = null
+    if (typeof ResizeObserver !== 'undefined' && mapContainerRef.current) {
+      resizeObserver = new ResizeObserver(() => {
+        map.invalidateSize()
+      })
+      resizeObserver.observe(mapContainerRef.current)
+    }
+
     // Handle click on map when placing a device
     map.on('click', async (e: L.LeafletMouseEvent) => {
       const activePlacingId = placingDeviceIdRef.current
@@ -333,6 +361,9 @@ export const BackboneMapView: React.FC<BackboneMapViewProps> = ({
     })
 
     return () => {
+      if (resizeObserver) {
+        resizeObserver.disconnect()
+      }
       map.remove()
       mapInstanceRef.current = null
       tileLayerRef.current = null
@@ -340,7 +371,7 @@ export const BackboneMapView: React.FC<BackboneMapViewProps> = ({
     }
   }, [])
 
-  // Synchronize dynamic tile layer (NetPulse Dark / Google Satélite / Google Ruas / OSM)
+  // Synchronize dynamic tile layer (Google Satélite / Google Ruas / Esri Dark / Google Relevo)
   useEffect(() => {
     const map = mapInstanceRef.current
     if (!map || !mapReady) return
@@ -350,7 +381,7 @@ export const BackboneMapView: React.FC<BackboneMapViewProps> = ({
       tileLayerRef.current = null
     }
 
-    const provider = LAYER_PROVIDERS[activeLayer] || LAYER_PROVIDERS.dark
+    const provider = LAYER_PROVIDERS[activeLayer] || LAYER_PROVIDERS.google_satellite
     const tileUrl = provider.url(googleApiKey)
     const newLayer = L.tileLayer(tileUrl, {
       maxZoom: provider.maxZoom,
@@ -607,7 +638,7 @@ export const BackboneMapView: React.FC<BackboneMapViewProps> = ({
 
           {/* Layer Selector */}
           <div className="flex items-center bg-[#161922] p-0.5 rounded-xl border border-[#242836]">
-            {(['dark', 'satellite', 'streets', 'osm'] as MapLayerType[]).map((lId) => {
+            {(['google_satellite', 'google_streets', 'esri_dark', 'google_terrain'] as MapLayerType[]).map((lId) => {
               const opt = LAYER_PROVIDERS[lId]
               const isActive = activeLayer === lId
               return (
@@ -922,7 +953,7 @@ export const BackboneMapView: React.FC<BackboneMapViewProps> = ({
                   )}
                 </div>
                 <p className="text-[11px] text-slate-400 leading-relaxed">
-                  O NetPulse <strong>não exige</strong> obrigatoriamente nenhuma chave de API para funcionar. O mapa já opera gratuitamente via <strong>CartoDB Dark Matter</strong> (OpenStreetMap). Caso você possua uma chave da Google Cloud Platform e deseje habilitar imagens oficiais de satélite e ruas da Google, configure-a abaixo.
+                  O NetPulse <strong>não exige</strong> obrigatoriamente nenhuma chave de API para funcionar. O mapa opera nativamente com <strong>Google Satélite, Google Ruas e NOC Dark Gray (Esri)</strong> de alta resolução. Caso você queira utilizar sua própria chave da Google Cloud Platform para cotas corporativas dedicadas, configure-a abaixo.
                 </p>
               </div>
 
