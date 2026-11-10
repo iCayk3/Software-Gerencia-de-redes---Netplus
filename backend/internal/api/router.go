@@ -62,6 +62,12 @@ func NewRouter(
 		log.Printf("[Router] Aviso: falha ao inicializar PeerMetadataStore: %v", err)
 	}
 
+	linkStore, err := storage.NewLinkStore(dataDir)
+	if err != nil {
+		log.Printf("[Router] Aviso: falha ao inicializar LinkStore: %v", err)
+	}
+	linkCtrl := NewLinkController(linkStore, store, auditStore)
+
 	trafficCtrl := NewTrafficController(store, asMetaStore, trafficSvc, uploadDir, auditStore)
 	if peerMetaStore != nil {
 		trafficCtrl.SetPeerMetadataStore(peerMetaStore)
@@ -112,6 +118,13 @@ func NewRouter(
 	mux.HandleFunc("POST /api/devices/{id}/test", devCtrl.TestDevice)
 	mux.HandleFunc("POST /api/devices/{id}/compliance", devCtrl.AuditDeviceCompliance)
 	mux.HandleFunc("GET /api/devices/{id}/compliance", devCtrl.GetDeviceCompliance)
+
+	// Backbone Links & Point-to-Point Fiber/Radio Routes
+	mux.HandleFunc("GET /api/backbone/links", linkCtrl.ListLinks)
+	mux.HandleFunc("GET /api/backbone/links/{id}", linkCtrl.GetLink)
+	mux.HandleFunc("POST /api/backbone/links", RequireRole(models.RoleAdmin, models.RoleNOCOperator)(linkCtrl.CreateLink))
+	mux.HandleFunc("PUT /api/backbone/links/{id}", RequireRole(models.RoleAdmin, models.RoleNOCOperator)(linkCtrl.UpdateLink))
+	mux.HandleFunc("DELETE /api/backbone/links/{id}", RequireRole(models.RoleAdmin, models.RoleNOCOperator)(linkCtrl.DeleteLink))
 
 	// Routing inspection per device
 	mux.HandleFunc("GET /api/devices/{id}/bgp", devCtrl.GetDeviceBGP)

@@ -20,6 +20,9 @@ const (
 	ActionCreateUser        = "CREATE_USER"
 	ActionUpdateUser        = "UPDATE_USER"
 	ActionDeleteUser        = "DELETE_USER"
+	ActionCreateBackboneLink = "CREATE_BACKBONE_LINK"
+	ActionUpdateBackboneLink = "UPDATE_BACKBONE_LINK"
+	ActionDeleteBackboneLink = "DELETE_BACKBONE_LINK"
 )
 
 // AuditLog represents an immutable record of an operator action.

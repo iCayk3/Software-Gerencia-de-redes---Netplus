@@ -34,3 +34,17 @@ body {
 ::-webkit-scrollbar-thumb:hover {
   background: #3B5B8C;
 }
+
+/* Leaflet custom tooltips for fiber cables */
+.leaflet-tooltip.leaflet-noc-link-tooltip {
+  background: rgba(22, 25, 34, 0.95);
+  border: 1px solid #2D3345;
+  color: #E2E5EC;
+  border-radius: 8px;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.6);
+  padding: 4px 8px;
+  font-family: inherit;
+}
+.leaflet-tooltip.leaflet-noc-link-tooltip:before {
+  border-top-color: rgba(22, 25, 34, 0.95);
+}

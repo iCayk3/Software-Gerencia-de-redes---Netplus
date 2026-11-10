@@ -1,11 +1,6 @@
-import React, { useEffect, useRef, useState, useMemo } from 'react'
+import React, { useEffect, useRef, useState, useMemo, useCallback } from 'react'
 import L from 'leaflet'
 import {
-  Server,
-  Network,
-  Radio,
-  Layers,
-  Crown,
   MapPin,
   Search,
   Terminal,
@@ -15,14 +10,29 @@ import {
   Edit2,
   Plus,
   KeyRound,
-  Eye,
-  EyeOff,
-  ExternalLink,
   ShieldCheck,
   X,
   Sparkles,
+  Route,
+  Waypoints,
+  Trash2,
+  Cable,
+  Check,
+  Sliders,
 } from 'lucide-react'
 import type { Device, DeviceRole } from '../../services/api'
+import {
+  fetchBackboneLinks,
+  createBackboneLink,
+  updateBackboneLink,
+  deleteBackboneLink,
+  calculateRoadRoute,
+  haversineDistance,
+  type BackboneLink,
+  type LinkType,
+  type LinkRoutingMode,
+  type LinkStatus,
+} from '../../services/api'
 import { isBGPMasterDevice } from '../../utils/bgpMaster'
 
 export type MapLayerType = 'google_satellite' | 'google_streets' | 'esri_dark' | 'google_terrain'
@@ -151,6 +161,17 @@ const ROLE_CONFIG: Record<
   },
 }
 
+const LINK_COLOR_PALETTE = [
+  { id: '#00E5FF', label: 'Ciano Neon' },
+  { id: '#10B981', label: 'Esmeralda' },
+  { id: '#F59E0B', label: 'Âmbar' },
+  { id: '#A855F7', label: 'Púrpura' },
+  { id: '#EC4899', label: 'Rosa' },
+  { id: '#3B82F6', label: 'Azul BGP' },
+]
+
+const CAPACITY_PRESETS = ['1G', '10G', '40G', '100G', '200G', '400G']
+
 export const BackboneMapView: React.FC<BackboneMapViewProps> = ({
   devices,
   onEditDevice,
@@ -161,6 +182,8 @@ export const BackboneMapView: React.FC<BackboneMapViewProps> = ({
 }) => {
   const mapContainerRef = useRef<HTMLDivElement>(null)
   const mapInstanceRef = useRef<L.Map | null>(null)
+  const linksLayerRef = useRef<L.LayerGroup | null>(null)
+  const editLayerRef = useRef<L.LayerGroup | null>(null)
   const markersLayerRef = useRef<L.LayerGroup | null>(null)
   const tileLayerRef = useRef<L.TileLayer | null>(null)
 
@@ -169,6 +192,37 @@ export const BackboneMapView: React.FC<BackboneMapViewProps> = ({
   const [statusFilter, setStatusFilter] = useState<'all' | 'online' | 'offline'>('all')
   const [search, setSearch] = useState('')
   const [selectedDevice, setSelectedDevice] = useState<Device | null>(null)
+
+  // Backbone Links state
+  const [links, setLinks] = useState<BackboneLink[]>([])
+  const [loadingLinks, setLoadingLinks] = useState(false)
+  const [selectedLink, setSelectedLink] = useState<BackboneLink | null>(null)
+  const [isLinksDrawerOpen, setIsLinksDrawerOpen] = useState(false)
+
+  // Link Creation & Editing State
+  const [isLinkModalOpen, setIsLinkModalOpen] = useState(false)
+  const [editingLinkTarget, setEditingLinkTarget] = useState<BackboneLink | null>(null)
+  const [linkFormSourceId, setLinkFormSourceId] = useState('')
+  const [linkFormTargetId, setLinkFormTargetId] = useState('')
+  const [linkFormName, setLinkFormName] = useState('')
+  const [linkFormType, setLinkFormType] = useState<LinkType>('fiber')
+  const [linkFormRoutingMode, setLinkFormRoutingMode] = useState<LinkRoutingMode>('road')
+  const [linkFormCapacity, setLinkFormCapacity] = useState('10G')
+  const [linkFormColor, setLinkFormColor] = useState('#00E5FF')
+  const [linkFormStatus, setLinkFormStatus] = useState<LinkStatus>('active')
+  const [linkFormNotes, setLinkFormNotes] = useState('')
+  const [linkFormWaypoints, setLinkFormWaypoints] = useState<[number, number][]>([])
+  const [linkFormPath, setLinkFormPath] = useState<[number, number][]>([])
+  const [linkFormDistanceKm, setLinkFormDistanceKm] = useState(0)
+  const [isCalculatingRoute, setIsCalculatingRoute] = useState(false)
+  const [isSavingLink, setIsSavingLink] = useState(false)
+
+  // Interactive Map Modes for Links
+  const [isAddWaypointMode, setIsAddWaypointMode] = useState(false)
+  const [isManualDrawMode, setIsManualDrawMode] = useState(false)
+  const [isEditingLinkPath, setIsEditingLinkPath] = useState(false)
+  const [editingPath, setEditingPath] = useState<[number, number][]>([])
+  const [editingDistanceKm, setEditingDistanceKm] = useState(0)
 
   // Map Layer & Google Maps API configuration
   const [activeLayer, setActiveLayer] = useState<MapLayerType>(() => {
@@ -181,7 +235,6 @@ export const BackboneMapView: React.FC<BackboneMapViewProps> = ({
     ) {
       return stored as MapLayerType
     }
-    // Auto-migrate from any legacy 'dark' or 'osm' that caused "API Required"
     localStorage.setItem('netpulse_map_layer', 'google_satellite')
     return 'google_satellite'
   })
@@ -199,6 +252,23 @@ export const BackboneMapView: React.FC<BackboneMapViewProps> = ({
   const [showKeySecret, setShowKeySecret] = useState(false)
   const [keySavedToast, setKeySavedToast] = useState(false)
   const [mapReady, setMapReady] = useState(false)
+
+  // Load Links from API
+  const loadLinks = useCallback(async () => {
+    setLoadingLinks(true)
+    try {
+      const data = await fetchBackboneLinks()
+      setLinks(data)
+    } catch {
+      // Non-blocking fallback
+    } finally {
+      setLoadingLinks(false)
+    }
+  }, [])
+
+  useEffect(() => {
+    loadLinks()
+  }, [loadLinks])
 
   const handleSelectLayer = (layer: MapLayerType) => {
     setActiveLayer(layer)
@@ -246,15 +316,22 @@ export const BackboneMapView: React.FC<BackboneMapViewProps> = ({
   const [placingDeviceId, setPlacingDeviceId] = useState<string | null>(null)
   const [savingLocation, setSavingLocation] = useState(false)
 
-  // Cancel placement mode on Escape
+  // Cancel placement mode or drawing mode on Escape
   useEffect(() => {
-    if (!placingDeviceId) return
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') setPlacingDeviceId(null)
+      if (e.key === 'Escape') {
+        if (placingDeviceId) setPlacingDeviceId(null)
+        if (isAddWaypointMode) setIsAddWaypointMode(false)
+        if (isManualDrawMode) setIsManualDrawMode(false)
+        if (isEditingLinkPath) {
+          setIsEditingLinkPath(false)
+          setEditingLinkTarget(null)
+        }
+      }
     }
     window.addEventListener('keydown', handleKeyDown)
     return () => window.removeEventListener('keydown', handleKeyDown)
-  }, [placingDeviceId])
+  }, [placingDeviceId, isAddWaypointMode, isManualDrawMode, isEditingLinkPath])
 
   // Classify devices into placed on map vs unplaced
   const placedDevices = useMemo(() => {
@@ -303,16 +380,27 @@ export const BackboneMapView: React.FC<BackboneMapViewProps> = ({
 
   // Backbone KPI counts
   const counts = useMemo(() => {
-    const res = {
+    const res: Record<DeviceRole, number> & {
+      total: number
+      online: number
+      offline: number
+      placed: number
+      unplaced: number
+      links: number
+      totalFiberKm: number
+    } = {
       total: devices.length,
       bgp: 0,
       pe: 0,
       sw: 0,
       olt: 0,
+      other: 0,
       online: 0,
       offline: 0,
       placed: placedDevices.length,
       unplaced: unplacedDevices.length,
+      links: links.length,
+      totalFiberKm: Number(links.reduce((acc, l) => acc + (l.distance_km || 0), 0).toFixed(1)),
     }
     devices.forEach((d) => {
       const r = d.device_role || (d.is_bgp ? 'bgp' : 'sw')
@@ -320,18 +408,110 @@ export const BackboneMapView: React.FC<BackboneMapViewProps> = ({
       else if (r === 'pe') res.pe++
       else if (r === 'sw') res.sw++
       else if (r === 'olt') res.olt++
+      else res.other++
 
       if (d.status === 'online') res.online++
       else res.offline++
     })
     return res
-  }, [devices, placedDevices, unplacedDevices])
+  }, [devices, placedDevices, unplacedDevices, links])
+
+  // Route calculation engine
+  const handleRecalculateRoute = useCallback(
+    async (
+      sourceId: string,
+      targetId: string,
+      mode: LinkRoutingMode,
+      waypoints: [number, number][] = []
+    ) => {
+      const src = devices.find((d) => d.id === sourceId)
+      const tgt = devices.find((d) => d.id === targetId)
+      if (
+        !src ||
+        !tgt ||
+        src.latitude == null ||
+        src.longitude == null ||
+        tgt.latitude == null ||
+        tgt.longitude == null
+      ) {
+        return
+      }
+
+      const pStart: [number, number] = [Number(src.latitude), Number(src.longitude)]
+      const pEnd: [number, number] = [Number(tgt.latitude), Number(tgt.longitude)]
+
+      if (mode === 'direct') {
+        const path: [number, number][] = [pStart, pEnd]
+        setLinkFormPath(path)
+        setLinkFormDistanceKm(Number(haversineDistance(pStart, pEnd).toFixed(2)))
+        return
+      }
+
+      if (mode === 'road') {
+        setIsCalculatingRoute(true)
+        try {
+          const points: [number, number][] = [pStart, ...waypoints, pEnd]
+          const result = await calculateRoadRoute(points)
+          setLinkFormPath(result.path)
+          setLinkFormDistanceKm(result.distanceKm)
+        } finally {
+          setIsCalculatingRoute(false)
+        }
+        return
+      }
+
+      // mode === 'manual': if no points, initialize endpoints
+      if (linkFormPath.length < 2) {
+        const path: [number, number][] = [pStart, pEnd]
+        setLinkFormPath(path)
+        setLinkFormDistanceKm(Number(haversineDistance(pStart, pEnd).toFixed(2)))
+      }
+    },
+    [devices, linkFormPath.length]
+  )
+
+  // Synchronize ref callbacks for Leaflet event listener
+  const placingDeviceIdRef = useRef<string | null>(placingDeviceId)
+  const isAddWaypointModeRef = useRef(isAddWaypointMode)
+  const isManualDrawModeRef = useRef(isManualDrawMode)
+  const isEditingLinkPathRef = useRef(isEditingLinkPath)
+  const linkSourceIdRef = useRef(linkFormSourceId)
+  const linkTargetIdRef = useRef(linkFormTargetId)
+  const linkWaypointsRef = useRef(linkFormWaypoints)
+  const handleRecalculateRouteRef = useRef(handleRecalculateRoute)
+
+  useEffect(() => {
+    placingDeviceIdRef.current = placingDeviceId
+    isAddWaypointModeRef.current = isAddWaypointMode
+    isManualDrawModeRef.current = isManualDrawMode
+    isEditingLinkPathRef.current = isEditingLinkPath
+    linkSourceIdRef.current = linkFormSourceId
+    linkTargetIdRef.current = linkFormTargetId
+    linkWaypointsRef.current = linkFormWaypoints
+    handleRecalculateRouteRef.current = handleRecalculateRoute
+  }, [
+    placingDeviceId,
+    isAddWaypointMode,
+    isManualDrawMode,
+    isEditingLinkPath,
+    linkFormSourceId,
+    linkFormTargetId,
+    linkFormWaypoints,
+    handleRecalculateRoute,
+  ])
+
+  // Invalidate map size when placement or edit mode toggles
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      mapInstanceRef.current?.invalidateSize()
+    }, 50)
+    return () => clearTimeout(timer)
+  }, [placingDeviceId, isEditingLinkPath, isAddWaypointMode, isManualDrawMode])
 
   // Initialize Leaflet Map once
   useEffect(() => {
     if (!mapContainerRef.current || mapInstanceRef.current) return
 
-    // Default center in Northern/Eastern Brazil (Pará/Belém region or central Brazil)
     const initialLat = placedDevices.length > 0 ? Number(placedDevices[0].latitude) : -1.4558
     const initialLng = placedDevices.length > 0 ? Number(placedDevices[0].longitude) : -48.4902
 
@@ -342,21 +522,25 @@ export const BackboneMapView: React.FC<BackboneMapViewProps> = ({
       attributionControl: false,
     })
 
-    // Custom positioned zoom control at top-right
     L.control.zoom({ position: 'topright' }).addTo(map)
 
-    // Layer group to hold dynamic markers
+    // Layer groups hierarchy: links at bottom, edit overlay in middle, device markers on top
+    const linksGroup = L.layerGroup().addTo(map)
+    linksLayerRef.current = linksGroup
+
+    const editGroup = L.layerGroup().addTo(map)
+    editLayerRef.current = editGroup
+
     const markersGroup = L.layerGroup().addTo(map)
     markersLayerRef.current = markersGroup
+
     mapInstanceRef.current = map
     setMapReady(true)
 
-    // Ensure map tiles calculate correct container dimensions immediately
     setTimeout(() => {
       map.invalidateSize()
     }, 150)
 
-    // Resize observer to auto-adapt if window or layout flexbox changes
     let resizeObserver: ResizeObserver | null = null
     if (typeof ResizeObserver !== 'undefined' && mapContainerRef.current) {
       resizeObserver = new ResizeObserver(() => {
@@ -365,33 +549,85 @@ export const BackboneMapView: React.FC<BackboneMapViewProps> = ({
       resizeObserver.observe(mapContainerRef.current)
     }
 
-    // Handle click on map when placing a device
+    // Unified Leaflet map click listener
     map.on('click', async (e: L.LeafletMouseEvent) => {
+      // 1. Placing device coordinates
       const activePlacingId = placingDeviceIdRef.current
-      if (!activePlacingId || !onUpdateCoordinates) return
+      if (activePlacingId && onUpdateCoordinates) {
+        const { lat, lng } = e.latlng
+        setSavingLocation(true)
+        try {
+          await onUpdateCoordinates(activePlacingId, Number(lat.toFixed(6)), Number(lng.toFixed(6)))
+          setPlacingDeviceId(null)
+        } finally {
+          setSavingLocation(false)
+        }
+        return
+      }
 
-      const { lat, lng } = e.latlng
-      setSavingLocation(true)
-      try {
-        await onUpdateCoordinates(activePlacingId, Number(lat.toFixed(6)), Number(lng.toFixed(6)))
-        setPlacingDeviceId(null)
-      } finally {
-        setSavingLocation(false)
+      // 2. In interactive cable path editing mode: append vertex
+      if (isEditingLinkPathRef.current) {
+        const { lat, lng } = e.latlng
+        const newCoord: [number, number] = [Number(lat.toFixed(6)), Number(lng.toFixed(6))]
+        setEditingPath((prev) => {
+          const next = [...prev, newCoord]
+          let d = 0
+          for (let i = 0; i < next.length - 1; i++) {
+            d += haversineDistance(next[i], next[i + 1])
+          }
+          setEditingDistanceKm(Number(d.toFixed(2)))
+          return next
+        })
+        return
+      }
+
+      // 3. Adding alternative waypoint in road routing mode (ramal / vicinal)
+      if (isAddWaypointModeRef.current) {
+        const { lat, lng } = e.latlng
+        const newWp: [number, number] = [Number(lat.toFixed(6)), Number(lng.toFixed(6))]
+        setLinkFormWaypoints((prev) => {
+          const next = [...prev, newWp]
+          handleRecalculateRouteRef.current?.(
+            linkSourceIdRef.current,
+            linkTargetIdRef.current,
+            'road',
+            next
+          )
+          return next
+        })
+        return
+      }
+
+      // 4. Drawing manual cable point-by-point
+      if (isManualDrawModeRef.current) {
+        const { lat, lng } = e.latlng
+        const newCoord: [number, number] = [Number(lat.toFixed(6)), Number(lng.toFixed(6))]
+        setLinkFormPath((prev) => {
+          const next = [...prev, newCoord]
+          let d = 0
+          for (let i = 0; i < next.length - 1; i++) {
+            d += haversineDistance(next[i], next[i + 1])
+          }
+          setLinkFormDistanceKm(Number(d.toFixed(2)))
+          return next
+        })
+        return
       }
     })
 
     return () => {
-      if (resizeObserver) {
-        resizeObserver.disconnect()
-      }
+      if (resizeObserver) resizeObserver.disconnect()
       map.remove()
       mapInstanceRef.current = null
+      linksLayerRef.current = null
+      editLayerRef.current = null
+      markersLayerRef.current = null
       tileLayerRef.current = null
       setMapReady(false)
     }
-  }, [])
+  }, [onUpdateCoordinates, placedDevices])
 
-  // Synchronize dynamic tile layer (Google Satélite / Google Ruas / Esri Dark / Google Relevo)
+  // Synchronize dynamic tile layer
   useEffect(() => {
     const map = mapInstanceRef.current
     if (!map || !mapReady) return
@@ -410,31 +646,224 @@ export const BackboneMapView: React.FC<BackboneMapViewProps> = ({
     })
 
     newLayer.addTo(map)
-    // Send tile layer to back so markers are always visible on top
     if ((newLayer as any).bringToBack) {
-      (newLayer as any).bringToBack()
+      ;(newLayer as any).bringToBack()
     }
     tileLayerRef.current = newLayer
   }, [activeLayer, googleApiKey, mapReady])
 
-  // Keep a ref to placingDeviceId for the Leaflet event listener
-  const placingDeviceIdRef = useRef<string | null>(placingDeviceId)
+  // Render Backbone Links on the map
   useEffect(() => {
-    placingDeviceIdRef.current = placingDeviceId
-    const timer = setTimeout(() => {
-      mapInstanceRef.current?.invalidateSize()
-    }, 50)
-    return () => clearTimeout(timer)
-  }, [placingDeviceId])
+    const map = mapInstanceRef.current
+    const layer = linksLayerRef.current
+    if (!map || !layer) return
 
-  // Update markers when visibleDevices changes
+    layer.clearLayers()
+
+    links.forEach((link) => {
+      if (!link.path || link.path.length < 2) return
+
+      const isSelected = selectedLink?.id === link.id
+      const color = link.color || '#00E5FF'
+
+      // Outer glowing halo
+      const glowLine = L.polyline(link.path, {
+        color,
+        weight: isSelected ? 8 : 6,
+        opacity: isSelected ? 0.6 : 0.25,
+        lineCap: 'round',
+        lineJoin: 'round',
+      })
+
+      // Inner core cable line
+      const coreLine = L.polyline(link.path, {
+        color,
+        weight: isSelected ? 4 : 3,
+        opacity: 0.95,
+        dashArray: link.type === 'radio' || link.status === 'planned' ? '6, 6' : undefined,
+        lineCap: 'round',
+        lineJoin: 'round',
+      })
+
+      const tooltipContent = `
+        <div style="font-family: inherit; font-size: 11px; padding: 2px 4px; line-height: 1.3;">
+          <strong style="color: #FFFFFF;">${link.name}</strong><br/>
+          <span style="color: ${color}; font-weight: 700;">${link.capacity || '10G'}</span> •
+          <span style="color: #94A3B8;">${link.distance_km ? link.distance_km.toFixed(1) + ' km' : ''}</span>
+          ${link.type === 'radio' ? ' • <span style="color: #F59E0B;">Rádio</span>' : ' • <span style="color: #38BDF8;">Fibra</span>'}
+        </div>
+      `
+      glowLine.bindTooltip(tooltipContent, { sticky: true, className: 'leaflet-noc-link-tooltip' })
+      coreLine.bindTooltip(tooltipContent, { sticky: true, className: 'leaflet-noc-link-tooltip' })
+
+      const handleClick = (e: L.LeafletMouseEvent) => {
+        L.DomEvent.stopPropagation(e)
+        setSelectedDevice(null)
+        setSelectedLink(link)
+      }
+
+      glowLine.on('click', handleClick)
+      coreLine.on('click', handleClick)
+
+      glowLine.addTo(layer)
+      coreLine.addTo(layer)
+    })
+  }, [links, selectedLink])
+
+  // Render Interactive Edit Layer (drafting new links or modifying existing cables)
+  useEffect(() => {
+    const map = mapInstanceRef.current
+    const layer = editLayerRef.current
+    if (!map || !layer) return
+
+    layer.clearLayers()
+
+    // 1. If actively editing an existing link's path
+    if (isEditingLinkPath && editingPath.length >= 2) {
+      const activeColor = editingLinkTarget?.color || '#00E5FF'
+
+      // Active cable polyline
+      L.polyline(editingPath, {
+        color: activeColor,
+        weight: 4,
+        opacity: 0.9,
+      }).addTo(layer)
+
+      // Control vertex markers (draggable)
+      editingPath.forEach((pt, idx) => {
+        const isEndpoint = idx === 0 || idx === editingPath.length - 1
+        const handleHtml = `
+          <div style="width: 14px; height: 14px; border-radius: 50%; background-color: ${
+            isEndpoint ? '#3B82F6' : activeColor
+          }; border: 2px solid #FFFFFF; box-shadow: 0 0 10px rgba(0,0,0,0.8); cursor: grab; display: flex; align-items: center; justify-content: center; font-size: 8px; font-weight: 900; color: #FFFFFF;">
+            ${idx + 1}
+          </div>
+        `
+        const icon = L.divIcon({
+          html: handleHtml,
+          className: 'vertex-edit-handle',
+          iconSize: [14, 14],
+          iconAnchor: [7, 7],
+        })
+
+        const marker = L.marker(pt, {
+          icon,
+          draggable: true,
+          title: `Vértice ${idx + 1} (Arraste para mover o cabo | Botão direito para excluir)`,
+        }).addTo(layer)
+
+        marker.on('drag', (e: any) => {
+          const { lat, lng } = e.latlng
+          setEditingPath((prev) => {
+            const next = [...prev]
+            next[idx] = [Number(lat.toFixed(6)), Number(lng.toFixed(6))]
+            let d = 0
+            for (let i = 0; i < next.length - 1; i++) {
+              d += haversineDistance(next[i], next[i + 1])
+            }
+            setEditingDistanceKm(Number(d.toFixed(2)))
+            return next
+          })
+        })
+
+        marker.on('contextmenu', (e: any) => {
+          L.DomEvent.stopPropagation(e)
+          if (!isEndpoint && editingPath.length > 2) {
+            setEditingPath((prev) => {
+              const next = prev.filter((_, i) => i !== idx)
+              let d = 0
+              for (let i = 0; i < next.length - 1; i++) {
+                d += haversineDistance(next[i], next[i + 1])
+              }
+              setEditingDistanceKm(Number(d.toFixed(2)))
+              return next
+            })
+          }
+        })
+      })
+      return
+    }
+
+    // 2. If creating a link with live preview
+    if (isLinkModalOpen || isAddWaypointMode || isManualDrawMode) {
+      if (linkFormPath.length >= 2) {
+        L.polyline(linkFormPath, {
+          color: linkFormColor,
+          weight: 4,
+          opacity: 0.9,
+          dashArray: isAddWaypointMode || isManualDrawMode ? '5, 5' : undefined,
+        }).addTo(layer)
+      }
+
+      // Waypoints markers in road mode
+      if (linkFormRoutingMode === 'road' && linkFormWaypoints.length > 0) {
+        linkFormWaypoints.forEach((wp, wIdx) => {
+          const wpHtml = `
+            <div style="width: 20px; height: 20px; border-radius: 50%; background-color: #F59E0B; border: 2px solid #FFFFFF; box-shadow: 0 0 10px rgba(245,158,11,0.9); display: flex; align-items: center; justify-content: center; font-size: 10px; font-weight: 900; color: #000000; cursor: pointer;">
+              ${wIdx + 1}
+            </div>
+          `
+          const wpIcon = L.divIcon({
+            html: wpHtml,
+            className: 'waypoint-marker',
+            iconSize: [20, 20],
+            iconAnchor: [10, 10],
+          })
+          const wpMarker = L.marker(wp, {
+            icon: wpIcon,
+            title: `Ponto de passagem no ramal ${wIdx + 1} (Clique para remover)`,
+          }).addTo(layer)
+
+          wpMarker.on('click', (e) => {
+            L.DomEvent.stopPropagation(e)
+            setLinkFormWaypoints((prev) => {
+              const next = prev.filter((_, i) => i !== wIdx)
+              handleRecalculateRoute(linkFormSourceId, linkFormTargetId, 'road', next)
+              return next
+            })
+          })
+        })
+      }
+
+      // Manual draw vertices
+      if (isManualDrawMode && linkFormPath.length > 0) {
+        linkFormPath.forEach((pt, idx) => {
+          const handleHtml = `
+            <div style="width: 12px; height: 12px; border-radius: 50%; background-color: ${linkFormColor}; border: 2px solid #FFFFFF; box-shadow: 0 0 6px rgba(0,0,0,0.8); cursor: pointer;"></div>
+          `
+          const icon = L.divIcon({
+            html: handleHtml,
+            className: 'manual-draw-handle',
+            iconSize: [12, 12],
+            iconAnchor: [6, 6],
+          })
+          L.marker(pt, { icon, title: `Ponto ${idx + 1}` }).addTo(layer)
+        })
+      }
+    }
+  }, [
+    isEditingLinkPath,
+    editingPath,
+    editingLinkTarget,
+    isLinkModalOpen,
+    isAddWaypointMode,
+    isManualDrawMode,
+    linkFormPath,
+    linkFormColor,
+    linkFormRoutingMode,
+    linkFormWaypoints,
+    linkFormSourceId,
+    linkFormTargetId,
+    handleRecalculateRoute,
+  ])
+
+  // Update device markers
   useEffect(() => {
     const map = mapInstanceRef.current
     const layer = markersLayerRef.current
     if (!map || !layer) return
 
     layer.clearLayers()
-
     const bounds = L.latLngBounds([])
 
     visibleDevices.forEach((dev) => {
@@ -447,7 +876,6 @@ export const BackboneMapView: React.FC<BackboneMapViewProps> = ({
       const isMaster = isBGPMasterDevice(dev, devices)
       const isOnline = dev.status === 'online'
 
-      // Custom HTML Marker Pin
       const markerHtml = `
         <div class="relative flex items-center justify-center cursor-pointer group" style="width: 44px; height: 44px;">
           ${
@@ -483,12 +911,11 @@ export const BackboneMapView: React.FC<BackboneMapViewProps> = ({
       }).addTo(layer)
       bounds.extend([lat, lng])
 
-      // Click event selects device for quick actions flyout
       marker.on('click', () => {
+        setSelectedLink(null)
         setSelectedDevice(dev)
       })
 
-      // Drag event updates coordinates directly when marker is dropped
       marker.on('dragend', async (e: L.LeafletEvent) => {
         const target = e.target as L.Marker
         const newPos = target.getLatLng()
@@ -502,170 +929,248 @@ export const BackboneMapView: React.FC<BackboneMapViewProps> = ({
       })
     })
 
-    // If there are placed markers, fit bounds smoothly
-    if (visibleDevices.length > 0 && bounds.isValid()) {
-      map.fitBounds(bounds, { padding: [50, 50], maxZoom: 14 })
-    }
-  }, [visibleDevices, devices])
-
-  // Center on entire backbone bounds
-  const handleResetView = () => {
-    const map = mapInstanceRef.current
-    if (!map || visibleDevices.length === 0) return
-    const bounds = L.latLngBounds(
-      visibleDevices.map((d) => [Number(d.latitude), Number(d.longitude)])
-    )
-    if (bounds.isValid()) {
+    if (visibleDevices.length > 0 && mapReady && !mapInstanceRef.current?.getZoom()) {
       map.fitBounds(bounds, { padding: [60, 60], maxZoom: 14 })
     }
+  }, [visibleDevices, devices, onUpdateCoordinates, mapReady])
+
+  // Reset zoom view
+  const handleResetView = () => {
+    const map = mapInstanceRef.current
+    if (!map) return
+
+    if (placedDevices.length > 0) {
+      const bounds = L.latLngBounds([])
+      placedDevices.forEach((d) => bounds.extend([Number(d.latitude), Number(d.longitude)]))
+      map.fitBounds(bounds, { padding: [60, 60], maxZoom: 14 })
+    } else {
+      map.setView([-1.4558, -48.4902], 5)
+    }
+  }
+
+  // Start new link flow
+  const handleOpenCreateLink = (preselectedSource?: Device) => {
+    setSelectedDevice(null)
+    setSelectedLink(null)
+    setEditingLinkTarget(null)
+
+    const src = preselectedSource || placedDevices[0]
+    const tgt = placedDevices.find((d) => d.id !== src?.id) || placedDevices[1]
+
+    const srcId = src?.id || ''
+    const tgtId = tgt?.id || ''
+
+    setLinkFormSourceId(srcId)
+    setLinkFormTargetId(tgtId)
+    setLinkFormName(src && tgt ? `Enlace ${src.name} ➔ ${tgt.name}` : 'Novo Enlace PTP')
+    setLinkFormType('fiber')
+    setLinkFormRoutingMode('road')
+    setLinkFormCapacity('10G')
+    setLinkFormColor('#00E5FF')
+    setLinkFormStatus('active')
+    setLinkFormNotes('')
+    setLinkFormWaypoints([])
+    setLinkFormPath([])
+    setLinkFormDistanceKm(0)
+
+    setIsLinkModalOpen(true)
+
+    if (srcId && tgtId) {
+      handleRecalculateRoute(srcId, tgtId, 'road', [])
+    }
+  }
+
+  // Save new or edited link
+  const handleSaveLink = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!linkFormSourceId || !linkFormTargetId) return
+
+    setIsSavingLink(true)
+    try {
+      const payload: Partial<BackboneLink> = {
+        name: linkFormName.trim(),
+        source_device_id: linkFormSourceId,
+        target_device_id: linkFormTargetId,
+        type: linkFormType,
+        routing_mode: linkFormRoutingMode,
+        capacity: linkFormCapacity,
+        color: linkFormColor,
+        status: linkFormStatus,
+        notes: linkFormNotes.trim(),
+        path: linkFormPath,
+        waypoints: linkFormWaypoints,
+        distance_km: linkFormDistanceKm,
+      }
+
+      if (editingLinkTarget) {
+        const updated = await updateBackboneLink(editingLinkTarget.id, payload)
+        setLinks((prev) => prev.map((l) => (l.id === updated.id ? updated : l)))
+        setSelectedLink(updated)
+      } else {
+        const created = await createBackboneLink(payload)
+        setLinks((prev) => [...prev, created])
+        setSelectedLink(created)
+      }
+
+      setIsLinkModalOpen(false)
+      setIsAddWaypointMode(false)
+      setIsManualDrawMode(false)
+      setEditingLinkTarget(null)
+    } finally {
+      setIsSavingLink(false)
+    }
+  }
+
+  // Delete link
+  const handleDeleteLink = async (id: string) => {
+    if (!window.confirm('Tem certeza que deseja excluir este enlace de backbone?')) return
+    try {
+      await deleteBackboneLink(id)
+      setLinks((prev) => prev.filter((l) => l.id !== id))
+      if (selectedLink?.id === id) setSelectedLink(null)
+    } catch (err: any) {
+      alert(err.message || 'Erro ao excluir enlace')
+    }
+  }
+
+  // Enter interactive path editing mode for an existing link
+  const handleStartEditPath = (link: BackboneLink) => {
+    setEditingLinkTarget(link)
+    setEditingPath([...link.path])
+    setEditingDistanceKm(link.distance_km)
+    setIsEditingLinkPath(true)
+    setSelectedLink(null)
+  }
+
+  // Save interactive path editing
+  const handleSaveEditedPath = async () => {
+    if (!editingLinkTarget) return
+    setIsSavingLink(true)
+    try {
+      const updated = await updateBackboneLink(editingLinkTarget.id, {
+        path: editingPath,
+        distance_km: editingDistanceKm,
+        routing_mode: 'manual',
+      })
+      setLinks((prev) => prev.map((l) => (l.id === updated.id ? updated : l)))
+      setSelectedLink(updated)
+      setIsEditingLinkPath(false)
+      setEditingLinkTarget(null)
+    } finally {
+      setIsSavingLink(false)
+    }
+  }
+
+  // Convert road route to manual points for point-by-point tweaking
+  const handleConvertRoadToManual = () => {
+    setLinkFormRoutingMode('manual')
+    setIsManualDrawMode(true)
   }
 
   return (
     <div className="space-y-4">
-      {/* Top Backbone KPI Summary */}
-      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
-        <div className="p-3.5 rounded-2xl bg-[#1C202C] border border-[#242836] shadow-sm flex items-center gap-3">
-          <div className="h-10 w-10 rounded-xl bg-[#25334D] border border-[#3B5B8C]/40 flex items-center justify-center text-[#93B4E6] shrink-0">
-            <Server className="h-5 w-5" />
-          </div>
-          <div>
-            <span className="text-[11px] font-medium text-slate-400 block uppercase tracking-wider">Backbone Total</span>
-            <span className="text-lg font-bold text-white">{counts.total}</span>
-          </div>
-        </div>
-
-        <div className="p-3.5 rounded-2xl bg-[#1C202C] border border-[#242836] shadow-sm flex items-center gap-3">
-          <div className="h-10 w-10 rounded-xl bg-blue-950/70 border border-blue-500/40 flex items-center justify-center text-blue-400 shrink-0">
-            <ArrowUpDown className="h-5 w-5" />
-          </div>
-          <div>
-            <span className="text-[11px] font-medium text-slate-400 block uppercase tracking-wider">Bordas BGP</span>
-            <span className="text-lg font-bold text-blue-300">{counts.bgp}</span>
-          </div>
-        </div>
-
-        <div className="p-3.5 rounded-2xl bg-[#1C202C] border border-[#242836] shadow-sm flex items-center gap-3">
-          <div className="h-10 w-10 rounded-xl bg-purple-950/70 border border-purple-500/40 flex items-center justify-center text-purple-400 shrink-0">
-            <Network className="h-5 w-5" />
-          </div>
-          <div>
-            <span className="text-[11px] font-medium text-slate-400 block uppercase tracking-wider">Roteadores PE</span>
-            <span className="text-lg font-bold text-purple-300">{counts.pe}</span>
-          </div>
-        </div>
-
-        <div className="p-3.5 rounded-2xl bg-[#1C202C] border border-[#242836] shadow-sm flex items-center gap-3">
-          <div className="h-10 w-10 rounded-xl bg-emerald-950/70 border border-emerald-500/40 flex items-center justify-center text-emerald-400 shrink-0">
-            <Layers className="h-5 w-5" />
-          </div>
-          <div>
-            <span className="text-[11px] font-medium text-slate-400 block uppercase tracking-wider">Switches Core</span>
-            <span className="text-lg font-bold text-emerald-300">{counts.sw}</span>
-          </div>
-        </div>
-
-        <div className="p-3.5 rounded-2xl bg-[#1C202C] border border-[#242836] shadow-sm flex items-center gap-3">
-          <div className="h-10 w-10 rounded-xl bg-amber-950/70 border border-amber-500/40 flex items-center justify-center text-amber-400 shrink-0">
-            <Radio className="h-5 w-5" />
-          </div>
-          <div>
-            <span className="text-[11px] font-medium text-slate-400 block uppercase tracking-wider">OLTs Ópticas</span>
-            <span className="text-lg font-bold text-amber-300">{counts.olt}</span>
-          </div>
-        </div>
-
-        <div className="p-3.5 rounded-2xl bg-[#1C202C] border border-[#242836] shadow-sm flex items-center gap-3">
-          <div className="h-10 w-10 rounded-xl bg-[#161922] border border-[#242836] flex items-center justify-center text-emerald-400 shrink-0">
-            <CheckCircle2 className="h-5 w-5" />
-          </div>
-          <div>
-            <span className="text-[11px] font-medium text-slate-400 block uppercase tracking-wider">Status Online</span>
-            <span className="text-lg font-bold text-white">
-              {counts.online} <span className="text-xs font-normal text-slate-400">/ {counts.total}</span>
-            </span>
-          </div>
-        </div>
-      </div>
-
-      {/* Map Control Bar & Filters */}
-      <div className="flex flex-col lg:flex-row items-stretch lg:items-center justify-between gap-3 bg-[#1C202C] border border-[#242836] p-3.5 rounded-2xl shadow-sm">
-        {/* Role Pills */}
-        <div className="flex flex-wrap items-center gap-1.5">
+      {/* Top Map Control Bar */}
+      <div className="p-4 rounded-2xl bg-[#1C202C] border border-[#242836] shadow-xl flex flex-col md:flex-row md:items-center justify-between gap-4">
+        {/* Left: KPI summary chips */}
+        <div className="flex items-center gap-2 flex-wrap">
           <button
             type="button"
             onClick={() => setRoleFilter('all')}
-            className={`px-3 py-1.5 rounded-xl text-xs font-semibold transition cursor-pointer border ${
+            className={`px-3 py-1.5 rounded-xl text-xs font-semibold transition cursor-pointer flex items-center gap-1.5 ${
               roleFilter === 'all'
-                ? 'bg-[#25334D] text-[#93B4E6] border-[#3B5B8C]'
-                : 'bg-[#161922] text-slate-400 border-[#242836] hover:text-white'
+                ? 'bg-[#25334D] text-[#93B4E6] border border-[#3B5B8C]/50 shadow-sm'
+                : 'bg-[#161922] text-slate-400 hover:text-white border border-[#242836]'
             }`}
           >
-            Todos ({counts.total})
+            <span>Todos</span>
+            <span className="bg-[#1C202C] px-1.5 py-0.2 rounded-md text-[10px] text-slate-300">
+              {counts.total}
+            </span>
           </button>
+
+          {(['bgp', 'pe', 'sw', 'olt'] as DeviceRole[]).map((role) => {
+            const cfg = ROLE_CONFIG[role]
+            const count = counts[role]
+            const isActive = roleFilter === role
+            return (
+              <button
+                key={role}
+                type="button"
+                onClick={() => setRoleFilter(isActive ? 'all' : role)}
+                className={`px-3 py-1.5 rounded-xl text-xs font-semibold transition cursor-pointer flex items-center gap-1.5 ${
+                  isActive
+                    ? `${cfg.bg} ${cfg.text} border ${cfg.border} ring-1 ring-current`
+                    : 'bg-[#161922] text-slate-400 hover:text-white border border-[#242836]'
+                }`}
+              >
+                <span>{cfg.label}</span>
+                <span className="bg-[#1C202C] px-1.5 py-0.2 rounded-md text-[10px] text-slate-300">
+                  {count}
+                </span>
+              </button>
+            )
+          })}
+
+          {/* Links counter chip */}
           <button
             type="button"
-            onClick={() => setRoleFilter('bgp')}
-            className={`px-3 py-1.5 rounded-xl text-xs font-semibold transition cursor-pointer border flex items-center gap-1.5 ${
-              roleFilter === 'bgp'
-                ? 'bg-blue-950 border-blue-500 text-blue-300'
-                : 'bg-[#161922] text-slate-400 border-[#242836] hover:text-white'
+            onClick={() => setIsLinksDrawerOpen((prev) => !prev)}
+            className={`px-3 py-1.5 rounded-xl text-xs font-semibold transition cursor-pointer flex items-center gap-1.5 ${
+              isLinksDrawerOpen
+                ? 'bg-cyan-950/70 text-cyan-300 border border-cyan-500/50 shadow-sm'
+                : 'bg-[#161922] text-slate-300 hover:text-white border border-[#242836]'
             }`}
+            title="Ver enlaces de fibra óptica e rádio cadastrados"
           >
-            <span className="w-2 h-2 rounded-full bg-blue-500"></span>
-            <span>BGP ({counts.bgp})</span>
+            <Cable className="h-3.5 w-3.5 text-cyan-400" />
+            <span>Enlaces</span>
+            {loadingLinks ? (
+              <span className="w-2.5 h-2.5 border-2 border-cyan-400 border-t-transparent rounded-full animate-spin" />
+            ) : (
+              <span className="bg-[#1C202C] px-1.5 py-0.2 rounded-md text-[10px] text-cyan-300 font-bold">
+                {counts.links}
+              </span>
+            )}
+            {counts.totalFiberKm > 0 && (
+              <span className="text-[10px] text-slate-500 font-mono hidden xl:inline">
+                ({counts.totalFiberKm} km)
+              </span>
+            )}
           </button>
-          <button
-            type="button"
-            onClick={() => setRoleFilter('pe')}
-            className={`px-3 py-1.5 rounded-xl text-xs font-semibold transition cursor-pointer border flex items-center gap-1.5 ${
-              roleFilter === 'pe'
-                ? 'bg-purple-950 border-purple-500 text-purple-300'
-                : 'bg-[#161922] text-slate-400 border-[#242836] hover:text-white'
-            }`}
-          >
-            <span className="w-2 h-2 rounded-full bg-purple-500"></span>
-            <span>PE ({counts.pe})</span>
-          </button>
-          <button
-            type="button"
-            onClick={() => setRoleFilter('sw')}
-            className={`px-3 py-1.5 rounded-xl text-xs font-semibold transition cursor-pointer border flex items-center gap-1.5 ${
-              roleFilter === 'sw'
-                ? 'bg-emerald-950 border-emerald-500 text-emerald-300'
-                : 'bg-[#161922] text-slate-400 border-[#242836] hover:text-white'
-            }`}
-          >
-            <span className="w-2 h-2 rounded-full bg-emerald-500"></span>
-            <span>SW ({counts.sw})</span>
-          </button>
-          <button
-            type="button"
-            onClick={() => setRoleFilter('olt')}
-            className={`px-3 py-1.5 rounded-xl text-xs font-semibold transition cursor-pointer border flex items-center gap-1.5 ${
-              roleFilter === 'olt'
-                ? 'bg-amber-950 border-amber-500 text-amber-300'
-                : 'bg-[#161922] text-slate-400 border-[#242836] hover:text-white'
-            }`}
-          >
-            <span className="w-2 h-2 rounded-full bg-amber-500"></span>
-            <span>OLT ({counts.olt})</span>
-          </button>
+
+          {/* Status Quick Filter (Online / Offline) */}
+          <div className="flex items-center bg-[#161922] p-0.5 rounded-xl border border-[#242836]">
+            <button
+              type="button"
+              onClick={() => setStatusFilter(statusFilter === 'online' ? 'all' : 'online')}
+              className={`px-2 py-1 rounded-lg text-xs font-semibold transition cursor-pointer flex items-center gap-1.5 ${
+                statusFilter === 'online'
+                  ? 'bg-emerald-950/70 text-emerald-300 border border-emerald-500/40 shadow-xs'
+                  : 'text-slate-400 hover:text-white'
+              }`}
+              title="Filtrar equipamentos online"
+            >
+              <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
+              <span>Online ({counts.online})</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setStatusFilter(statusFilter === 'offline' ? 'all' : 'offline')}
+              className={`px-2 py-1 rounded-lg text-xs font-semibold transition cursor-pointer flex items-center gap-1.5 ${
+                statusFilter === 'offline'
+                  ? 'bg-rose-950/70 text-rose-300 border border-rose-500/40 shadow-xs'
+                  : 'text-slate-400 hover:text-white'
+              }`}
+              title="Filtrar equipamentos offline"
+            >
+              <span className="w-1.5 h-1.5 rounded-full bg-rose-400" />
+              <span>Offline ({counts.offline})</span>
+            </button>
+          </div>
         </div>
 
-        {/* Right Search & Controls */}
-        <div className="flex flex-wrap items-center gap-2">
-          {/* Status selector */}
-          <select
-            value={statusFilter}
-            onChange={(e) => setStatusFilter(e.target.value as any)}
-            className="px-3 py-1.5 rounded-xl bg-[#161922] border border-[#242836] text-slate-300 text-xs font-medium focus:outline-none focus:border-[#3B5B8C] cursor-pointer"
-          >
-            <option value="all">Status: Todos</option>
-            <option value="online">Apenas Online</option>
-            <option value="offline">Apenas Offline</option>
-          </select>
-
-          {/* Search */}
+        {/* Right: Search, Layers & Action Buttons */}
+        <div className="flex items-center gap-2 flex-wrap justify-end">
           <div className="relative">
             <Search className="absolute left-3 top-2.5 h-3.5 w-3.5 text-slate-500" />
             <input
@@ -701,7 +1206,7 @@ export const BackboneMapView: React.FC<BackboneMapViewProps> = ({
             })}
           </div>
 
-          {/* Google Maps API Key Config Button */}
+          {/* Google Maps API Key Config */}
           <button
             type="button"
             onClick={() => {
@@ -722,7 +1227,7 @@ export const BackboneMapView: React.FC<BackboneMapViewProps> = ({
             ) : null}
           </button>
 
-          {/* Reset Zoom */}
+          {/* Center View */}
           <button
             type="button"
             onClick={handleResetView}
@@ -731,6 +1236,17 @@ export const BackboneMapView: React.FC<BackboneMapViewProps> = ({
           >
             <Compass className="h-3.5 w-3.5 text-[#93B4E6]" />
             <span className="hidden sm:inline">Centralizar</span>
+          </button>
+
+          {/* New PTP Link button */}
+          <button
+            type="button"
+            onClick={() => handleOpenCreateLink()}
+            className="px-3.5 py-1.5 rounded-xl bg-cyan-950/60 hover:bg-cyan-900 text-cyan-200 border border-cyan-500/50 text-xs font-bold transition cursor-pointer flex items-center gap-1.5 shadow-sm"
+            title="Criar novo enlace de fibra óptica seguindo as rodovias ou ramais"
+          >
+            <Route className="h-4 w-4 text-cyan-400" />
+            <span>Novo Enlace</span>
           </button>
 
           {/* Add Device */}
@@ -758,9 +1274,9 @@ export const BackboneMapView: React.FC<BackboneMapViewProps> = ({
                 'Salvando coordenadas geográficas no equipamento...'
               ) : (
                 <>
-                  Clique em qualquer ponto do mapa para definir a posição de{' '}
-                  <strong className="text-white bg-amber-900/80 px-1.5 py-0.5 rounded font-mono">
-                    {devices.find((d) => d.id === placingDeviceId)?.name || 'equipamento'}
+                  Clique no local exato do mapa onde está instalado{' '}
+                  <strong>
+                    {devices.find((d) => d.id === placingDeviceId)?.name || 'o equipamento'}
                   </strong>
                   .
                 </>
@@ -773,17 +1289,140 @@ export const BackboneMapView: React.FC<BackboneMapViewProps> = ({
             onClick={() => setPlacingDeviceId(null)}
             className="px-3 py-1 rounded-lg bg-amber-900/60 hover:bg-amber-800 text-amber-100 text-xs font-bold transition cursor-pointer border border-amber-600/50 disabled:opacity-50"
           >
-            Cancelar
+            Cancelar (Esc)
           </button>
         </div>
       )}
 
+      {/* Interactive Path Editing Mode Banner */}
+      {isEditingLinkPath && (
+        <div className="p-3.5 rounded-2xl bg-cyan-950/70 border border-cyan-500/70 text-cyan-200 text-xs flex items-center justify-between shadow-xl animate-in fade-in duration-150">
+          <div className="flex items-center gap-2.5 flex-wrap">
+            <Cable className="h-4 w-4 text-cyan-400 animate-pulse shrink-0" />
+            <span>
+              <strong>Editando Traçado do Enlace:</strong> {editingLinkTarget?.name} •{' '}
+              <span className="text-white font-mono font-bold">{editingDistanceKm.toFixed(1)} km</span>{' '}
+              ({editingPath.length} pontos). Arraste os pontos para curvar o cabo pelo ramal. Clique no mapa para adicionar pontos. Botão direito para excluir.
+            </span>
+          </div>
+          <div className="flex items-center gap-2 shrink-0">
+            <button
+              type="button"
+              onClick={() => {
+                setIsEditingLinkPath(false)
+                setEditingLinkTarget(null)
+              }}
+              className="px-3 py-1 rounded-lg bg-[#161922] hover:bg-[#202738] text-slate-300 text-xs font-medium transition cursor-pointer border border-[#242836]"
+            >
+              Cancelar (Esc)
+            </button>
+            <button
+              type="button"
+              disabled={isSavingLink}
+              onClick={handleSaveEditedPath}
+              className="px-3.5 py-1 rounded-lg bg-cyan-600 hover:bg-cyan-500 text-black text-xs font-bold transition cursor-pointer shadow-md flex items-center gap-1"
+            >
+              <Check className="h-3.5 w-3.5" />
+              <span>Salvar Traçado</span>
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* Main Map Box & Lateral Overlay */}
-      <div className={`relative rounded-2xl border border-[#242836] overflow-hidden bg-[#13151D] shadow-2xl h-[620px] sm:h-[680px] ${placingDeviceId ? 'cursor-crosshair [&_.leaflet-container]:!cursor-crosshair [&_.leaflet-grab]:!cursor-crosshair' : ''}`}>
+      <div
+        className={`relative rounded-2xl border border-[#242836] overflow-hidden bg-[#13151D] shadow-2xl h-[620px] sm:h-[680px] ${
+          placingDeviceId || isAddWaypointMode || isManualDrawMode
+            ? 'cursor-crosshair [&_.leaflet-container]:!cursor-crosshair [&_.leaflet-grab]:!cursor-crosshair'
+            : ''
+        }`}
+      >
         {/* Leaflet DOM container */}
         <div ref={mapContainerRef} className="w-full h-full z-0" />
 
-        {/* Floating Unplaced Devices Drawer (if any devices lack coordinates) */}
+        {/* Links Drawer (Floating lateral panel) */}
+        {isLinksDrawerOpen && !placingDeviceId && !isEditingLinkPath && (
+          <div className="absolute top-4 right-4 z-20 max-w-sm w-full bg-[#1C202C]/95 border border-[#242836] rounded-2xl p-4 shadow-2xl backdrop-blur-md space-y-3 animate-in fade-in slide-in-from-right duration-150 max-h-[580px] flex flex-col">
+            <div className="flex items-center justify-between border-b border-[#242836] pb-2 shrink-0">
+              <span className="text-xs font-bold text-slate-200 flex items-center gap-1.5">
+                <Cable className="h-4 w-4 text-cyan-400" />
+                <span>Enlaces de Backbone ({links.length})</span>
+              </span>
+              <div className="flex items-center gap-1">
+                <button
+                  type="button"
+                  onClick={() => handleOpenCreateLink()}
+                  className="px-2 py-1 bg-cyan-950/60 hover:bg-cyan-900 text-cyan-300 rounded-lg text-[10px] font-bold border border-cyan-500/40 cursor-pointer"
+                >
+                  + Enlace
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setIsLinksDrawerOpen(false)}
+                  className="text-slate-400 hover:text-white p-1 rounded-lg"
+                >
+                  <X className="h-4 w-4" />
+                </button>
+              </div>
+            </div>
+
+            <div className="overflow-y-auto space-y-2 flex-1 pr-1">
+              {links.length === 0 ? (
+                <div className="p-4 text-center text-xs text-slate-500">
+                  Nenhum enlace ponto a ponto cadastrado ainda. Clique em <strong>+ Enlace</strong> para traçar uma rota pelas rodovias ou ramais.
+                </div>
+              ) : (
+                links.map((link) => {
+                  const src = devices.find((d) => d.id === link.source_device_id)
+                  const tgt = devices.find((d) => d.id === link.target_device_id)
+                  const isSelected = selectedLink?.id === link.id
+                  return (
+                    <div
+                      key={link.id}
+                      onClick={() => {
+                        setSelectedDevice(null)
+                        setSelectedLink(link)
+                        // Fit bounds to link
+                        if (link.path && link.path.length > 1 && mapInstanceRef.current) {
+                          const bounds = L.latLngBounds(link.path)
+                          mapInstanceRef.current.fitBounds(bounds, { padding: [50, 50], maxZoom: 14 })
+                        }
+                      }}
+                      className={`p-2.5 rounded-xl border transition cursor-pointer text-xs space-y-1 ${
+                        isSelected
+                          ? 'bg-[#25334D] border-[#3B5B8C] text-white'
+                          : 'bg-[#161922] border-[#242836] text-slate-300 hover:border-[#3B5B8C]/60'
+                      }`}
+                    >
+                      <div className="flex items-center justify-between gap-1.5">
+                        <strong className="truncate font-semibold flex items-center gap-1.5">
+                          <span
+                            className="w-2.5 h-2.5 rounded-full shrink-0"
+                            style={{ backgroundColor: link.color || '#00E5FF' }}
+                          />
+                          <span>{link.name}</span>
+                        </strong>
+                        <span className="text-[10px] px-1.5 py-0.2 rounded font-bold bg-[#1C202C] text-cyan-300 font-mono">
+                          {link.capacity || '10G'}
+                        </span>
+                      </div>
+                      <div className="text-[11px] text-slate-400 flex items-center justify-between">
+                        <span className="truncate">
+                          {src?.name || 'Origem'} ➔ {tgt?.name || 'Destino'}
+                        </span>
+                        <span className="font-mono text-slate-300 font-bold shrink-0">
+                          {link.distance_km ? link.distance_km.toFixed(1) + ' km' : ''}
+                        </span>
+                      </div>
+                    </div>
+                  )
+                })
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* Floating Unplaced Devices Drawer */}
         {unplacedDevices.length > 0 && !placingDeviceId && (
           <div className="absolute top-4 left-4 z-20 max-w-xs w-full bg-[#1C202C]/95 border border-[#242836] rounded-2xl p-3.5 shadow-2xl backdrop-blur-md space-y-2">
             <div className="flex items-center justify-between border-b border-[#242836] pb-2">
@@ -822,16 +1461,6 @@ export const BackboneMapView: React.FC<BackboneMapViewProps> = ({
                           Posicionar
                         </button>
                       )}
-                      {onEditDevice && (
-                        <button
-                          type="button"
-                          onClick={() => onEditDevice(d)}
-                          className="p-1 rounded-lg text-slate-400 hover:text-white hover:bg-[#252C3D] transition cursor-pointer"
-                          title="Editar"
-                        >
-                          <Edit2 className="h-3 w-3" />
-                        </button>
-                      )}
                     </div>
                   </div>
                 )
@@ -840,51 +1469,23 @@ export const BackboneMapView: React.FC<BackboneMapViewProps> = ({
           </div>
         )}
 
-        {/* Selected Device Popup Flyout */}
-        {selectedDevice && (
-          <div className="absolute bottom-4 left-4 right-4 sm:right-auto sm:max-w-md bg-[#1C202C] border border-[#3B5B8C] rounded-2xl p-4 shadow-2xl z-20 space-y-3 animate-in fade-in slide-in-from-bottom-2 duration-150">
-            <div className="flex items-start justify-between gap-3 border-b border-[#242836] pb-3">
-              <div className="flex items-center gap-2.5">
-                <div
-                  className="h-10 w-10 rounded-xl flex items-center justify-center font-bold text-xs shrink-0"
-                  style={{
-                    backgroundColor: '#161922',
-                    border: `2px solid ${
-                      ROLE_CONFIG[selectedDevice.device_role || (selectedDevice.is_bgp ? 'bgp' : 'sw')].markerColor
-                    }`,
-                    color:
-                      ROLE_CONFIG[selectedDevice.device_role || (selectedDevice.is_bgp ? 'bgp' : 'sw')].markerColor,
-                  }}
+        {/* Selected Device Details Flyout Overlay */}
+        {selectedDevice && !isEditingLinkPath && (
+          <div className="absolute bottom-4 left-4 right-4 sm:left-auto sm:right-4 z-20 sm:max-w-md bg-[#1C202C]/95 border border-[#242836] rounded-2xl p-4 shadow-2xl backdrop-blur-md space-y-3 animate-in fade-in slide-in-from-bottom-2 duration-150">
+            <div className="flex items-center justify-between border-b border-[#242836] pb-2">
+              <div className="flex items-center gap-2">
+                <span
+                  className={`text-xs font-black px-2 py-0.5 rounded-lg border ${
+                    ROLE_CONFIG[selectedDevice.device_role || (selectedDevice.is_bgp ? 'bgp' : 'sw')].bg
+                  } ${
+                    ROLE_CONFIG[selectedDevice.device_role || (selectedDevice.is_bgp ? 'bgp' : 'sw')].text
+                  } ${
+                    ROLE_CONFIG[selectedDevice.device_role || (selectedDevice.is_bgp ? 'bgp' : 'sw')].border
+                  }`}
                 >
-                  {ROLE_CONFIG[selectedDevice.device_role || (selectedDevice.is_bgp ? 'bgp' : 'sw')].icon}
-                </div>
-                <div>
-                  <div className="flex items-center gap-2">
-                    <h4 className="text-sm font-bold text-white leading-snug">{selectedDevice.name}</h4>
-                    {isBGPMasterDevice(selectedDevice, devices) && (
-                      <span className="flex items-center gap-1 text-[9px] bg-amber-500/20 text-amber-300 border border-amber-500/40 px-1.5 py-0.5 rounded-md font-bold">
-                        <Crown className="h-2.5 w-2.5 text-amber-400" />
-                        MASTER
-                      </span>
-                    )}
-                  </div>
-                  <div className="flex items-center gap-2 mt-0.5">
-                    <span className="text-[11px] font-mono text-slate-400">{selectedDevice.host}</span>
-                    <span className="text-slate-600">&bull;</span>
-                    <span
-                      className={`text-[10px] font-semibold flex items-center gap-1 ${
-                        selectedDevice.status === 'online' ? 'text-emerald-400' : 'text-rose-400'
-                      }`}
-                    >
-                      <span
-                        className={`w-1.5 h-1.5 rounded-full ${
-                          selectedDevice.status === 'online' ? 'bg-emerald-400' : 'bg-rose-500'
-                        }`}
-                      ></span>
-                      {selectedDevice.status === 'online' ? 'Online' : 'Offline'}
-                    </span>
-                  </div>
-                </div>
+                  {ROLE_CONFIG[selectedDevice.device_role || (selectedDevice.is_bgp ? 'bgp' : 'sw')].label}
+                </span>
+                <h4 className="font-bold text-white text-sm truncate">{selectedDevice.name}</h4>
               </div>
               <button
                 type="button"
@@ -920,11 +1521,21 @@ export const BackboneMapView: React.FC<BackboneMapViewProps> = ({
 
             {/* Action buttons */}
             <div className="flex items-center gap-2 pt-1 flex-wrap">
+              <button
+                type="button"
+                onClick={() => handleOpenCreateLink(selectedDevice)}
+                className="py-1.5 px-2.5 rounded-xl bg-cyan-950/60 hover:bg-cyan-900 text-cyan-300 text-xs font-semibold border border-cyan-500/40 transition cursor-pointer flex items-center justify-center gap-1.5"
+                title="Criar enlace de fibra óptica a partir deste equipamento"
+              >
+                <Route className="h-3.5 w-3.5 text-cyan-400" />
+                <span>Ligar Enlace</span>
+              </button>
+
               {onSelectDeviceForTerminal && (
                 <button
                   type="button"
                   onClick={() => onSelectDeviceForTerminal(selectedDevice)}
-                  className="flex-1 py-1.5 px-2.5 rounded-xl bg-[#25334D] hover:bg-[#3B5B8C] text-slate-200 hover:text-white text-xs font-semibold border border-[#3B5B8C]/40 transition cursor-pointer flex items-center justify-center gap-1.5 min-w-[100px]"
+                  className="flex-1 py-1.5 px-2.5 rounded-xl bg-[#25334D] hover:bg-[#3B5B8C] text-slate-200 hover:text-white text-xs font-semibold border border-[#3B5B8C]/40 transition cursor-pointer flex items-center justify-center gap-1.5 min-w-[90px]"
                 >
                   <Terminal className="h-3.5 w-3.5 text-[#93B4E6]" />
                   <span>Terminal</span>
@@ -935,7 +1546,7 @@ export const BackboneMapView: React.FC<BackboneMapViewProps> = ({
                 <button
                   type="button"
                   onClick={() => onSelectDeviceForBGP(selectedDevice)}
-                  className="flex-1 py-1.5 px-2.5 rounded-xl bg-blue-950/70 hover:bg-blue-900 text-blue-200 text-xs font-semibold border border-blue-500/40 transition cursor-pointer flex items-center justify-center gap-1.5 min-w-[90px]"
+                  className="flex-1 py-1.5 px-2.5 rounded-xl bg-blue-950/70 hover:bg-blue-900 text-blue-200 text-xs font-semibold border border-blue-500/40 transition cursor-pointer flex items-center justify-center gap-1.5 min-w-[80px]"
                 >
                   <ArrowUpDown className="h-3.5 w-3.5 text-blue-400" />
                   <span>BGP</span>
@@ -974,7 +1585,472 @@ export const BackboneMapView: React.FC<BackboneMapViewProps> = ({
             </div>
           </div>
         )}
+
+        {/* Selected Link Details Flyout Overlay */}
+        {selectedLink && !isEditingLinkPath && (
+          <div className="absolute bottom-4 left-4 right-4 sm:left-auto sm:right-4 z-20 sm:max-w-md bg-[#1C202C]/95 border border-[#242836] rounded-2xl p-4 shadow-2xl backdrop-blur-md space-y-3 animate-in fade-in slide-in-from-bottom-2 duration-150">
+            <div className="flex items-center justify-between border-b border-[#242836] pb-2">
+              <div className="flex items-center gap-2">
+                <span
+                  className="w-3 h-3 rounded-full shrink-0"
+                  style={{ backgroundColor: selectedLink.color || '#00E5FF' }}
+                />
+                <h4 className="font-bold text-white text-sm truncate">{selectedLink.name}</h4>
+              </div>
+              <button
+                type="button"
+                onClick={() => setSelectedLink(null)}
+                className="text-slate-400 hover:text-white p-1 rounded-lg hover:bg-[#161922] transition cursor-pointer"
+                title="Fechar"
+              >
+                &times;
+              </button>
+            </div>
+
+            {/* Link details grid */}
+            <div className="grid grid-cols-2 gap-2 text-xs font-mono bg-[#161922] p-2.5 rounded-xl border border-[#242836]">
+              <div>
+                <span className="text-slate-500 font-sans text-[10px] block">Extremos:</span>
+                <span className="text-slate-200 font-semibold truncate block">
+                  {devices.find((d) => d.id === selectedLink.source_device_id)?.name || 'Origem'} ➔{' '}
+                  {devices.find((d) => d.id === selectedLink.target_device_id)?.name || 'Destino'}
+                </span>
+              </div>
+              <div>
+                <span className="text-slate-500 font-sans text-[10px] block">Comprimento Real:</span>
+                <span className="text-white font-bold font-mono">
+                  {selectedLink.distance_km ? selectedLink.distance_km.toFixed(1) + ' km' : '0 km'}
+                </span>
+              </div>
+              <div>
+                <span className="text-slate-500 font-sans text-[10px] block">Meio & Capacidade:</span>
+                <span className="text-cyan-300 font-semibold">
+                  {selectedLink.type === 'radio' ? 'Rádio Digital' : 'Fibra Óptica'} ({selectedLink.capacity || '10G'})
+                </span>
+              </div>
+              <div>
+                <span className="text-slate-500 font-sans text-[10px] block">Traçado / Rota:</span>
+                <span className="text-amber-400 font-semibold">
+                  {selectedLink.routing_mode === 'road'
+                    ? 'Rodovia / Estradas'
+                    : selectedLink.routing_mode === 'manual'
+                    ? 'Ramal / Desenho Manual'
+                    : 'Rádio PTP Direto'}
+                </span>
+              </div>
+            </div>
+
+            {/* Latency estimation info */}
+            <div className="p-2 rounded-xl bg-[#161922] border border-[#242836] text-[11px] text-slate-400 flex items-center justify-between">
+              <span>Latência teórica da fibra (~5µs/km):</span>
+              <strong className="text-emerald-400 font-mono">
+                {((selectedLink.distance_km || 0) * 0.005).toFixed(2)} ms RTT
+              </strong>
+            </div>
+
+            {/* Link action buttons */}
+            <div className="flex items-center gap-2 pt-1 flex-wrap">
+              <button
+                type="button"
+                onClick={() => handleStartEditPath(selectedLink)}
+                className="flex-1 py-1.5 px-2.5 rounded-xl bg-cyan-950/60 hover:bg-cyan-900 text-cyan-200 text-xs font-semibold border border-cyan-500/40 transition cursor-pointer flex items-center justify-center gap-1.5"
+                title="Ajustar curvas e passar o cabo por ramais específicos diretamente no mapa"
+              >
+                <Sliders className="h-3.5 w-3.5 text-cyan-400" />
+                <span>Editar Traçado / Ramal</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => {
+                  setEditingLinkTarget(selectedLink)
+                  setLinkFormSourceId(selectedLink.source_device_id)
+                  setLinkFormTargetId(selectedLink.target_device_id)
+                  setLinkFormName(selectedLink.name)
+                  setLinkFormType(selectedLink.type)
+                  setLinkFormRoutingMode(selectedLink.routing_mode)
+                  setLinkFormCapacity(selectedLink.capacity || '10G')
+                  setLinkFormColor(selectedLink.color || '#00E5FF')
+                  setLinkFormStatus(selectedLink.status)
+                  setLinkFormNotes(selectedLink.notes || '')
+                  setLinkFormWaypoints(selectedLink.waypoints || [])
+                  setLinkFormPath(selectedLink.path || [])
+                  setLinkFormDistanceKm(selectedLink.distance_km || 0)
+                  setIsLinkModalOpen(true)
+                }}
+                className="p-1.5 rounded-xl bg-[#161922] hover:bg-[#202738] text-slate-300 hover:text-white border border-[#242836] transition cursor-pointer"
+                title="Editar propriedades do enlace"
+              >
+                <Edit2 className="h-3.5 w-3.5" />
+              </button>
+
+              <button
+                type="button"
+                onClick={() => handleDeleteLink(selectedLink.id)}
+                className="p-1.5 rounded-xl bg-rose-950/40 hover:bg-rose-900 text-rose-300 border border-rose-500/40 transition cursor-pointer"
+                title="Excluir enlace"
+              >
+                <Trash2 className="h-3.5 w-3.5" />
+              </button>
+            </div>
+          </div>
+        )}
       </div>
+
+      {/* New / Edit Backbone Link Modal */}
+      {isLinkModalOpen && (
+        <div
+          onClick={(e) => {
+            if (e.target === e.currentTarget && !isAddWaypointMode && !isManualDrawMode) {
+              setIsLinkModalOpen(false)
+            }
+          }}
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 backdrop-blur-xs p-3 sm:p-4 overflow-y-auto"
+        >
+          <div className="bg-[#1C202C] border border-[#2D3345] rounded-2xl w-full max-w-xl shadow-2xl overflow-hidden my-auto max-h-[90vh] flex flex-col animate-in fade-in zoom-in-95 duration-150">
+            {/* Modal Header */}
+            <div className="p-4 sm:p-5 border-b border-[#242836] flex items-center justify-between shrink-0 bg-[#161922]">
+              <div className="flex items-center gap-2.5">
+                <div className="h-9 w-9 rounded-xl bg-cyan-950/60 border border-cyan-500/40 flex items-center justify-center text-cyan-400">
+                  <Route className="h-5 w-5" />
+                </div>
+                <div>
+                  <h3 className="font-semibold text-slate-100 text-sm">
+                    {editingLinkTarget ? 'Editar Enlace de Backbone' : 'Novo Enlace Ponto a Ponto (PTP)'}
+                  </h3>
+                  <p className="text-[11px] text-slate-400">
+                    Traçado de cabo óptico por rodovias, ramais vicinais ou rádio enlace
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  setIsLinkModalOpen(false)
+                  setIsAddWaypointMode(false)
+                  setIsManualDrawMode(false)
+                }}
+                className="text-slate-400 hover:text-white p-1.5 rounded-lg hover:bg-[#1C202C] transition cursor-pointer"
+                title="Fechar"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            <form onSubmit={handleSaveLink} className="flex flex-col flex-1 min-h-0 overflow-hidden">
+              <div className="p-4 sm:p-6 space-y-4 overflow-y-auto flex-1">
+                {/* Source & Target Devices Selector */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-xs font-medium text-slate-400 mb-1">
+                      Equipamento de Origem (Ponta A) *
+                    </label>
+                    <select
+                      value={linkFormSourceId}
+                      onChange={(e) => {
+                        const newSrc = e.target.value
+                        setLinkFormSourceId(newSrc)
+                        handleRecalculateRoute(newSrc, linkFormTargetId, linkFormRoutingMode, linkFormWaypoints)
+                      }}
+                      required
+                      className="w-full px-3 py-2 bg-slate-950/70 border border-slate-700 rounded-lg text-xs text-slate-100 focus:outline-none focus:border-cyan-500 cursor-pointer"
+                    >
+                      <option value="">Selecione a origem...</option>
+                      {placedDevices.map((d) => (
+                        <option key={d.id} value={d.id} disabled={d.id === linkFormTargetId}>
+                          {d.name} ({d.site || d.city || d.host})
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-medium text-slate-400 mb-1">
+                      Equipamento de Destino (Ponta B) *
+                    </label>
+                    <select
+                      value={linkFormTargetId}
+                      onChange={(e) => {
+                        const newTgt = e.target.value
+                        setLinkFormTargetId(newTgt)
+                        handleRecalculateRoute(linkFormSourceId, newTgt, linkFormRoutingMode, linkFormWaypoints)
+                      }}
+                      required
+                      className="w-full px-3 py-2 bg-slate-950/70 border border-slate-700 rounded-lg text-xs text-slate-100 focus:outline-none focus:border-cyan-500 cursor-pointer"
+                    >
+                      <option value="">Selecione o destino...</option>
+                      {placedDevices.map((d) => (
+                        <option key={d.id} value={d.id} disabled={d.id === linkFormSourceId}>
+                          {d.name} ({d.site || d.city || d.host})
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+
+                {/* Link Name */}
+                <div>
+                  <label className="block text-xs font-medium text-slate-400 mb-1">
+                    Identificação / Nome do Enlace *
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    value={linkFormName}
+                    onChange={(e) => setLinkFormName(e.target.value)}
+                    placeholder="ex: Fibra BGP Pirabas ➔ PE Capanema (Via Ramal KM 14)"
+                    className="w-full px-3 py-2 bg-slate-950/70 border border-slate-700 rounded-lg text-xs text-slate-100 placeholder-slate-500 focus:outline-none focus:border-cyan-500"
+                  />
+                </div>
+
+                {/* Routing Mode Cards (Road vs Alternative Ramal vs Manual Draw vs Direct Radio) */}
+                <div className="space-y-1.5">
+                  <label className="block text-xs font-medium text-slate-300">
+                    Modo de Traçado da Rota *
+                  </label>
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setLinkFormRoutingMode('road')
+                        setIsManualDrawMode(false)
+                        handleRecalculateRoute(linkFormSourceId, linkFormTargetId, 'road', linkFormWaypoints)
+                      }}
+                      className={`p-3 rounded-xl border text-left transition cursor-pointer flex flex-col gap-1 ${
+                        linkFormRoutingMode === 'road' && linkFormWaypoints.length === 0
+                          ? 'bg-[#25334D] border-[#3B5B8C] text-white ring-1 ring-[#3B5B8C]'
+                          : 'bg-[#161922] border-[#242836] text-slate-400 hover:border-[#3B5B8C]/40'
+                      }`}
+                    >
+                      <div className="flex items-center gap-1.5 text-xs font-bold text-white">
+                        <span>🛣️ Rodovias (Auto)</span>
+                      </div>
+                      <p className="text-[10px] text-slate-400 leading-tight">
+                        Calcula o traçado automático pelas rodovias e estradas principais.
+                      </p>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setLinkFormRoutingMode('road')
+                        setIsManualDrawMode(false)
+                        setIsAddWaypointMode(true)
+                        setIsLinkModalOpen(false) // Minimizes modal so user clicks on the ramal road on map!
+                      }}
+                      className={`p-3 rounded-xl border text-left transition cursor-pointer flex flex-col gap-1 ${
+                        linkFormRoutingMode === 'road' && (linkFormWaypoints.length > 0 || isAddWaypointMode)
+                          ? 'bg-[#25334D] border-amber-500/60 text-white ring-1 ring-amber-500'
+                          : 'bg-[#161922] border-[#242836] text-slate-400 hover:border-amber-500/40'
+                      }`}
+                    >
+                      <div className="flex items-center gap-1.5 text-xs font-bold text-amber-300">
+                        <span>🔀 Por Ramal / Vicinal</span>
+                        {linkFormWaypoints.length > 0 && (
+                          <span className="bg-amber-500/20 text-amber-300 px-1 rounded text-[9px] font-bold">
+                            {linkFormWaypoints.length}
+                          </span>
+                        )}
+                      </div>
+                      <p className="text-[10px] text-slate-400 leading-tight">
+                        Clique em ramais ou rotas alternativas no mapa para forçar a passagem do cabo.
+                      </p>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setLinkFormRoutingMode('manual')
+                        setIsAddWaypointMode(false)
+                        setIsManualDrawMode(true)
+                        setIsLinkModalOpen(false) // Minimizes modal so user clicks freely on map!
+                      }}
+                      className={`p-3 rounded-xl border text-left transition cursor-pointer flex flex-col gap-1 ${
+                        linkFormRoutingMode === 'manual'
+                          ? 'bg-[#25334D] border-emerald-500/60 text-white ring-1 ring-emerald-500'
+                          : 'bg-[#161922] border-[#242836] text-slate-400 hover:border-emerald-500/40'
+                      }`}
+                    >
+                      <div className="flex items-center gap-1.5 text-xs font-bold text-emerald-300">
+                        <span>✏️ Desenho Manual</span>
+                      </div>
+                      <p className="text-[10px] text-slate-400 leading-tight">
+                        Desenhe o cabo clique a clique no mapa (ideal para rios, fazendas e travessias).
+                      </p>
+                    </button>
+                  </div>
+                </div>
+
+                {/* Waypoints List if in Ramal mode */}
+                {linkFormWaypoints.length > 0 && (
+                  <div className="p-3 bg-amber-950/20 border border-amber-800/40 rounded-xl space-y-2">
+                    <div className="flex items-center justify-between text-xs">
+                      <span className="font-semibold text-amber-300 flex items-center gap-1.5">
+                        <Waypoints className="h-3.5 w-3.5 text-amber-400" />
+                        <span>Pontos de Passagem no Ramal ({linkFormWaypoints.length}):</span>
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setIsAddWaypointMode(true)
+                          setIsLinkModalOpen(false)
+                        }}
+                        className="text-[10px] text-amber-400 hover:underline font-bold"
+                      >
+                        + Adicionar no Mapa
+                      </button>
+                    </div>
+                    <div className="flex flex-wrap gap-1.5">
+                      {linkFormWaypoints.map((wp, idx) => (
+                        <span
+                          key={idx}
+                          className="px-2 py-0.5 rounded-lg bg-[#161922] border border-[#242836] text-[10px] text-slate-300 flex items-center gap-1"
+                        >
+                          <span className="text-amber-400 font-bold">#{idx + 1}</span>
+                          <span>
+                            {wp[0].toFixed(3)}, {wp[1].toFixed(3)}
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              const updated = linkFormWaypoints.filter((_, i) => i !== idx)
+                              setLinkFormWaypoints(updated)
+                              handleRecalculateRoute(linkFormSourceId, linkFormTargetId, 'road', updated)
+                            }}
+                            className="text-slate-500 hover:text-rose-400 ml-0.5 cursor-pointer"
+                          >
+                            &times;
+                          </button>
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Cable Specifications: Medium, Capacity, Color */}
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                  <div>
+                    <label className="block text-xs font-medium text-slate-400 mb-1">
+                      Meio Físico
+                    </label>
+                    <select
+                      value={linkFormType}
+                      onChange={(e) => setLinkFormType(e.target.value as LinkType)}
+                      className="w-full px-3 py-2 bg-slate-950/70 border border-slate-700 rounded-lg text-xs text-slate-100 focus:outline-none focus:border-cyan-500 cursor-pointer"
+                    >
+                      <option value="fiber">Fibra Óptica Monomodo</option>
+                      <option value="radio">Rádio Enlace Digital</option>
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-medium text-slate-400 mb-1">
+                      Capacidade / Banda
+                    </label>
+                    <select
+                      value={linkFormCapacity}
+                      onChange={(e) => setLinkFormCapacity(e.target.value)}
+                      className="w-full px-3 py-2 bg-slate-950/70 border border-slate-700 rounded-lg text-xs text-slate-100 focus:outline-none focus:border-cyan-500 cursor-pointer"
+                    >
+                      {CAPACITY_PRESETS.map((cap) => (
+                        <option key={cap} value={cap}>
+                          {cap}bps
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-medium text-slate-400 mb-1">
+                      Cor do Cabo no Mapa
+                    </label>
+                    <div className="flex items-center gap-1.5 pt-1">
+                      {LINK_COLOR_PALETTE.map((pal) => (
+                        <button
+                          key={pal.id}
+                          type="button"
+                          onClick={() => setLinkFormColor(pal.id)}
+                          className={`w-6 h-6 rounded-full transition cursor-pointer border-2 ${
+                            linkFormColor === pal.id ? 'border-white scale-110 shadow-md' : 'border-transparent'
+                          }`}
+                          style={{ backgroundColor: pal.id }}
+                          title={pal.label}
+                        />
+                      ))}
+                    </div>
+                  </div>
+                </div>
+
+                {/* Real-time Route Calculation Info Box */}
+                <div className="p-3.5 rounded-xl bg-[#161922] border border-[#242836] flex items-center justify-between">
+                  <div>
+                    <span className="text-[10px] text-slate-400 block">Comprimento Real Calculado:</span>
+                    <div className="flex items-center gap-2">
+                      <span className="text-base font-bold text-white font-mono">
+                        {isCalculatingRoute ? (
+                          <span className="text-cyan-400 animate-pulse text-xs">Calculando curvas da estrada...</span>
+                        ) : (
+                          `${linkFormDistanceKm.toFixed(2)} km`
+                        )}
+                      </span>
+                      {linkFormPath.length > 2 && (
+                        <span className="text-[10px] text-slate-500">({linkFormPath.length} pontos no traçado)</span>
+                      )}
+                    </div>
+                  </div>
+
+                  {linkFormRoutingMode === 'road' && (
+                    <button
+                      type="button"
+                      onClick={handleConvertRoadToManual}
+                      className="px-2.5 py-1.5 rounded-lg bg-[#25334D] hover:bg-[#3B5B8C] text-cyan-300 hover:text-white text-[10px] font-bold transition cursor-pointer"
+                      title="Transforma as curvas da estrada em pontos editáveis livremente"
+                    >
+                      Converter em Pontos Manuais
+                    </button>
+                  )}
+                </div>
+
+                {/* Notes */}
+                <div>
+                  <label className="block text-xs font-medium text-slate-400 mb-1">
+                    Observações do Ramal / Rota (Opcional)
+                  </label>
+                  <textarea
+                    rows={2}
+                    value={linkFormNotes}
+                    onChange={(e) => setLinkFormNotes(e.target.value)}
+                    placeholder="ex: Sai pela rodovia PA-136, desvia no KM 12 pelo ramal de terra até a torre de transmissão."
+                    className="w-full px-3 py-2 bg-slate-950/70 border border-slate-700 rounded-lg text-xs text-slate-100 placeholder-slate-500 focus:outline-none focus:border-cyan-500 resize-none"
+                  />
+                </div>
+              </div>
+
+              {/* Pinned Modal Footer */}
+              <div className="p-4 border-t border-[#242836] flex items-center justify-between gap-3 shrink-0 bg-[#161922]">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsLinkModalOpen(false)
+                    setIsAddWaypointMode(false)
+                    setIsManualDrawMode(false)
+                  }}
+                  className="px-4 py-2 bg-[#1E2330] hover:bg-[#252C3D] text-slate-300 rounded-xl text-xs font-medium cursor-pointer border border-[#2D3345] transition"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="submit"
+                  disabled={isSavingLink || isCalculatingRoute || !linkFormSourceId || !linkFormTargetId}
+                  className="px-5 py-2 bg-[#3B5B8C] hover:bg-[#4A72B2] text-white rounded-xl text-xs font-semibold shadow-sm cursor-pointer transition disabled:opacity-50"
+                >
+                  {isSavingLink ? 'Salvando Enlace...' : 'Salvar Enlace'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
 
       {/* Google Maps API Key Modal */}
       {isApiKeyModalOpen && (
@@ -1008,75 +2084,60 @@ export const BackboneMapView: React.FC<BackboneMapViewProps> = ({
 
             <form onSubmit={handleSaveApiKey} className="flex flex-col flex-1 min-h-0 overflow-hidden">
               <div className="p-4 sm:p-6 space-y-4 overflow-y-auto flex-1">
-              {/* Informative Status Banner */}
-              <div className="p-3.5 rounded-xl bg-[#161922] border border-[#242836] space-y-2">
-                <div className="flex items-center justify-between">
-                  <span className="text-xs font-semibold text-slate-200 flex items-center gap-1.5">
-                    <Sparkles className="h-3.5 w-3.5 text-[#93B4E6]" />
-                    <span>Status da Integração:</span>
-                  </span>
-                  {googleApiKey ? (
-                    <span className="text-[10px] font-bold text-emerald-400 bg-emerald-950/60 border border-emerald-500/40 px-2 py-0.5 rounded-full flex items-center gap-1">
-                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-400"></span>
-                      Chave Google Maps Ativa
+                {/* Informative Status Banner */}
+                <div className="p-3.5 rounded-xl bg-[#161922] border border-[#242836] space-y-2">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-semibold text-slate-200 flex items-center gap-1.5">
+                      <Sparkles className="h-3.5 w-3.5 text-[#93B4E6]" />
+                      <span>Status da Integração:</span>
                     </span>
-                  ) : (
-                    <span className="text-[10px] font-bold text-[#93B4E6] bg-[#25334D] border border-[#3B5B8C]/40 px-2 py-0.5 rounded-full flex items-center gap-1">
-                      <ShieldCheck className="h-3 w-3" />
-                      Modo Livre Ativo (Sem Chave)
-                    </span>
-                  )}
+                    {googleApiKey ? (
+                      <span className="text-[10px] font-bold text-emerald-400 bg-emerald-950/60 border border-emerald-500/40 px-2 py-0.5 rounded-full flex items-center gap-1">
+                        <span className="w-1.5 h-1.5 rounded-full bg-emerald-400"></span>
+                        Chave Google Maps Ativa
+                      </span>
+                    ) : (
+                      <span className="text-[10px] font-bold text-[#93B4E6] bg-[#25334D] border border-[#3B5B8C]/40 px-2 py-0.5 rounded-full flex items-center gap-1">
+                        <ShieldCheck className="h-3 w-3" />
+                        Modo Livre Ativo (Sem Chave)
+                      </span>
+                    )}
+                  </div>
+                  <p className="text-[11px] text-slate-400 leading-relaxed">
+                    O NetPulse <strong>não exige</strong> obrigatoriamente nenhuma chave de API para funcionar. O mapa opera nativamente com <strong>Google Satélite, Google Ruas e NOC Dark Gray (Esri)</strong> de alta resolução. Caso você queira utilizar sua própria chave da Google Cloud Platform para cotas corporativas dedicadas, configure-a abaixo.
+                  </p>
                 </div>
-                <p className="text-[11px] text-slate-400 leading-relaxed">
-                  O NetPulse <strong>não exige</strong> obrigatoriamente nenhuma chave de API para funcionar. O mapa opera nativamente com <strong>Google Satélite, Google Ruas e NOC Dark Gray (Esri)</strong> de alta resolução. Caso você queira utilizar sua própria chave da Google Cloud Platform para cotas corporativas dedicadas, configure-a abaixo.
-                </p>
-              </div>
 
-              {/* API Key Input */}
-              <div className="space-y-1.5">
-                <label className="block text-xs font-medium text-slate-300">
-                  Chave de API da Google Cloud (API Key)
-                </label>
-                <div className="relative">
-                  <input
-                    type={showKeySecret ? 'text' : 'password'}
-                    value={tempApiKey}
-                    onChange={(e) => setTempApiKey(e.target.value)}
-                    placeholder="AIzaSy..."
-                    className="w-full pl-3 pr-10 py-2 bg-[#13151D] border border-[#2D3345] rounded-xl text-xs text-slate-100 placeholder-slate-600 font-mono focus:outline-none focus:border-[#3B5B8C]"
-                  />
-                  <button
-                    type="button"
-                    onClick={() => setShowKeySecret(!showKeySecret)}
-                    className="absolute right-2.5 top-2.5 text-slate-500 hover:text-slate-300 cursor-pointer"
-                    title={showKeySecret ? 'Ocultar chave' : 'Mostrar chave'}
-                  >
-                    {showKeySecret ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-                  </button>
+                {/* API Key Input */}
+                <div className="space-y-1.5">
+                  <label className="block text-xs font-medium text-slate-300">
+                    Chave de API da Google Cloud (API Key)
+                  </label>
+                  <div className="relative">
+                    <input
+                      type={showKeySecret ? 'text' : 'password'}
+                      value={tempApiKey}
+                      onChange={(e) => setTempApiKey(e.target.value)}
+                      placeholder="AIzaSy..."
+                      className="w-full px-3 py-2 bg-[#161922] border border-[#242836] rounded-xl text-xs text-slate-100 placeholder-slate-600 focus:outline-none focus:border-[#3B5B8C] font-mono pr-20"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowKeySecret((prev) => !prev)}
+                      className="absolute right-2 top-2 text-[10px] text-slate-400 hover:text-white px-2 py-0.5 rounded-md hover:bg-[#1C202C] cursor-pointer"
+                    >
+                      {showKeySecret ? 'Ocultar' : 'Mostrar'}
+                    </button>
+                  </div>
                 </div>
-                <p className="text-[11px] text-slate-500">
-                  Alternativamente, você também pode definir no arquivo <code className="text-[#93B4E6] bg-[#161922] px-1 py-0.5 rounded">frontend/.env</code> como <code className="text-[#93B4E6] bg-[#161922] px-1 py-0.5 rounded">VITE_GOOGLE_MAPS_API_KEY=sua_chave</code>.
-                </p>
-              </div>
 
-              {/* Quick instructions */}
-              <div className="p-3 bg-[#161922]/70 border border-[#242836] rounded-xl space-y-1.5 text-[11px] text-slate-400">
-                <span className="font-semibold text-slate-300 block">Como obter sua chave no Google Cloud Console:</span>
-                <ol className="list-decimal list-inside space-y-1 text-slate-400">
-                  <li>Acesse o <a href="https://console.cloud.google.com" target="_blank" rel="noreferrer" className="text-[#93B4E6] hover:underline inline-flex items-center gap-0.5">Google Cloud Console <ExternalLink className="h-2.5 w-2.5" /></a> e selecione seu projeto.</li>
-                  <li>Em <strong>APIs & Services &gt; Library</strong>, ative a <strong>Maps JavaScript API</strong>.</li>
-                  <li>Em <strong>Credentials</strong>, crie uma <strong>API Key</strong> e cole no campo acima.</li>
-                </ol>
-              </div>
-
-              {/* Toast feedback */}
-              {keySavedToast && (
-                <div className="p-2.5 rounded-xl bg-emerald-950/60 border border-emerald-600/50 text-emerald-300 text-xs flex items-center gap-2 animate-in fade-in">
-                  <CheckCircle2 className="h-4 w-4 text-emerald-400" />
-                  <span>Configuração da API atualizada com sucesso!</span>
-                </div>
-              )}
-
+                {/* Toast feedback */}
+                {keySavedToast && (
+                  <div className="p-2.5 rounded-xl bg-emerald-950/60 border border-emerald-600/50 text-emerald-300 text-xs flex items-center gap-2 animate-in fade-in">
+                    <CheckCircle2 className="h-4 w-4 text-emerald-400" />
+                    <span>Configuração da API atualizada com sucesso!</span>
+                  </div>
+                )}
               </div>
 
               {/* Modal Actions */}

@@ -235,3 +235,42 @@ type CommandExecResponse struct {
 	Success    bool    `json:"success"`
 	Error      string  `json:"error,omitempty"`
 }
+
+// --- Backbone Links (Point-to-Point Topology & Fiber Routes) ---
+
+// LinkType defines physical medium.
+type LinkType string
+
+const (
+	LinkTypeFiber LinkType = "fiber"
+	LinkTypeRadio LinkType = "radio"
+)
+
+// LinkRoutingMode defines how the link path was created.
+type LinkRoutingMode string
+
+const (
+	LinkRoutingRoad   LinkRoutingMode = "road"   // Auto-followed highways/roads
+	LinkRoutingManual LinkRoutingMode = "manual" // Hand-drawn / custom points
+	LinkRoutingDirect LinkRoutingMode = "direct" // Straight line
+)
+
+// BackboneLink represents a point-to-point connection between two network devices.
+type BackboneLink struct {
+	ID             string          `json:"id"`
+	TenantID       string          `json:"tenant_id"`
+	Name           string          `json:"name"`
+	SourceDeviceID string          `json:"source_device_id"`
+	TargetDeviceID string          `json:"target_device_id"`
+	Type           LinkType        `json:"type"`                // "fiber", "radio"
+	RoutingMode    LinkRoutingMode `json:"routing_mode"`         // "road", "manual", "direct"
+	Path           [][2]float64    `json:"path"`                 // Array of [lat, lng] coordinates
+	Waypoints      [][2]float64    `json:"waypoints,omitempty"` // Intermediate forced via-points
+	Capacity       string          `json:"capacity,omitempty"`   // e.g. "10G", "40G", "100G"
+	Color          string          `json:"color,omitempty"`      // Hex color code, e.g. "#00E5FF"
+	DistanceKm     float64         `json:"distance_km"`
+	Notes          string          `json:"notes,omitempty"`
+	Status         string          `json:"status"`               // "active", "planned", "degraded", "down"
+	CreatedAt      time.Time       `json:"created_at"`
+	UpdatedAt      time.Time       `json:"updated_at"`
+}

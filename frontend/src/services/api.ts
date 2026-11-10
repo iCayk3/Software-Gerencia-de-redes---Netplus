@@ -1514,5 +1514,131 @@ export async function activateLicense(key: string): Promise<LicenseInfo> {
   return res.json()
 }
 
+// --- Backbone Point-to-Point Links (Fiber & Radio Topology) ---
+
+export type LinkType = 'fiber' | 'radio'
+export type LinkRoutingMode = 'road' | 'manual' | 'direct'
+export type LinkStatus = 'active' | 'planned' | 'degraded' | 'down'
+
+export interface BackboneLink {
+  id: string
+  tenant_id?: string
+  name: string
+  source_device_id: string
+  target_device_id: string
+  type: LinkType
+  routing_mode: LinkRoutingMode
+  path: [number, number][] // [lat, lng] array
+  waypoints?: [number, number][] // intermediate forced waypoints
+  capacity?: string // e.g. "10G", "40G", "100G"
+  color?: string // Hex code, e.g. "#00E5FF"
+  distance_km: number
+  notes?: string
+  status: LinkStatus
+  created_at?: string
+  updated_at?: string
+}
+
+export async function fetchBackboneLinks(tenantId?: string): Promise<BackboneLink[]> {
+  const query = tenantId ? `?tenant_id=${encodeURIComponent(tenantId)}` : ''
+  const res = await apiFetch(`${API_BASE}/backbone/links${query}`)
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}))
+    throw new Error(err.error || `Erro ao carregar enlaces: HTTP ${res.status}`)
+  }
+  return res.json()
+}
+
+export async function createBackboneLink(link: Partial<BackboneLink>): Promise<BackboneLink> {
+  const res = await apiFetch(`${API_BASE}/backbone/links`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(link),
+  })
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}))
+    throw new Error(err.error || `Erro ao cadastrar enlace: HTTP ${res.status}`)
+  }
+  return res.json()
+}
+
+export async function updateBackboneLink(id: string, link: Partial<BackboneLink>): Promise<BackboneLink> {
+  const res = await apiFetch(`${API_BASE}/backbone/links/${id}`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(link),
+  })
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}))
+    throw new Error(err.error || `Erro ao atualizar enlace: HTTP ${res.status}`)
+  }
+  return res.json()
+}
+
+export async function deleteBackboneLink(id: string): Promise<void> {
+  const res = await apiFetch(`${API_BASE}/backbone/links/${id}`, {
+    method: 'DELETE',
+  })
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}))
+    throw new Error(err.error || `Erro ao remover enlace: HTTP ${res.status}`)
+  }
+}
+
+/**
+ * Calculates road-following route using OpenStreetMap/OSRM routing engine.
+ * Automatically falls back to straight lines if network or routing is unavailable.
+ */
+export async function calculateRoadRoute(
+  points: [number, number][]
+): Promise<{ path: [number, number][]; distanceKm: number }> {
+  if (points.length < 2) {
+    return { path: points, distanceKm: 0 }
+  }
+
+  try {
+    // OSRM coordinates format: {lon},{lat};{lon},{lat}
+    const coordsStr = points.map((p) => `${p[1]},${p[0]}`).join(';')
+    const url = `https://router.project-osrm.org/route/v1/driving/${coordsStr}?overview=full&geometries=geojson`
+    const res = await fetch(url, { signal: AbortSignal.timeout(6000) })
+    if (res.ok) {
+      const data = await res.json()
+      if (data.routes && data.routes.length > 0) {
+        const route = data.routes[0]
+        // OSRM returns GeoJSON coordinates as [lon, lat], Leaflet expects [lat, lng]
+        const path: [number, number][] = route.geometry.coordinates.map(
+          ([lon, lat]: [number, number]) => [lat, lon]
+        )
+        const distanceKm = Number((route.distance / 1000).toFixed(2))
+        return { path, distanceKm }
+      }
+    }
+  } catch {
+    // Fallback: Haversine distance between points
+  }
+
+  // Fallback to straight segments
+  let dist = 0
+  for (let i = 0; i < points.length - 1; i++) {
+    dist += haversineDistance(points[i], points[i + 1])
+  }
+  return { path: points, distanceKm: Number(dist.toFixed(2)) }
+}
+
+export function haversineDistance(p1: [number, number], p2: [number, number]): number {
+  const R = 6371 // km
+  const dLat = ((p2[0] - p1[0]) * Math.PI) / 180
+  const dLon = ((p2[1] - p1[1]) * Math.PI) / 180
+  const a =
+    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+    Math.cos((p1[0] * Math.PI) / 180) *
+      Math.cos((p2[0] * Math.PI) / 180) *
+      Math.sin(dLon / 2) *
+      Math.sin(dLon / 2)
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a))
+  return R * c
+}
+
+
 
 
