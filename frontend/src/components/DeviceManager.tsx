@@ -147,7 +147,23 @@ export const DeviceManager: React.FC<DeviceManagerProps> = ({
   // Update coordinates directly from map placement
   const handleUpdateCoordinates = async (deviceId: string, lat: number, lng: number) => {
     try {
-      await updateDevice(deviceId, { latitude: lat, longitude: lng })
+      const dev = devices.find((d) => d.id === deviceId)
+      if (dev) {
+        await updateDevice(deviceId, {
+          name: dev.name,
+          host: dev.host,
+          port: dev.port,
+          vendor: dev.vendor || 'huawei',
+          model: dev.model || '',
+          username: dev.username,
+          is_bgp: dev.is_bgp,
+          device_role: dev.device_role || (dev.is_bgp ? 'bgp' : 'sw'),
+          latitude: lat,
+          longitude: lng,
+        })
+      } else {
+        await updateDevice(deviceId, { latitude: lat, longitude: lng })
+      }
       setDevices((prev) =>
         prev.map((d) => (d.id === deviceId ? { ...d, latitude: lat, longitude: lng } : d))
       )
@@ -227,8 +243,8 @@ export const DeviceManager: React.FC<DeviceManagerProps> = ({
     setFormName(dev.name)
     setFormHost(dev.host)
     setFormPort(dev.port)
-    setFormVendor(dev.vendor)
-    setFormModel(dev.model || '')
+    setFormVendor(dev.vendor || 'huawei')
+    setFormModel(dev.model || (dev.vendor === 'huawei' || !dev.vendor ? 'NE8000 F1A' : ''))
     setFormUsername(dev.username)
     setFormPassword('')
     setFormIsBGP(dev.is_bgp ?? true)

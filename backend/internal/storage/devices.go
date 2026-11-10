@@ -79,6 +79,19 @@ func (s *DeviceStore) load() error {
 				log.Printf("[Security Warning] ⚠️ Falha ao descriptografar senha de %s (%s): %v. Verifique a variável DEVICE_ENCRYPTION_KEY.", d.Name, d.Host, err)
 			}
 		}
+		if d.Vendor == "" {
+			d.Vendor = models.VendorHuawei
+		}
+		if d.DeviceRole == "" {
+			if d.IsBGP {
+				d.DeviceRole = models.RoleBGP
+			} else {
+				d.DeviceRole = models.RoleSW
+			}
+		}
+		if d.DeviceRole == models.RoleBGP {
+			d.IsBGP = true
+		}
 		s.devices[d.ID] = d
 	}
 
@@ -207,12 +220,18 @@ func (s *DeviceStore) Create(d models.Device) (*models.Device, error) {
 	if d.Status == "" {
 		d.Status = "untested"
 	}
+	if d.Vendor == "" {
+		d.Vendor = models.VendorHuawei
+	}
 	if d.DeviceRole == "" {
 		if d.IsBGP {
 			d.DeviceRole = models.RoleBGP
 		} else {
 			d.DeviceRole = models.RoleSW
 		}
+	}
+	if d.DeviceRole == models.RoleBGP {
+		d.IsBGP = true
 	}
 	d.CreatedAt = time.Now()
 
@@ -233,19 +252,57 @@ func (s *DeviceStore) Update(d models.Device) error {
 		return ErrDeviceNotFound
 	}
 
-	// Preserve password if blank in update request
+	// Preserve existing values for any fields not supplied in partial updates
+	if d.Name == "" {
+		d.Name = existing.Name
+	}
+	if d.Host == "" {
+		d.Host = existing.Host
+	}
+	if d.Port <= 0 {
+		d.Port = existing.Port
+		if d.Port <= 0 {
+			d.Port = 22
+		}
+	}
+	if d.Vendor == "" {
+		d.Vendor = existing.Vendor
+		if d.Vendor == "" {
+			d.Vendor = models.VendorHuawei
+		}
+	}
+	if d.Model == "" {
+		d.Model = existing.Model
+	}
+	if d.Username == "" {
+		d.Username = existing.Username
+	}
 	if d.Password == "" {
 		d.Password = existing.Password
+	}
+	if d.AuthType == "" {
+		d.AuthType = existing.AuthType
 	}
 	if d.TenantID == "" {
 		d.TenantID = existing.TenantID
 	}
-	if d.Port <= 0 {
-		d.Port = 22
+	if d.Status == "" {
+		d.Status = existing.Status
 	}
 	if d.DeviceRole == "" {
 		d.DeviceRole = existing.DeviceRole
 	}
+	// Synchronize IsBGP and DeviceRole
+	if d.DeviceRole == models.RoleBGP {
+		d.IsBGP = true
+	} else if d.DeviceRole != "" && d.DeviceRole != models.RoleBGP {
+		d.IsBGP = false
+	} else {
+		// When device_role is not explicitly set, preserve existing
+		d.IsBGP = existing.IsBGP
+		d.DeviceRole = existing.DeviceRole
+	}
+
 	if d.Latitude == nil {
 		d.Latitude = existing.Latitude
 	}
