@@ -1006,14 +1006,14 @@ export const BackboneMapView: React.FC<BackboneMapViewProps> = ({
                  transform: translate(-50%, -50%);
                  display: inline-flex;
                  align-items: center;
-                 gap: 4px;
-                 padding: 3px 7px;
+                 gap: 3px;
+                 padding: 2px 5px;
                  background: rgba(8, 12, 22, 0.96);
                  backdrop-filter: blur(8px);
                  -webkit-backdrop-filter: blur(8px);
-                 border: 1.5px solid ${badgeBorder};
+                 border: 1px solid ${badgeBorder};
                  border-radius: 9999px;
-                 box-shadow: 0 2px 12px rgba(0, 0, 0, 0.9), 0 0 8px ${badgeGlow};
+                 box-shadow: 0 2px 8px rgba(0, 0, 0, 0.85), 0 0 6px ${badgeGlow};
                  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
                  user-select: none;
                  white-space: nowrap;
@@ -1021,12 +1021,12 @@ export const BackboneMapView: React.FC<BackboneMapViewProps> = ({
                  transition: transform 0.15s ease;
                "
                title="${link.name} • Clique para ver detalhes"
-               onmouseover="this.style.transform='translate(-50%, -50%) scale(1.1)'"
+               onmouseover="this.style.transform='translate(-50%, -50%) scale(1.12)'"
                onmouseout="this.style.transform='translate(-50%, -50%) scale(1)'">
             ${
               isDown
-                ? `<span style="display: inline-flex; align-items: center; gap: 5px; color: #FFFFFF; font-weight: 900; font-size: 10px; letter-spacing: 0.5px; text-transform: uppercase;">
-                    <span style="width: 7px; height: 7px; border-radius: 50%; background: #EF4444; box-shadow: 0 0 8px #EF4444; display: inline-block;"></span>
+                ? `<span style="display: inline-flex; align-items: center; gap: 4px; color: #FFFFFF; font-weight: 900; font-size: 9px; letter-spacing: 0.4px; text-transform: uppercase;">
+                    <span style="width: 6px; height: 6px; border-radius: 50%; background: #EF4444; box-shadow: 0 0 6px #EF4444; display: inline-block;"></span>
                     🚨 FORA DO AR (DOWN)
                    </span>`
                 : `
@@ -1034,18 +1034,17 @@ export const BackboneMapView: React.FC<BackboneMapViewProps> = ({
                    <span style="
                      display: inline-flex;
                      align-items: center;
-                     gap: 3px;
+                     gap: 2.5px;
                      background: rgba(6, 182, 212, 0.22);
-                     border: 1px solid rgba(6, 182, 212, 0.6);
-                     padding: 1.5px 5.5px;
-                     border-radius: 5px;
+                     border: 1px solid rgba(6, 182, 212, 0.55);
+                     padding: 1px 4.5px;
+                     border-radius: 4px;
                      color: #38BDF8;
-                     font-size: 10.5px;
+                     font-size: 9.5px;
                      font-weight: 800;
-                     letter-spacing: 0.15px;
-                     box-shadow: 0 1px 3px rgba(0,0,0,0.35);
+                     letter-spacing: 0.1px;
                    ">
-                     <span style="font-size: 11px; font-weight: 900; color: #00E5FF; line-height: 1;">↓</span>
+                     <span style="font-size: 10px; font-weight: 900; color: #00E5FF; line-height: 1;">↓</span>
                      ${rxText}
                    </span>
 
@@ -1053,18 +1052,17 @@ export const BackboneMapView: React.FC<BackboneMapViewProps> = ({
                    <span style="
                      display: inline-flex;
                      align-items: center;
-                     gap: 3px;
+                     gap: 2.5px;
                      background: rgba(16, 185, 129, 0.22);
-                     border: 1px solid rgba(16, 185, 129, 0.6);
-                     padding: 1.5px 5.5px;
-                     border-radius: 5px;
+                     border: 1px solid rgba(16, 185, 129, 0.55);
+                     padding: 1px 4.5px;
+                     border-radius: 4px;
                      color: #34D399;
-                     font-size: 10.5px;
+                     font-size: 9.5px;
                      font-weight: 800;
-                     letter-spacing: 0.15px;
-                     box-shadow: 0 1px 3px rgba(0,0,0,0.35);
+                     letter-spacing: 0.1px;
                    ">
-                     <span style="font-size: 11px; font-weight: 900; color: #10B981; line-height: 1;">↑</span>
+                     <span style="font-size: 10px; font-weight: 900; color: #10B981; line-height: 1;">↑</span>
                      ${txText}
                    </span>
 
@@ -1075,11 +1073,11 @@ export const BackboneMapView: React.FC<BackboneMapViewProps> = ({
                             background: #DC2626;
                             color: #FFFFFF;
                             font-weight: 900;
-                            font-size: 9.5px;
-                            padding: 1.5px 5px;
-                            border-radius: 5px;
-                            letter-spacing: 0.4px;
-                            box-shadow: 0 0 8px rgba(220, 38, 38, 0.85);
+                            font-size: 8.5px;
+                            padding: 1px 4px;
+                            border-radius: 4px;
+                            letter-spacing: 0.3px;
+                            box-shadow: 0 0 6px rgba(220, 38, 38, 0.85);
                           ">⚠️ ${usagePercent.toFixed(0)}% LOTADO</span>`
                        : isWarning
                          ? `<span style="
@@ -1087,19 +1085,19 @@ export const BackboneMapView: React.FC<BackboneMapViewProps> = ({
                               border: 1px solid #F59E0B;
                               color: #FBBF24;
                               font-weight: 800;
-                              font-size: 9.5px;
-                              padding: 1.5px 5px;
-                              border-radius: 5px;
+                              font-size: 8.5px;
+                              padding: 1px 4px;
+                              border-radius: 4px;
                             ">⚡ ${usagePercent.toFixed(0)}%</span>`
                          : capacityBps > 0
                            ? `<span style="
                                 background: rgba(255, 255, 255, 0.08);
-                                border: 1px solid rgba(255, 255, 255, 0.16);
+                                border: 1px solid rgba(255, 255, 255, 0.15);
                                 color: #CBD5E1;
                                 font-weight: 700;
-                                font-size: 9.5px;
-                                padding: 1.5px 5px;
-                                border-radius: 5px;
+                                font-size: 8.5px;
+                                padding: 1px 4px;
+                                border-radius: 4px;
                               ">${usagePercent.toFixed(0)}% de ${link.capacity || '10G'}</span>`
                            : ''
                    }
