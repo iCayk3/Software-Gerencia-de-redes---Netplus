@@ -19,6 +19,7 @@ import {
   Cable,
   Check,
   Sliders,
+  Undo2,
 } from 'lucide-react'
 import type { Device, DeviceRole } from '../../services/api'
 import {
@@ -322,8 +323,14 @@ export const BackboneMapView: React.FC<BackboneMapViewProps> = ({
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
         if (placingDeviceId) setPlacingDeviceId(null)
-        if (isAddWaypointMode) setIsAddWaypointMode(false)
-        if (isManualDrawMode) setIsManualDrawMode(false)
+        if (isAddWaypointMode) {
+          setIsAddWaypointMode(false)
+          setIsLinkModalOpen(true)
+        }
+        if (isManualDrawMode) {
+          setIsManualDrawMode(false)
+          setIsLinkModalOpen(true)
+        }
         if (isEditingLinkPath) {
           setIsEditingLinkPath(false)
           setEditingLinkTarget(null)
@@ -1097,6 +1104,107 @@ export const BackboneMapView: React.FC<BackboneMapViewProps> = ({
     setIsManualDrawMode(true)
   }
 
+  // Undo last waypoint in Ramal mode
+  const handleUndoWaypoint = () => {
+    setLinkFormWaypoints((prev) => {
+      if (prev.length === 0) return prev
+      const next = prev.slice(0, -1)
+      handleRecalculateRoute(linkSourceIdRef.current, linkTargetIdRef.current, 'road', next)
+      return next
+    })
+  }
+
+  // Clear all waypoints in Ramal mode
+  const handleClearWaypoints = () => {
+    setLinkFormWaypoints([])
+    handleRecalculateRoute(linkSourceIdRef.current, linkTargetIdRef.current, 'road', [])
+  }
+
+  // Undo last point in manual draw mode
+  const handleUndoManualPoint = () => {
+    setLinkFormPath((prev) => {
+      if (prev.length === 0) return prev
+      const next = prev.slice(0, -1)
+      let d = 0
+      for (let i = 0; i < next.length - 1; i++) {
+        d += haversineDistance(next[i], next[i + 1])
+      }
+      setLinkFormDistanceKm(Number(d.toFixed(2)))
+      return next
+    })
+  }
+
+  // Clear all manual points
+  const handleClearManualPoints = () => {
+    setLinkFormPath([])
+    setLinkFormDistanceKm(0)
+  }
+
+  // Finalize Ramal or Manual Draw and return to modal
+  const handleFinishWaypointMode = () => {
+    setIsAddWaypointMode(false)
+    setIsLinkModalOpen(true)
+  }
+
+  const handleFinishManualDrawMode = () => {
+    setIsManualDrawMode(false)
+    setIsLinkModalOpen(true)
+  }
+
+  // Direct Save Link from the active map banner
+  const handleDirectSaveFromBanner = async () => {
+    if (!linkFormSourceId || !linkFormTargetId) {
+      setIsAddWaypointMode(false)
+      setIsManualDrawMode(false)
+      setIsLinkModalOpen(true)
+      return
+    }
+
+    const srcDev = devices.find((d) => d.id === linkFormSourceId)
+    const tgtDev = devices.find((d) => d.id === linkFormTargetId)
+    const defaultName =
+      linkFormName.trim() ||
+      `Enlace ${srcDev?.name || 'A'} ➔ ${tgtDev?.name || 'B'}`
+
+    setIsSavingLink(true)
+    try {
+      const payload: Partial<BackboneLink> = {
+        name: defaultName,
+        source_device_id: linkFormSourceId,
+        target_device_id: linkFormTargetId,
+        type: linkFormType,
+        routing_mode: linkFormRoutingMode,
+        capacity: linkFormCapacity,
+        color: linkFormColor,
+        status: linkFormStatus,
+        notes: linkFormNotes.trim(),
+        path: linkFormPath,
+        waypoints: linkFormWaypoints,
+        distance_km: linkFormDistanceKm,
+      }
+
+      if (editingLinkTarget) {
+        const updated = await updateBackboneLink(editingLinkTarget.id, payload)
+        setLinks((prev) => prev.map((l) => (l.id === updated.id ? updated : l)))
+        setSelectedLink(updated)
+      } else {
+        const created = await createBackboneLink(payload)
+        setLinks((prev) => [...prev, created])
+        setSelectedLink(created)
+      }
+
+      setIsAddWaypointMode(false)
+      setIsManualDrawMode(false)
+      setIsLinkModalOpen(false)
+      setEditingLinkTarget(null)
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'Erro ao salvar enlace'
+      alert(msg)
+    } finally {
+      setIsSavingLink(false)
+    }
+  }
+
   return (
     <div className="space-y-4">
       {/* Top Map Control Bar */}
@@ -1359,6 +1467,118 @@ export const BackboneMapView: React.FC<BackboneMapViewProps> = ({
         </div>
       )}
 
+      {/* Waypoint Ramal Mode Banner */}
+      {isAddWaypointMode && (
+        <div className="p-3.5 rounded-2xl bg-amber-950/80 border border-amber-500/80 text-amber-200 text-xs flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-2xl backdrop-blur-md animate-in fade-in duration-150">
+          <div className="flex items-center gap-2.5 flex-wrap">
+            <Waypoints className="h-4 w-4 text-amber-400 animate-pulse shrink-0" />
+            <span>
+              <strong>Definindo Ramal / Rota Alternativa:</strong> Clique no mapa nos pontos por onde o cabo deve desviar da rodovia.
+              {linkFormWaypoints.length > 0 && (
+                <span className="ml-1 text-white font-mono font-bold">
+                  ({linkFormWaypoints.length} {linkFormWaypoints.length === 1 ? 'ponto marcado' : 'pontos marcados'} • {linkFormDistanceKm.toFixed(1)} km)
+                </span>
+              )}
+            </span>
+          </div>
+          <div className="flex items-center gap-2 flex-wrap shrink-0">
+            {linkFormWaypoints.length > 0 && (
+              <>
+                <button
+                  type="button"
+                  onClick={handleUndoWaypoint}
+                  className="px-2.5 py-1.5 rounded-xl bg-[#161922] hover:bg-[#202738] text-slate-300 hover:text-white text-xs font-medium transition cursor-pointer border border-[#242836] flex items-center gap-1"
+                  title="Desfazer o último ponto adicionado"
+                >
+                  <Undo2 className="h-3.5 w-3.5" />
+                  <span>Desfazer</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={handleClearWaypoints}
+                  className="px-2.5 py-1.5 rounded-xl bg-[#161922] hover:bg-[#202738] text-rose-300 hover:text-rose-200 text-xs font-medium transition cursor-pointer border border-[#242836]"
+                  title="Remover todos os pontos do ramal"
+                >
+                  Limpar
+                </button>
+              </>
+            )}
+            <button
+              type="button"
+              onClick={handleFinishWaypointMode}
+              className="px-3.5 py-1.5 rounded-xl bg-[#161922] hover:bg-[#202738] text-slate-200 hover:text-white text-xs font-semibold transition cursor-pointer border border-[#242836] flex items-center gap-1.5"
+            >
+              <span>Voltar ao Form</span>
+            </button>
+            <button
+              type="button"
+              disabled={isSavingLink || isCalculatingRoute}
+              onClick={handleDirectSaveFromBanner}
+              className="px-4 py-1.5 rounded-xl bg-amber-500 hover:bg-amber-400 text-black text-xs font-bold transition cursor-pointer shadow-md flex items-center gap-1.5 disabled:opacity-50"
+            >
+              <Check className="h-3.5 w-3.5" />
+              <span>Concluir e Salvar Enlace</span>
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Manual Draw Mode Banner */}
+      {isManualDrawMode && (
+        <div className="p-3.5 rounded-2xl bg-emerald-950/80 border border-emerald-500/80 text-emerald-200 text-xs flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-2xl backdrop-blur-md animate-in fade-in duration-150">
+          <div className="flex items-center gap-2.5 flex-wrap">
+            <Route className="h-4 w-4 text-emerald-400 animate-pulse shrink-0" />
+            <span>
+              <strong>Desenho Manual do Cabo:</strong> Clique ponto a ponto no mapa seguindo postes ou terreno próprio.
+              {linkFormPath.length > 0 && (
+                <span className="ml-1 text-white font-mono font-bold">
+                  ({linkFormPath.length} {linkFormPath.length === 1 ? 'ponto marcado' : 'pontos'} • {linkFormDistanceKm.toFixed(1)} km)
+                </span>
+              )}
+            </span>
+          </div>
+          <div className="flex items-center gap-2 flex-wrap shrink-0">
+            {linkFormPath.length > 0 && (
+              <>
+                <button
+                  type="button"
+                  onClick={handleUndoManualPoint}
+                  className="px-2.5 py-1.5 rounded-xl bg-[#161922] hover:bg-[#202738] text-slate-300 hover:text-white text-xs font-medium transition cursor-pointer border border-[#242836] flex items-center gap-1"
+                  title="Desfazer o último ponto desenhado"
+                >
+                  <Undo2 className="h-3.5 w-3.5" />
+                  <span>Desfazer</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={handleClearManualPoints}
+                  className="px-2.5 py-1.5 rounded-xl bg-[#161922] hover:bg-[#202738] text-rose-300 hover:text-rose-200 text-xs font-medium transition cursor-pointer border border-[#242836]"
+                  title="Remover todos os pontos desenhados"
+                >
+                  Limpar
+                </button>
+              </>
+            )}
+            <button
+              type="button"
+              onClick={handleFinishManualDrawMode}
+              className="px-3.5 py-1.5 rounded-xl bg-[#161922] hover:bg-[#202738] text-slate-200 hover:text-white text-xs font-semibold transition cursor-pointer border border-[#242836] flex items-center gap-1.5"
+            >
+              <span>Voltar ao Form</span>
+            </button>
+            <button
+              type="button"
+              disabled={linkFormPath.length < 2 || isSavingLink}
+              onClick={handleDirectSaveFromBanner}
+              className="px-4 py-1.5 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-black text-xs font-bold transition cursor-pointer shadow-md flex items-center gap-1.5 disabled:opacity-50"
+            >
+              <Check className="h-3.5 w-3.5" />
+              <span>Concluir e Salvar Enlace</span>
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* Main Map Box & Lateral Overlay */}
       <div
         className={`relative rounded-2xl border border-[#242836] overflow-hidden bg-[#13151D] shadow-2xl h-[620px] sm:h-[680px] ${
@@ -1369,6 +1589,70 @@ export const BackboneMapView: React.FC<BackboneMapViewProps> = ({
       >
         {/* Leaflet DOM container */}
         <div ref={mapContainerRef} className="w-full h-full z-0" />
+
+        {/* Floating In-Map Pill for Ramal Waypoints */}
+        {isAddWaypointMode && (
+          <div className="absolute top-3 left-1/2 -translate-x-1/2 z-30 bg-[#1C202C]/95 border border-amber-500/80 rounded-2xl p-2 px-3.5 shadow-2xl backdrop-blur-md flex items-center gap-2.5 animate-in fade-in slide-in-from-top-2 duration-150 text-xs text-amber-200">
+            <span className="flex items-center gap-1.5 font-bold">
+              <Waypoints className="h-4 w-4 text-amber-400 animate-pulse" />
+              <span>Ramal:</span>
+              <span className="text-white font-mono">{linkFormWaypoints.length} pts • {linkFormDistanceKm.toFixed(1)} km</span>
+            </span>
+            <div className="h-4 w-px bg-slate-700 mx-1" />
+            {linkFormWaypoints.length > 0 && (
+              <button
+                type="button"
+                onClick={handleUndoWaypoint}
+                className="px-2 py-1 rounded-lg bg-[#161922] hover:bg-[#202738] text-slate-300 hover:text-white text-[11px] font-semibold border border-[#242836] flex items-center gap-1 cursor-pointer"
+                title="Desfazer o último ponto adicionado"
+              >
+                <Undo2 className="h-3 w-3" />
+                <span>Desfazer</span>
+              </button>
+            )}
+            <button
+              type="button"
+              disabled={isSavingLink || isCalculatingRoute}
+              onClick={handleDirectSaveFromBanner}
+              className="px-3 py-1 rounded-lg bg-amber-500 hover:bg-amber-400 text-black text-xs font-bold shadow-md flex items-center gap-1 cursor-pointer disabled:opacity-50"
+            >
+              <Check className="h-3.5 w-3.5" />
+              <span>Concluir Ramal</span>
+            </button>
+          </div>
+        )}
+
+        {/* Floating In-Map Pill for Manual Draw */}
+        {isManualDrawMode && (
+          <div className="absolute top-3 left-1/2 -translate-x-1/2 z-30 bg-[#1C202C]/95 border border-emerald-500/80 rounded-2xl p-2 px-3.5 shadow-2xl backdrop-blur-md flex items-center gap-2.5 animate-in fade-in slide-in-from-top-2 duration-150 text-xs text-emerald-200">
+            <span className="flex items-center gap-1.5 font-bold">
+              <Route className="h-4 w-4 text-emerald-400 animate-pulse" />
+              <span>Manual:</span>
+              <span className="text-white font-mono">{linkFormPath.length} pts • {linkFormDistanceKm.toFixed(1)} km</span>
+            </span>
+            <div className="h-4 w-px bg-slate-700 mx-1" />
+            {linkFormPath.length > 0 && (
+              <button
+                type="button"
+                onClick={handleUndoManualPoint}
+                className="px-2 py-1 rounded-lg bg-[#161922] hover:bg-[#202738] text-slate-300 hover:text-white text-[11px] font-semibold border border-[#242836] flex items-center gap-1 cursor-pointer"
+                title="Desfazer o último ponto desenhado"
+              >
+                <Undo2 className="h-3 w-3" />
+                <span>Desfazer</span>
+              </button>
+            )}
+            <button
+              type="button"
+              disabled={linkFormPath.length < 2 || isSavingLink}
+              onClick={handleDirectSaveFromBanner}
+              className="px-3 py-1 rounded-lg bg-emerald-500 hover:bg-emerald-400 text-black text-xs font-bold shadow-md flex items-center gap-1 cursor-pointer disabled:opacity-50"
+            >
+              <Check className="h-3.5 w-3.5" />
+              <span>Concluir Desenho</span>
+            </button>
+          </div>
+        )}
 
         {/* Links Drawer (Floating lateral panel) */}
         {isLinksDrawerOpen && !placingDeviceId && !isEditingLinkPath && (
