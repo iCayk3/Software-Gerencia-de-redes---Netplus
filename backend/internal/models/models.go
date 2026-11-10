@@ -272,11 +272,16 @@ type BackboneLink struct {
 	Color           string          `json:"color,omitempty"`      // Hex color code, e.g. "#00E5FF"
 	DistanceKm      float64         `json:"distance_km"`
 	Notes           string          `json:"notes,omitempty"`
-	Status          string          `json:"status"`               // "active", "planned", "degraded", "down"
-	ZabbixProblem   string          `json:"zabbix_problem,omitempty"`   // Descrição da falha no Zabbix quando link down
-	ZabbixLastAlert *time.Time      `json:"zabbix_last_alert,omitempty"`// Timestamp do último evento recebido
-	CreatedAt       time.Time       `json:"created_at"`
-	UpdatedAt       time.Time       `json:"updated_at"`
+	Status                string          `json:"status"`               // "active", "planned", "degraded", "down"
+	ZabbixProblem         string          `json:"zabbix_problem,omitempty"`   // Descrição da falha no Zabbix quando link down
+	ZabbixLastAlert       *time.Time      `json:"zabbix_last_alert,omitempty"`// Timestamp do último evento recebido
+	TrafficMonitoredEnd   string          `json:"traffic_monitored_end,omitempty"`   // "source" (Ponta A) ou "target" (Ponta B)
+	TrafficMonitoredIface string          `json:"traffic_monitored_iface,omitempty"` // Interface ativa sendo monitorada
+	TrafficRxBps          float64         `json:"traffic_rx_bps,omitempty"`          // Download / Entrada em bps
+	TrafficTxBps          float64         `json:"traffic_tx_bps,omitempty"`          // Upload / Saída em bps
+	TrafficUpdatedAt      *time.Time      `json:"traffic_updated_at,omitempty"`      // Timestamp da última coleta de tráfego
+	CreatedAt             time.Time       `json:"created_at"`
+	UpdatedAt             time.Time       `json:"updated_at"`
 }
 
 // --- Zabbix Integration & Network Monitoring ---

@@ -233,6 +233,21 @@ func (s *LinkStore) Update(link models.BackboneLink) error {
 	if link.ZabbixLastAlert == nil && existing.ZabbixLastAlert != nil {
 		link.ZabbixLastAlert = existing.ZabbixLastAlert
 	}
+	if link.TrafficMonitoredEnd == "" && existing.TrafficMonitoredEnd != "" {
+		link.TrafficMonitoredEnd = existing.TrafficMonitoredEnd
+	}
+	if link.TrafficMonitoredIface == "" && existing.TrafficMonitoredIface != "" {
+		link.TrafficMonitoredIface = existing.TrafficMonitoredIface
+	}
+	if link.TrafficRxBps == 0 && existing.TrafficRxBps > 0 {
+		link.TrafficRxBps = existing.TrafficRxBps
+	}
+	if link.TrafficTxBps == 0 && existing.TrafficTxBps > 0 {
+		link.TrafficTxBps = existing.TrafficTxBps
+	}
+	if link.TrafficUpdatedAt == nil && existing.TrafficUpdatedAt != nil {
+		link.TrafficUpdatedAt = existing.TrafficUpdatedAt
+	}
 	link.CreatedAt = existing.CreatedAt
 	link.UpdatedAt = time.Now()
 
@@ -254,6 +269,32 @@ func (s *LinkStore) UpdateLinkZabbixStatus(linkID string, status string, problem
 	existing.ZabbixProblem = problem
 	now := time.Now()
 	existing.ZabbixLastAlert = &now
+	existing.UpdatedAt = now
+
+	s.links[linkID] = existing
+	if err := s.saveLocked(); err != nil {
+		return nil, err
+	}
+	return &existing, nil
+}
+
+// UpdateLinkTraffic updates RX/TX bandwidth metrics for a specific link.
+func (s *LinkStore) UpdateLinkTraffic(linkID string, rxBps, txBps float64, monitoredIface string) (*models.BackboneLink, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	existing, ok := s.links[linkID]
+	if !ok {
+		return nil, ErrLinkNotFound
+	}
+
+	existing.TrafficRxBps = rxBps
+	existing.TrafficTxBps = txBps
+	if monitoredIface != "" {
+		existing.TrafficMonitoredIface = monitoredIface
+	}
+	now := time.Now()
+	existing.TrafficUpdatedAt = &now
 	existing.UpdatedAt = now
 
 	s.links[linkID] = existing

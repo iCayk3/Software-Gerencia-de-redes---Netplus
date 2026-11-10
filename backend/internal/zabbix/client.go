@@ -12,6 +12,7 @@ import (
 	"net/url"
 	"regexp"
 	"sort"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -238,6 +239,7 @@ type ZabbixItem struct {
 	Name      string `json:"name"`
 	Key       string `json:"key_"`
 	LastValue string `json:"lastvalue"`
+	Units     string `json:"units,omitempty"`
 	Status    string `json:"status"` // 0 = enabled
 }
 
@@ -484,4 +486,122 @@ func MatchInterfaces(a, b string) bool {
 	// e.g. "10ge0/1/1" contains "ge0/1/1"? No, but "10ge0/1/1" vs "10ge0/1/1" is handled.
 	// Check if one ends with the other (e.g. "0/1/1")
 	return strings.HasSuffix(na, nb) || strings.HasSuffix(nb, na)
+}
+
+// InterfaceTraffic holds real-time inbound (RX) and outbound (TX) bandwidth in bps.
+type InterfaceTraffic struct {
+	RxBps     float64   `json:"rx_bps"`
+	TxBps     float64   `json:"tx_bps"`
+	Interface string    `json:"interface"`
+	HostName  string    `json:"host_name"`
+	Timestamp time.Time `json:"timestamp"`
+}
+
+// GetInterfaceTraffic queries Zabbix for real-time RX/TX traffic on the specified interface.
+func (c *Client) GetInterfaceTraffic(ctx context.Context, hostIP, hostName, ifaceName string) (*InterfaceTraffic, error) {
+	if err := c.ensureAuth(ctx); err != nil {
+		return nil, err
+	}
+
+	hostID, err := c.findHostID(ctx, hostIP, hostName)
+	if err != nil {
+		return nil, err
+	}
+
+	normTarget := NormalizeInterface(ifaceName)
+
+	itemParams := map[string]interface{}{
+		"hostids": []string{hostID},
+		"output":  []string{"itemid", "name", "key_", "lastvalue", "units", "lastclock"},
+		"filter": map[string]interface{}{
+			"status": 0,
+		},
+	}
+
+	res, err := c.doRPC(ctx, "item.get", itemParams, true)
+	if err != nil {
+		return nil, fmt.Errorf("item.get failed: %w", err)
+	}
+
+	var items []ZabbixItem
+	if err := json.Unmarshal(res, &items); err != nil {
+		return nil, fmt.Errorf("failed to parse items: %w", err)
+	}
+
+	var rxBps, txBps float64
+	var foundRx, foundTx bool
+
+	for _, it := range items {
+		normName := NormalizeInterface(it.Name)
+		normKey := NormalizeInterface(it.Key)
+
+		// Check if this item is for the requested interface
+		if !strings.Contains(normName, normTarget) && !strings.Contains(normKey, normTarget) {
+			continue
+		}
+
+		val := parseRateValue(it.LastValue, it.Units, it.Key)
+
+		// Check RX (inbound/bits received)
+		if isRxItem(normKey, normName) {
+			rxBps = val
+			foundRx = true
+		} else if isTxItem(normKey, normName) {
+			txBps = val
+			foundTx = true
+		}
+	}
+
+	if !foundRx && !foundTx {
+		return nil, fmt.Errorf("itens de tráfego (bits received/sent) para interface '%s' não encontrados no Zabbix", ifaceName)
+	}
+
+	return &InterfaceTraffic{
+		RxBps:     rxBps,
+		TxBps:     txBps,
+		Interface: ifaceName,
+		HostName:  hostName,
+		Timestamp: time.Now(),
+	}, nil
+}
+
+func isRxItem(normKey, normName string) bool {
+	return strings.Contains(normKey, "net.if.in") ||
+		strings.Contains(normKey, "ifinoctets") ||
+		strings.Contains(normKey, "ifhcinoctets") ||
+		strings.Contains(normName, "bitsreceived") ||
+		strings.Contains(normName, "bytesreceived") ||
+		strings.Contains(normName, "trafficin") ||
+		strings.Contains(normName, "incoming") ||
+		strings.Contains(normName, "download")
+}
+
+func isTxItem(normKey, normName string) bool {
+	return strings.Contains(normKey, "net.if.out") ||
+		strings.Contains(normKey, "ifoutoctets") ||
+		strings.Contains(normKey, "ifhcoutoctets") ||
+		strings.Contains(normName, "bitssent") ||
+		strings.Contains(normName, "bytessent") ||
+		strings.Contains(normName, "trafficout") ||
+		strings.Contains(normName, "outgoing") ||
+		strings.Contains(normName, "upload")
+}
+
+func parseRateValue(rawVal, units, key string) float64 {
+	val, err := strconv.ParseFloat(strings.TrimSpace(rawVal), 64)
+	if err != nil || val < 0 {
+		return 0
+	}
+
+	unitsLower := strings.ToLower(strings.TrimSpace(units))
+	keyLower := strings.ToLower(key)
+
+	// If unit is Bytes per second (Bps, B/s) or key contains Octets without bits, multiply by 8
+	if unitsLower == "bps" || unitsLower == "bit/s" || unitsLower == "bits" {
+		return val
+	}
+	if unitsLower == "b" || unitsLower == "bytes" || strings.Contains(keyLower, "octets") {
+		return val * 8
+	}
+	return val
 }

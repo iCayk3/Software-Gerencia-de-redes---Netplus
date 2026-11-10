@@ -153,3 +153,38 @@ func TestZabbixWebhookUnauthorized(t *testing.T) {
 		t.Fatalf("Expected 401 Unauthorized for invalid token, got %d", w.Code)
 	}
 }
+
+func TestParseTrafficFromCLI(t *testing.T) {
+	huaweiOutput := `
+40GE0/0/1 current state : UP
+Line protocol current state : UP
+Description: Enlace Backbone
+Last 300 seconds input rate 2450000000 bits/sec, 125000 packets/sec
+Last 300 seconds output rate 1120000000 bits/sec, 62000 packets/sec
+`
+	rx, tx, err := parseTrafficFromCLI(huaweiOutput, models.VendorHuawei)
+	if err != nil {
+		t.Fatalf("Unexpected error: %v", err)
+	}
+	if rx != 2450000000 {
+		t.Errorf("Expected RX 2450000000, got %f", rx)
+	}
+	if tx != 1120000000 {
+		t.Errorf("Expected TX 1120000000, got %f", tx)
+	}
+
+	mikrotikOutput := `
+rx-bits-per-second: 54.2Mbps
+tx-bits-per-second: 12.8Mbps
+`
+	rxMk, txMk, errMk := parseTrafficFromCLI(mikrotikOutput, models.VendorMikrotikV7)
+	if errMk != nil {
+		t.Fatalf("Unexpected error: %v", errMk)
+	}
+	if rxMk != 54200000 {
+		t.Errorf("Expected RX 54200000, got %f", rxMk)
+	}
+	if txMk != 12800000 {
+		t.Errorf("Expected TX 12800000, got %f", txMk)
+	}
+}

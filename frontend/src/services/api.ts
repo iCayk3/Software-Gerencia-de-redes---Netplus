@@ -1539,6 +1539,11 @@ export interface BackboneLink {
   status: LinkStatus
   zabbix_problem?: string
   zabbix_last_alert?: string
+  traffic_monitored_end?: 'source' | 'target'
+  traffic_monitored_iface?: string
+  traffic_rx_bps?: number
+  traffic_tx_bps?: number
+  traffic_updated_at?: string
   created_at?: string
   updated_at?: string
 }
@@ -1610,11 +1615,41 @@ export async function calculateRoadRoute(
       if (data.routes && data.routes.length > 0) {
         const route = data.routes[0]
         // OSRM returns GeoJSON coordinates as [lon, lat], Leaflet expects [lat, lng]
-        const path: [number, number][] = route.geometry.coordinates.map(
+        const roadPath: [number, number][] = route.geometry.coordinates.map(
           ([lon, lat]: [number, number]) => [lat, lon]
         )
-        const distanceKm = Number((route.distance / 1000).toFixed(2))
-        return { path, distanceKm }
+
+        // Ensure cable line starts EXACTLY at the source equipment pin
+        // and ends EXACTLY at the target equipment pin (closing the gap between street and building)
+        const fullPath: [number, number][] = []
+        const pStart = points[0]
+        const pEnd = points[points.length - 1]
+
+        if (roadPath.length > 0) {
+          const firstRoad = roadPath[0]
+          if (
+            Math.abs(firstRoad[0] - pStart[0]) > 0.000005 ||
+            Math.abs(firstRoad[1] - pStart[1]) > 0.000005
+          ) {
+            fullPath.push(pStart)
+          }
+          fullPath.push(...roadPath)
+          const lastRoad = roadPath[roadPath.length - 1]
+          if (
+            Math.abs(lastRoad[0] - pEnd[0]) > 0.000005 ||
+            Math.abs(lastRoad[1] - pEnd[1]) > 0.000005
+          ) {
+            fullPath.push(pEnd)
+          }
+        } else {
+          fullPath.push(...points)
+        }
+
+        let totalDist = 0
+        for (let i = 0; i < fullPath.length - 1; i++) {
+          totalDist += haversineDistance(fullPath[i], fullPath[i + 1])
+        }
+        return { path: fullPath, distanceKm: Number(totalDist.toFixed(2)) }
       }
     }
   } catch {
@@ -1754,6 +1789,50 @@ export async function fetchDeviceInterfaces(deviceId: string): Promise<DeviceInt
   if (!res.ok) {
     const err = await res.json().catch(() => ({}))
     throw new Error(err.error || `Erro ao carregar interfaces do equipamento: HTTP ${res.status}`)
+  }
+  return res.json()
+}
+
+export function formatBps(bps?: number): string {
+  if (bps == null || isNaN(bps) || bps <= 0) return '0 bps'
+  if (bps >= 1_000_000_000_000) return `${(bps / 1_000_000_000_000).toFixed(2)} Tbps`
+  if (bps >= 1_000_000_000) return `${(bps / 1_000_000_000).toFixed(2)} Gbps`
+  if (bps >= 1_000_000) return `${(bps / 1_000_000).toFixed(1)} Mbps`
+  if (bps >= 1_000) return `${(bps / 1_000).toFixed(0)} Kbps`
+  return `${Math.round(bps)} bps`
+}
+
+export function parseCapacityToBps(cap?: string): number {
+  if (!cap) return 10_000_000_000
+  const clean = cap.trim().toUpperCase()
+  if (clean.includes('100G')) return 100_000_000_000
+  if (clean.includes('40G')) return 40_000_000_000
+  if (clean.includes('25G')) return 25_000_000_000
+  if (clean.includes('10G')) return 10_000_000_000
+  if (clean.includes('1G')) return 1_000_000_000
+  const num = parseFloat(clean)
+  if (!isNaN(num) && num > 0) {
+    if (clean.includes('G')) return num * 1_000_000_000
+    if (clean.includes('M')) return num * 1_000_000
+    if (clean.includes('T')) return num * 1_000_000_000_000
+  }
+  return 10_000_000_000
+}
+
+export async function collectLinkTraffic(linkId: string): Promise<{ success: boolean; link: BackboneLink; rx_bps: number; tx_bps: number; interface: string }> {
+  const res = await apiFetch(`${API_BASE}/backbone/links/${linkId}/traffic`, { method: 'POST' })
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}))
+    throw new Error(err.error || `Erro ao coletar tráfego do enlace: HTTP ${res.status}`)
+  }
+  return res.json()
+}
+
+export async function collectAllLinksTraffic(): Promise<{ success: boolean; total_links: number; updated_links: number; links: BackboneLink[] }> {
+  const res = await apiFetch(`${API_BASE}/backbone/links/collect-traffic`, { method: 'POST' })
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}))
+    throw new Error(err.error || `Erro ao coletar tráfego em lote: HTTP ${res.status}`)
   }
   return res.json()
 }

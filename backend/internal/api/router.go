@@ -131,6 +131,8 @@ func NewRouter(
 	mux.HandleFunc("POST /api/backbone/links", RequireRole(models.RoleAdmin, models.RoleNOCOperator)(linkCtrl.CreateLink))
 	mux.HandleFunc("PUT /api/backbone/links/{id}", RequireRole(models.RoleAdmin, models.RoleNOCOperator)(linkCtrl.UpdateLink))
 	mux.HandleFunc("DELETE /api/backbone/links/{id}", RequireRole(models.RoleAdmin, models.RoleNOCOperator)(linkCtrl.DeleteLink))
+	mux.HandleFunc("POST /api/backbone/links/{id}/traffic", zabbixCtrl.CollectLinkTraffic)
+	mux.HandleFunc("POST /api/backbone/links/collect-traffic", zabbixCtrl.CollectAllLinksTraffic)
 
 	// Zabbix Integration & Webhook Receivers
 	mux.HandleFunc("POST /api/webhooks/zabbix", zabbixCtrl.HandleWebhook)

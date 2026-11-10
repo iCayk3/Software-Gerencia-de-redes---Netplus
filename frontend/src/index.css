@@ -90,3 +90,10 @@ body {
   animation: link-down-glow-anim 1.4s infinite ease-in-out;
 }
 
+/* Midpoint Traffic Badge for Backbone Links */
+.leaflet-noc-mid-badge {
+  background: transparent !important;
+  border: none !important;
+}
+
+

@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"regexp"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 
@@ -411,6 +412,207 @@ func (c *ZabbixController) SyncStatus(w http.ResponseWriter, r *http.Request) {
 		"updated_links": len(updatedLinks),
 		"links":         updatedLinks,
 	})
+}
+
+// CollectLinkTraffic queries Zabbix (or router SSH) for live RX/TX bandwidth on a specific link.
+// POST /api/backbone/links/{id}/traffic
+func (c *ZabbixController) CollectLinkTraffic(w http.ResponseWriter, r *http.Request) {
+	id := r.PathValue("id")
+	if id == "" {
+		WriteError(w, http.StatusBadRequest, "ID do enlace é obrigatório")
+		return
+	}
+
+	link, err := c.linkStore.GetByID(id)
+	if err != nil {
+		WriteError(w, http.StatusNotFound, "Enlace não encontrado: "+err.Error())
+		return
+	}
+
+	ctx, cancel := context.WithTimeout(r.Context(), 15*time.Second)
+	defer cancel()
+
+	rx, tx, iface, err := c.collectTrafficForLink(ctx, link)
+	if err != nil {
+		WriteError(w, http.StatusBadRequest, "Falha na coleta de tráfego: "+err.Error())
+		return
+	}
+
+	updated, err := c.linkStore.UpdateLinkTraffic(link.ID, rx, tx, iface)
+	if err != nil {
+		WriteError(w, http.StatusInternalServerError, "Erro ao salvar métricas de tráfego: "+err.Error())
+		return
+	}
+
+	WriteJSON(w, http.StatusOK, map[string]interface{}{
+		"success":   true,
+		"link_id":   link.ID,
+		"rx_bps":    rx,
+		"tx_bps":    tx,
+		"interface": iface,
+		"link":      updated,
+	})
+}
+
+// CollectAllLinksTraffic collects real-time traffic for all backbone links in batch.
+// POST /api/backbone/links/collect-traffic
+func (c *ZabbixController) CollectAllLinksTraffic(w http.ResponseWriter, r *http.Request) {
+	claims := GetAuthUser(r)
+	tenantID := ""
+	if claims != nil && !claims.IsSuperAdmin {
+		tenantID = claims.TenantID
+	}
+
+	links := c.linkStore.GetAllByTenant(tenantID)
+	ctx, cancel := context.WithTimeout(r.Context(), 45*time.Second)
+	defer cancel()
+
+	var updatedList []models.BackboneLink
+	successCount := 0
+
+	for _, link := range links {
+		// Only collect for links that have at least one interface assigned
+		if link.SourceInterface == "" && link.TargetInterface == "" && link.TrafficMonitoredIface == "" {
+			continue
+		}
+
+		rx, tx, iface, err := c.collectTrafficForLink(ctx, &link)
+		if err == nil {
+			updated, err := c.linkStore.UpdateLinkTraffic(link.ID, rx, tx, iface)
+			if err == nil && updated != nil {
+				updatedList = append(updatedList, *updated)
+				successCount++
+			}
+		}
+	}
+
+	WriteJSON(w, http.StatusOK, map[string]interface{}{
+		"success":       true,
+		"total_links":   len(links),
+		"updated_links": successCount,
+		"links":         updatedList,
+	})
+}
+
+func (c *ZabbixController) collectTrafficForLink(ctx context.Context, link *models.BackboneLink) (float64, float64, string, error) {
+	// Determine target device and interface
+	deviceID := link.SourceDeviceID
+	iface := link.SourceInterface
+
+	if link.TrafficMonitoredEnd == "target" && link.TargetInterface != "" {
+		deviceID = link.TargetDeviceID
+		iface = link.TargetInterface
+	}
+	if link.TrafficMonitoredIface != "" {
+		iface = link.TrafficMonitoredIface
+	}
+	if iface == "" {
+		if link.SourceInterface != "" {
+			deviceID = link.SourceDeviceID
+			iface = link.SourceInterface
+		} else if link.TargetInterface != "" {
+			deviceID = link.TargetDeviceID
+			iface = link.TargetInterface
+		}
+	}
+	if iface == "" || deviceID == "" {
+		return 0, 0, "", fmt.Errorf("enlace '%s' não possui interface cadastrada para monitoramento", link.Name)
+	}
+
+	dev, err := c.deviceStore.GetByID(deviceID)
+	if err != nil || dev == nil {
+		return 0, 0, iface, fmt.Errorf("equipamento '%s' não encontrado", deviceID)
+	}
+
+	// 1. Try Zabbix API
+	cfg := c.zabbixStore.GetConfig()
+	if cfg.Enabled && cfg.URL != "" {
+		if client, err := zabbix.NewClient(cfg); err == nil {
+			if traf, err := client.GetInterfaceTraffic(ctx, dev.Host, dev.Name, iface); err == nil && traf != nil {
+				return traf.RxBps, traf.TxBps, iface, nil
+			}
+		}
+	}
+
+	// 2. Fallback to router direct SSH driver
+	if dev.Username != "" && (dev.Password != "" || dev.AuthType == "key") {
+		if driver, err := drivers.NewDriver(dev); err == nil {
+			rx, tx, err := queryRouterTrafficCLI(driver, dev.Vendor, iface)
+			if err == nil {
+				return rx, tx, iface, nil
+			}
+		}
+	}
+
+	return 0, 0, iface, fmt.Errorf("não foi possível obter tráfego da interface '%s' via Zabbix ou SSH", iface)
+}
+
+func queryRouterTrafficCLI(driver drivers.NetworkDriver, vendor models.VendorType, iface string) (float64, float64, error) {
+	var cmd string
+	switch vendor {
+	case models.VendorHuawei:
+		cmd = fmt.Sprintf("display interface %s", iface)
+	case models.VendorMikrotikV6, models.VendorMikrotikV7:
+		cmd = fmt.Sprintf("/interface monitor-traffic %s once", iface)
+	case models.VendorDatacom:
+		cmd = fmt.Sprintf("show interface %s", iface)
+	default:
+		cmd = fmt.Sprintf("display interface %s", iface)
+	}
+
+	out, err := driver.RunCommand(cmd)
+	if err != nil {
+		return 0, 0, err
+	}
+
+	return parseTrafficFromCLI(out, vendor)
+}
+
+func parseTrafficFromCLI(out string, vendor models.VendorType) (float64, float64, error) {
+	reIn := regexp.MustCompile(`(?i)input rate\s+([0-9\.]+)\s*([kKmMgGtT]?)\s*bits/sec`)
+	reOut := regexp.MustCompile(`(?i)output rate\s+([0-9\.]+)\s*([kKmMgGtT]?)\s*bits/sec`)
+
+	var rx, tx float64
+	if m := reIn.FindStringSubmatch(out); len(m) > 1 {
+		val, _ := strconv.ParseFloat(m[1], 64)
+		mult := parseUnitMultiplier(m[2])
+		rx = val * mult
+	}
+	if m := reOut.FindStringSubmatch(out); len(m) > 1 {
+		val, _ := strconv.ParseFloat(m[1], 64)
+		mult := parseUnitMultiplier(m[2])
+		tx = val * mult
+	}
+
+	if rx == 0 && tx == 0 {
+		reMkRx := regexp.MustCompile(`(?i)rx-bits-per-second:\s*([0-9\.]+)\s*([kKmMgGtT]?)`)
+		reMkTx := regexp.MustCompile(`(?i)tx-bits-per-second:\s*([0-9\.]+)\s*([kKmMgGtT]?)`)
+		if m := reMkRx.FindStringSubmatch(out); len(m) > 1 {
+			val, _ := strconv.ParseFloat(m[1], 64)
+			rx = val * parseUnitMultiplier(m[2])
+		}
+		if m := reMkTx.FindStringSubmatch(out); len(m) > 1 {
+			val, _ := strconv.ParseFloat(m[1], 64)
+			tx = val * parseUnitMultiplier(m[2])
+		}
+	}
+
+	return rx, tx, nil
+}
+
+func parseUnitMultiplier(unit string) float64 {
+	switch strings.ToUpper(strings.TrimSpace(unit)) {
+	case "K":
+		return 1_000
+	case "M":
+		return 1_000_000
+	case "G":
+		return 1_000_000_000
+	case "T":
+		return 1_000_000_000_000
+	default:
+		return 1
+	}
 }
 
 // GetDeviceInterfaces retrieves the list of network interfaces for a device,

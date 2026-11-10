@@ -26,6 +26,9 @@ import {
   Copy,
   CheckCircle,
   Link2,
+  ArrowDown,
+  ArrowUp,
+  Gauge,
 } from 'lucide-react'
 import type { Device, DeviceRole } from '../../services/api'
 import {
@@ -41,6 +44,10 @@ import {
   syncZabbixLinks,
   fetchZabbixWebhookScript,
   fetchDeviceInterfaces,
+  collectLinkTraffic,
+  collectAllLinksTraffic,
+  formatBps,
+  parseCapacityToBps,
   type BackboneLink,
   type LinkType,
   type LinkRoutingMode,
@@ -237,6 +244,8 @@ export const BackboneMapView: React.FC<BackboneMapViewProps> = ({
   // Source & Target Interface Assignment for Links
   const [linkFormSourceIface, setLinkFormSourceIface] = useState('')
   const [linkFormTargetIface, setLinkFormTargetIface] = useState('')
+  const [linkFormTrafficEnd, setLinkFormTrafficEnd] = useState<'source' | 'target'>('source')
+  const [isCollectingTraffic, setIsCollectingTraffic] = useState(false)
   const [sourceInterfaces, setSourceInterfaces] = useState<string[]>([])
   const [targetInterfaces, setTargetInterfaces] = useState<string[]>([])
   const [loadingSourceIfaces, setLoadingSourceIfaces] = useState(false)
@@ -313,6 +322,32 @@ export const BackboneMapView: React.FC<BackboneMapViewProps> = ({
   useEffect(() => {
     loadLinks()
   }, [loadLinks])
+
+  // Periodic background polling for link traffic (every 30 seconds)
+  useEffect(() => {
+    if (links.length === 0) return
+    const interval = setInterval(async () => {
+      try {
+        const res = await collectAllLinksTraffic()
+        if (res && res.links && res.links.length > 0) {
+          setLinks((prev) =>
+            prev.map((l) => {
+              const updated = res.links.find((u) => u.id === l.id)
+              return updated || l
+            })
+          )
+          setSelectedLink((prev) => {
+            if (!prev) return null
+            const updated = res.links.find((u) => u.id === prev.id)
+            return updated || prev
+          })
+        }
+      } catch {
+        // Non-blocking background poll
+      }
+    }, 30000)
+    return () => clearInterval(interval)
+  }, [links.length])
 
   // Load Zabbix configuration on mount
   useEffect(() => {
@@ -810,8 +845,33 @@ export const BackboneMapView: React.FC<BackboneMapViewProps> = ({
       const isDown = link.status === 'down'
       const color = isDown ? '#EF4444' : (link.color || '#00E5FF')
 
+      // Ensure the rendered path extends completely into the exact coordinates of source and target devices
+      const srcDev = devices.find((d) => d.id === link.source_device_id)
+      const tgtDev = devices.find((d) => d.id === link.target_device_id)
+
+      const renderedPath: [number, number][] = [...link.path]
+      if (srcDev && srcDev.latitude != null && srcDev.longitude != null) {
+        const srcCoord: [number, number] = [Number(srcDev.latitude), Number(srcDev.longitude)]
+        if (
+          Math.abs(srcCoord[0] - renderedPath[0][0]) > 0.00005 ||
+          Math.abs(srcCoord[1] - renderedPath[0][1]) > 0.00005
+        ) {
+          renderedPath.unshift(srcCoord)
+        }
+      }
+      if (tgtDev && tgtDev.latitude != null && tgtDev.longitude != null) {
+        const tgtCoord: [number, number] = [Number(tgtDev.latitude), Number(tgtDev.longitude)]
+        const lastIdx = renderedPath.length - 1
+        if (
+          Math.abs(tgtCoord[0] - renderedPath[lastIdx][0]) > 0.00005 ||
+          Math.abs(tgtCoord[1] - renderedPath[lastIdx][1]) > 0.00005
+        ) {
+          renderedPath.push(tgtCoord)
+        }
+      }
+
       // Outer glowing halo
-      const glowLine = L.polyline(link.path, {
+      const glowLine = L.polyline(renderedPath, {
         color,
         weight: isSelected ? 10 : (isDown ? 8 : 6),
         opacity: isDown ? 0.8 : (isSelected ? 0.6 : 0.25),
@@ -821,7 +881,7 @@ export const BackboneMapView: React.FC<BackboneMapViewProps> = ({
       })
 
       // Inner core cable line
-      const coreLine = L.polyline(link.path, {
+      const coreLine = L.polyline(renderedPath, {
         color,
         weight: isSelected ? 5 : (isDown ? 4 : 3),
         opacity: 0.98,
@@ -831,14 +891,40 @@ export const BackboneMapView: React.FC<BackboneMapViewProps> = ({
         lineJoin: 'round',
       })
 
+      const hasTraffic =
+        (link.traffic_rx_bps != null && link.traffic_rx_bps > 0) ||
+        (link.traffic_tx_bps != null && link.traffic_tx_bps > 0)
+      const rxText = formatBps(link.traffic_rx_bps || 0)
+      const txText = formatBps(link.traffic_tx_bps || 0)
+      const capacityBps = parseCapacityToBps(link.capacity)
+      const maxTraffic = Math.max(link.traffic_rx_bps || 0, link.traffic_tx_bps || 0)
+      const usagePercent = capacityBps > 0 ? Math.min(100, (maxTraffic / capacityBps) * 100) : 0
+
       const tooltipContent = `
-        <div style="font-family: inherit; font-size: 11px; padding: 4px 6px; line-height: 1.35;">
+        <div style="font-family: inherit; font-size: 11px; padding: 4px 6px; line-height: 1.35; min-width: 170px;">
           ${isDown ? '<div style="color: #EF4444; font-weight: 800; font-size: 10px; margin-bottom: 2px; text-transform: uppercase; letter-spacing: 0.5px;">🚨 ROTA FORA DO AR (LINK DOWN - ZABBIX)</div>' : ''}
           <strong style="color: #FFFFFF; font-size: 12px;">${link.name}</strong><br/>
           <span style="color: ${color}; font-weight: 700;">${link.capacity || '10G'}</span> •
           <span style="color: #94A3B8;">${link.distance_km ? link.distance_km.toFixed(1) + ' km' : ''}</span>
           ${link.type === 'radio' ? ' • <span style="color: #F59E0B;">Rádio</span>' : ' • <span style="color: #38BDF8;">Fibra</span>'}
           ${link.source_interface || link.target_interface ? `<br/><span style="color: #A78BFA; font-size: 10px; font-weight: 600;">Portas: ${link.source_interface || '?'} ➔ ${link.target_interface || '?'}</span>` : ''}
+          ${hasTraffic ? `
+            <div style="margin-top: 4px; padding-top: 4px; border-top: 1px solid rgba(255,255,255,0.15);">
+              <div style="font-size: 10px; color: #94A3B8;">Tráfego Atual (${link.traffic_monitored_end === 'target' ? 'Ponta B' : 'Ponta A'}):</div>
+              <div style="display: flex; gap: 8px; font-weight: 700; font-family: monospace; font-size: 11px;">
+                <span style="color: #38BDF8;">↓ RX: ${rxText}</span>
+                <span style="color: #34D399;">↑ TX: ${txText}</span>
+              </div>
+              ${capacityBps > 0 ? `
+                <div style="display: flex; align-items: center; gap: 4px; margin-top: 3px;">
+                  <div style="flex: 1; height: 4px; background: rgba(255,255,255,0.15); border-radius: 2px; overflow: hidden;">
+                    <div style="width: ${usagePercent.toFixed(1)}%; height: 100%; background: ${usagePercent > 85 ? '#EF4444' : usagePercent > 70 ? '#F59E0B' : '#10B981'};"></div>
+                  </div>
+                  <span style="font-size: 9px; color: #E2E8F0; font-weight: 600;">${usagePercent.toFixed(0)}%</span>
+                </div>
+              ` : ''}
+            </div>
+          ` : ''}
           ${isDown && link.zabbix_problem ? `<br/><span style="color: #FCA5A5; font-size: 10px; font-style: italic;">Falha: ${link.zabbix_problem}</span>` : ''}
         </div>
       `
@@ -856,8 +942,36 @@ export const BackboneMapView: React.FC<BackboneMapViewProps> = ({
 
       glowLine.addTo(layer)
       coreLine.addTo(layer)
+
+      // Floating Midpoint Badge with Live Traffic or Down Alarm
+      const midIdx = Math.floor(renderedPath.length / 2)
+      const midCoord = renderedPath[midIdx]
+      if (midCoord && (hasTraffic || isDown)) {
+        const badgeHtml = `
+          <div class="px-2 py-0.5 rounded-full shadow-xl font-mono text-[10px] font-bold flex items-center gap-1.5 whitespace-nowrap cursor-pointer transition transform hover:scale-110"
+               style="background: rgba(15, 23, 42, 0.95); border: 1.5px solid ${color}; color: #FFFFFF; box-shadow: 0 4px 12px rgba(0,0,0,0.7);">
+            ${
+              isDown
+                ? '<span style="width: 7px; height: 7px; border-radius: 50%; background-color: #EF4444; display: inline-block;"></span><span style="color:#EF4444; font-weight:900; letter-spacing: 0.5px;">🚨 DOWN</span>'
+                : `<span style="color: #38BDF8;">↓ ${rxText}</span><span style="color: #64748B;">|</span><span style="color: #34D399;">↑ ${txText}</span>`
+            }
+          </div>
+        `
+        const midIcon = L.divIcon({
+          html: badgeHtml,
+          className: 'leaflet-noc-mid-badge',
+          iconAnchor: [45, 10],
+        })
+        const midMarker = L.marker(midCoord, { icon: midIcon, interactive: true })
+        midMarker.on('click', (e) => {
+          L.DomEvent.stopPropagation(e)
+          setSelectedDevice(null)
+          setSelectedLink(link)
+        })
+        midMarker.addTo(layer)
+      }
     })
-  }, [links, selectedLink, mapReady])
+  }, [links, selectedLink, devices, mapReady])
 
   // Render Interactive Edit Layer (drafting new links or modifying existing cables)
   useEffect(() => {
@@ -1225,12 +1339,17 @@ export const BackboneMapView: React.FC<BackboneMapViewProps> = ({
 
     setIsSavingLink(true)
     try {
+      const monitoredIface =
+        linkFormTrafficEnd === 'source' ? linkFormSourceIface.trim() : linkFormTargetIface.trim()
+
       const payload: Partial<BackboneLink> = {
         name: linkFormName.trim(),
         source_device_id: linkFormSourceId,
         target_device_id: linkFormTargetId,
         source_interface: linkFormSourceIface.trim(),
         target_interface: linkFormTargetIface.trim(),
+        traffic_monitored_end: linkFormTrafficEnd,
+        traffic_monitored_iface: monitoredIface,
         type: linkFormType,
         routing_mode: linkFormRoutingMode,
         capacity: linkFormCapacity,
@@ -1242,20 +1361,33 @@ export const BackboneMapView: React.FC<BackboneMapViewProps> = ({
         distance_km: linkFormDistanceKm,
       }
 
+      let savedLink: BackboneLink
       if (editingLinkTarget) {
-        const updated = await updateBackboneLink(editingLinkTarget.id, payload)
-        setLinks((prev) => prev.map((l) => (l.id === updated.id ? updated : l)))
-        setSelectedLink(updated)
+        savedLink = await updateBackboneLink(editingLinkTarget.id, payload)
+        setLinks((prev) => prev.map((l) => (l.id === savedLink.id ? savedLink : l)))
+        setSelectedLink(savedLink)
       } else {
-        const created = await createBackboneLink(payload)
-        setLinks((prev) => [...prev, created])
-        setSelectedLink(created)
+        savedLink = await createBackboneLink(payload)
+        setLinks((prev) => [...prev, savedLink])
+        setSelectedLink(savedLink)
       }
 
       setIsLinkModalOpen(false)
       setIsAddWaypointMode(false)
       setIsManualDrawMode(false)
       setEditingLinkTarget(null)
+
+      // Automatically collect traffic immediately in the background if an interface is defined
+      if (monitoredIface) {
+        collectLinkTraffic(savedLink.id)
+          .then((res) => {
+            if (res && res.link) {
+              setLinks((prev) => prev.map((l) => (l.id === res.link.id ? res.link : l)))
+              setSelectedLink((curr) => (curr?.id === res.link.id ? res.link : curr))
+            }
+          })
+          .catch(() => {})
+      }
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : 'Erro ao salvar enlace'
       alert(msg)
@@ -1892,6 +2024,33 @@ export const BackboneMapView: React.FC<BackboneMapViewProps> = ({
               <div className="flex items-center gap-1">
                 <button
                   type="button"
+                  disabled={isCollectingTraffic}
+                  onClick={async () => {
+                    setIsCollectingTraffic(true)
+                    try {
+                      const res = await collectAllLinksTraffic()
+                      if (res && res.links) {
+                        setLinks(res.links)
+                        if (selectedLink) {
+                          const updatedSel = res.links.find((u) => u.id === selectedLink.id)
+                          if (updatedSel) setSelectedLink(updatedSel)
+                        }
+                      }
+                    } catch (err: unknown) {
+                      const msg = err instanceof Error ? err.message : 'Erro ao coletar tráfego'
+                      alert(msg)
+                    } finally {
+                      setIsCollectingTraffic(false)
+                    }
+                  }}
+                  className="px-2 py-1 bg-[#161922] hover:bg-[#252C3D] text-slate-300 hover:text-white rounded-lg text-[10px] font-bold border border-[#2D3345] cursor-pointer flex items-center gap-1 transition"
+                  title="Atualizar tráfego de todos os enlaces via Zabbix"
+                >
+                  <RefreshCw className={`h-3 w-3 ${isCollectingTraffic ? 'animate-spin text-cyan-400' : ''}`} />
+                  <span>Tráfego</span>
+                </button>
+                <button
+                  type="button"
                   onClick={() => handleOpenCreateLink()}
                   className="px-2 py-1 bg-cyan-950/60 hover:bg-cyan-900 text-cyan-300 rounded-lg text-[10px] font-bold border border-cyan-500/40 cursor-pointer"
                 >
@@ -1918,6 +2077,10 @@ export const BackboneMapView: React.FC<BackboneMapViewProps> = ({
                   const tgt = devices.find((d) => d.id === link.target_device_id)
                   const isSelected = selectedLink?.id === link.id
                   const isDown = link.status === 'down'
+                  const hasTraffic =
+                    (link.traffic_rx_bps != null && link.traffic_rx_bps > 0) ||
+                    (link.traffic_tx_bps != null && link.traffic_tx_bps > 0)
+
                   return (
                     <div
                       key={link.id}
@@ -1969,6 +2132,16 @@ export const BackboneMapView: React.FC<BackboneMapViewProps> = ({
                       {(link.source_interface || link.target_interface) && (
                         <div className="text-[10px] text-purple-300 font-mono flex items-center gap-1 truncate pt-0.5">
                           <span>Portas: {link.source_interface || '?'} ➔ {link.target_interface || '?'}</span>
+                        </div>
+                      )}
+                      {hasTraffic && !isDown && (
+                        <div className="text-[10px] font-mono flex items-center justify-between pt-1 border-t border-[#242836]/60 text-slate-300">
+                          <span className="text-sky-400 font-semibold flex items-center gap-0.5">
+                            <ArrowDown className="h-2.5 w-2.5" /> {formatBps(link.traffic_rx_bps)}
+                          </span>
+                          <span className="text-emerald-400 font-semibold flex items-center gap-0.5">
+                            <ArrowUp className="h-2.5 w-2.5" /> {formatBps(link.traffic_tx_bps)}
+                          </span>
                         </div>
                       )}
                       {isDown && link.zabbix_problem && (
@@ -2250,6 +2423,102 @@ export const BackboneMapView: React.FC<BackboneMapViewProps> = ({
               </div>
             </div>
 
+            {/* Real-Time Traffic Section */}
+            <div className="p-3 rounded-xl bg-[#161922] border border-[#242836] space-y-2">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-bold text-slate-200 flex items-center gap-1.5">
+                  <Gauge className="h-4 w-4 text-cyan-400" />
+                  <span>Tráfego em Tempo Real (Zabbix)</span>
+                </span>
+                <button
+                  type="button"
+                  disabled={isCollectingTraffic}
+                  onClick={async () => {
+                    setIsCollectingTraffic(true)
+                    try {
+                      const res = await collectLinkTraffic(selectedLink.id)
+                      if (res && res.link) {
+                        setSelectedLink(res.link)
+                        setLinks((prev) => prev.map((l) => (l.id === res.link.id ? res.link : l)))
+                      }
+                    } catch (err: unknown) {
+                      const msg = err instanceof Error ? err.message : 'Erro ao coletar tráfego'
+                      alert(msg)
+                    } finally {
+                      setIsCollectingTraffic(false)
+                    }
+                  }}
+                  className="text-[10px] font-bold text-cyan-400 hover:text-cyan-200 flex items-center gap-1 px-2 py-0.5 rounded bg-cyan-950/60 border border-cyan-600/40 hover:bg-cyan-900 cursor-pointer transition disabled:opacity-50"
+                  title="Consultar tráfego atual via Zabbix API"
+                >
+                  <RefreshCw className={`h-3 w-3 ${isCollectingTraffic ? 'animate-spin' : ''}`} />
+                  <span>{isCollectingTraffic ? 'Coletando...' : 'Atualizar'}</span>
+                </button>
+              </div>
+
+              {/* RX and TX Metrics */}
+              <div className="grid grid-cols-2 gap-2 pt-0.5 font-mono">
+                <div className="p-2 rounded-lg bg-slate-950/80 border border-slate-800">
+                  <span className="text-[10px] font-sans text-slate-400 flex items-center gap-1 mb-0.5">
+                    <ArrowDown className="h-3 w-3 text-sky-400" />
+                    <span>Download (RX)</span>
+                  </span>
+                  <span className="text-sm font-bold text-sky-400 block truncate">
+                    {formatBps(selectedLink.traffic_rx_bps || 0)}
+                  </span>
+                </div>
+
+                <div className="p-2 rounded-lg bg-slate-950/80 border border-slate-800">
+                  <span className="text-[10px] font-sans text-slate-400 flex items-center gap-1 mb-0.5">
+                    <ArrowUp className="h-3 w-3 text-emerald-400" />
+                    <span>Upload (TX)</span>
+                  </span>
+                  <span className="text-sm font-bold text-emerald-400 block truncate">
+                    {formatBps(selectedLink.traffic_tx_bps || 0)}
+                  </span>
+                </div>
+              </div>
+
+              {/* Bandwidth Utilization Progress Bar */}
+              {(() => {
+                const capBps = parseCapacityToBps(selectedLink.capacity)
+                const maxTraffic = Math.max(
+                  selectedLink.traffic_rx_bps || 0,
+                  selectedLink.traffic_tx_bps || 0
+                )
+                const pct = capBps > 0 ? Math.min(100, (maxTraffic / capBps) * 100) : 0
+                const barColor =
+                  pct > 85 ? 'bg-red-500' : pct > 70 ? 'bg-amber-500' : 'bg-emerald-500'
+
+                return (
+                  <div className="space-y-1 pt-1">
+                    <div className="flex items-center justify-between text-[10px]">
+                      <span className="text-slate-400">
+                        Ocupação do Enlace ({selectedLink.capacity || '10G'}):
+                      </span>
+                      <span className="font-bold text-white font-mono">{pct.toFixed(1)}%</span>
+                    </div>
+                    <div className="h-2 w-full rounded-full bg-slate-800 overflow-hidden border border-slate-700/50">
+                      <div
+                        className={`h-full transition-all duration-500 ${barColor}`}
+                        style={{ width: `${pct}%` }}
+                      />
+                    </div>
+                    <div className="flex items-center justify-between text-[9px] text-slate-500">
+                      <span>
+                        Interface: {selectedLink.traffic_monitored_iface || selectedLink.source_interface || 'Ponta A'} ({selectedLink.traffic_monitored_end === 'target' ? 'Ponta B' : 'Ponta A'})
+                      </span>
+                      {selectedLink.traffic_updated_at && (
+                        <span>
+                          {new Date(selectedLink.traffic_updated_at).toLocaleTimeString()}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                )
+              })()}
+            </div>
+
             {/* Latency estimation info */}
             <div className="p-2 rounded-xl bg-[#161922] border border-[#242836] text-[11px] text-slate-400 flex items-center justify-between">
               <span>Latência teórica da fibra (~5µs/km):</span>
@@ -2278,6 +2547,7 @@ export const BackboneMapView: React.FC<BackboneMapViewProps> = ({
                   setLinkFormTargetId(selectedLink.target_device_id)
                   setLinkFormSourceIface(selectedLink.source_interface || '')
                   setLinkFormTargetIface(selectedLink.target_interface || '')
+                  setLinkFormTrafficEnd((selectedLink.traffic_monitored_end as 'source' | 'target') || 'source')
                   setLinkFormName(selectedLink.name)
                   setLinkFormType(selectedLink.type)
                   setLinkFormRoutingMode(selectedLink.routing_mode)
@@ -2401,103 +2671,166 @@ export const BackboneMapView: React.FC<BackboneMapViewProps> = ({
                 </div>
 
                 {/* Source & Target Interfaces (Ports) for Zabbix Monitoring */}
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 p-3 rounded-xl bg-purple-950/20 border border-purple-500/30">
-                  <div>
-                    <div className="flex items-center justify-between mb-1">
-                      <label className="text-xs font-semibold text-purple-200 flex items-center gap-1">
-                        <Link2 className="h-3.5 w-3.5 text-purple-400" />
-                        <span>Porta / Interface na Origem</span>
-                      </label>
-                      {loadingSourceIfaces && (
-                        <span className="text-[10px] text-purple-400 flex items-center gap-1 animate-pulse">
-                          Buscando portas...
-                        </span>
-                      )}
-                    </div>
-                    <input
-                      type="text"
-                      list="source-interfaces-list"
-                      value={linkFormSourceIface}
-                      onChange={(e) => setLinkFormSourceIface(e.target.value)}
-                      placeholder="ex: 10GE0/1/1, ether1, XGE0/0/1"
-                      className="w-full px-3 py-2 bg-slate-950/70 border border-purple-500/40 rounded-lg text-xs text-white placeholder-slate-500 font-mono focus:outline-none focus:border-purple-400"
-                    />
-                    <datalist id="source-interfaces-list">
-                      {sourceInterfaces.map((iface) => (
-                        <option key={iface} value={iface} />
-                      ))}
-                    </datalist>
-
-                    {/* Quick suggestion chips */}
-                    {sourceInterfaces.length > 0 && (
-                      <div className="flex flex-wrap gap-1 mt-1.5 max-h-16 overflow-y-auto">
-                        {sourceInterfaces.slice(0, 6).map((iface) => (
-                          <button
-                            type="button"
-                            key={iface}
-                            onClick={() => setLinkFormSourceIface(iface)}
-                            className={`px-1.5 py-0.5 rounded text-[10px] font-mono cursor-pointer transition border ${
-                              linkFormSourceIface === iface
-                                ? 'bg-purple-600 text-white border-purple-400'
-                                : 'bg-[#161922] text-slate-300 border-[#242836] hover:bg-purple-900/40'
-                            }`}
-                          >
-                            {iface}
-                          </button>
-                        ))}
-                      </div>
-                    )}
+                <div className="p-3.5 rounded-xl bg-purple-950/20 border border-purple-500/30 space-y-3">
+                  <div className="flex items-center justify-between border-b border-purple-500/20 pb-2">
+                    <span className="text-xs font-bold text-purple-200 flex items-center gap-1.5">
+                      <Link2 className="h-4 w-4 text-purple-400" />
+                      <span>Interfaces Conectadas & Monitoramento Zabbix</span>
+                    </span>
+                    <span className="text-[10px] text-purple-300/70 font-mono">SNMP / JSON-RPC</span>
                   </div>
 
-                  <div>
-                    <div className="flex items-center justify-between mb-1">
-                      <label className="text-xs font-semibold text-purple-200 flex items-center gap-1">
-                        <Link2 className="h-3.5 w-3.5 text-purple-400" />
-                        <span>Porta / Interface no Destino</span>
-                      </label>
-                      {loadingTargetIfaces && (
-                        <span className="text-[10px] text-purple-400 flex items-center gap-1 animate-pulse">
-                          Buscando portas...
-                        </span>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div>
+                      <div className="flex items-center justify-between mb-1">
+                        <label className="text-xs font-semibold text-purple-200 flex items-center gap-1">
+                          <span>Porta na Origem (Ponta A)</span>
+                        </label>
+                        {loadingSourceIfaces && (
+                          <span className="text-[10px] text-purple-400 flex items-center gap-1 animate-pulse">
+                            Buscando portas...
+                          </span>
+                        )}
+                      </div>
+                      <input
+                        type="text"
+                        list="source-interfaces-list"
+                        value={linkFormSourceIface}
+                        onChange={(e) => setLinkFormSourceIface(e.target.value)}
+                        placeholder="ex: 10GE0/1/1, ether1, XGE0/0/1"
+                        className="w-full px-3 py-2 bg-slate-950/70 border border-purple-500/40 rounded-lg text-xs text-white placeholder-slate-500 font-mono focus:outline-none focus:border-purple-400"
+                      />
+                      <datalist id="source-interfaces-list">
+                        {sourceInterfaces.map((iface) => (
+                          <option key={iface} value={iface} />
+                        ))}
+                      </datalist>
+
+                      {/* Quick suggestion chips */}
+                      {sourceInterfaces.length > 0 && (
+                        <div className="flex flex-wrap gap-1 mt-1.5 max-h-16 overflow-y-auto">
+                          {sourceInterfaces.slice(0, 6).map((iface) => (
+                            <button
+                              type="button"
+                              key={iface}
+                              onClick={() => setLinkFormSourceIface(iface)}
+                              className={`px-1.5 py-0.5 rounded text-[10px] font-mono cursor-pointer transition border ${
+                                linkFormSourceIface === iface
+                                  ? 'bg-purple-600 text-white border-purple-400'
+                                  : 'bg-[#161922] text-slate-300 border-[#242836] hover:bg-purple-900/40'
+                              }`}
+                            >
+                              {iface}
+                            </button>
+                          ))}
+                        </div>
                       )}
                     </div>
-                    <input
-                      type="text"
-                      list="target-interfaces-list"
-                      value={linkFormTargetIface}
-                      onChange={(e) => setLinkFormTargetIface(e.target.value)}
-                      placeholder="ex: 10GE0/1/2, ether2, XGE0/0/2"
-                      className="w-full px-3 py-2 bg-slate-950/70 border border-purple-500/40 rounded-lg text-xs text-white placeholder-slate-500 font-mono focus:outline-none focus:border-purple-400"
-                    />
-                    <datalist id="target-interfaces-list">
-                      {targetInterfaces.map((iface) => (
-                        <option key={iface} value={iface} />
-                      ))}
-                    </datalist>
 
-                    {/* Quick suggestion chips */}
-                    {targetInterfaces.length > 0 && (
-                      <div className="flex flex-wrap gap-1 mt-1.5 max-h-16 overflow-y-auto">
-                        {targetInterfaces.slice(0, 6).map((iface) => (
-                          <button
-                            type="button"
-                            key={iface}
-                            onClick={() => setLinkFormTargetIface(iface)}
-                            className={`px-1.5 py-0.5 rounded text-[10px] font-mono cursor-pointer transition border ${
-                              linkFormTargetIface === iface
-                                ? 'bg-purple-600 text-white border-purple-400'
-                                : 'bg-[#161922] text-slate-300 border-[#242836] hover:bg-purple-900/40'
-                            }`}
-                          >
-                            {iface}
-                          </button>
-                        ))}
+                    <div>
+                      <div className="flex items-center justify-between mb-1">
+                        <label className="text-xs font-semibold text-purple-200 flex items-center gap-1">
+                          <span>Porta no Destino (Ponta B)</span>
+                        </label>
+                        {loadingTargetIfaces && (
+                          <span className="text-[10px] text-purple-400 flex items-center gap-1 animate-pulse">
+                            Buscando portas...
+                          </span>
+                        )}
                       </div>
-                    )}
+                      <input
+                        type="text"
+                        list="target-interfaces-list"
+                        value={linkFormTargetIface}
+                        onChange={(e) => setLinkFormTargetIface(e.target.value)}
+                        placeholder="ex: 10GE0/1/2, ether2, XGE0/0/2"
+                        className="w-full px-3 py-2 bg-slate-950/70 border border-purple-500/40 rounded-lg text-xs text-white placeholder-slate-500 font-mono focus:outline-none focus:border-purple-400"
+                      />
+                      <datalist id="target-interfaces-list">
+                        {targetInterfaces.map((iface) => (
+                          <option key={iface} value={iface} />
+                        ))}
+                      </datalist>
+
+                      {/* Quick suggestion chips */}
+                      {targetInterfaces.length > 0 && (
+                        <div className="flex flex-wrap gap-1 mt-1.5 max-h-16 overflow-y-auto">
+                          {targetInterfaces.slice(0, 6).map((iface) => (
+                            <button
+                              type="button"
+                              key={iface}
+                              onClick={() => setLinkFormTargetIface(iface)}
+                              className={`px-1.5 py-0.5 rounded text-[10px] font-mono cursor-pointer transition border ${
+                                linkFormTargetIface === iface
+                                  ? 'bg-purple-600 text-white border-purple-400'
+                                  : 'bg-[#161922] text-slate-300 border-[#242836] hover:bg-purple-900/40'
+                              }`}
+                            >
+                              {iface}
+                            </button>
+                          ))}
+                        </div>
+                      )}
+                    </div>
                   </div>
 
-                  <div className="col-span-1 sm:col-span-2 text-[10px] text-purple-300/80">
-                    💡 <strong>Alarme Automático:</strong> Se qualquer uma destas interfaces cair no Zabbix (webhook ou API), o enlace ficará vermelho no mapa instantaneamente.
+                  {/* Choice of Which Interface Measures Traffic */}
+                  <div className="pt-2 border-t border-purple-500/20">
+                    <label className="block text-xs font-semibold text-purple-200 mb-1.5 flex items-center gap-1.5">
+                      <Gauge className="h-3.5 w-3.5 text-cyan-400" />
+                      <span>Interface para Coleta de Tráfego:</span>
+                    </label>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                      <label
+                        className={`flex items-center gap-2 p-2 rounded-lg border cursor-pointer transition text-xs ${
+                          linkFormTrafficEnd === 'source'
+                            ? 'bg-purple-900/40 border-purple-400 text-white'
+                            : 'bg-[#161922] border-[#242836] text-slate-400 hover:text-slate-200'
+                        }`}
+                      >
+                        <input
+                          type="radio"
+                          name="traffic_end"
+                          value="source"
+                          checked={linkFormTrafficEnd === 'source'}
+                          onChange={() => setLinkFormTrafficEnd('source')}
+                          className="accent-purple-500 cursor-pointer"
+                        />
+                        <div className="min-w-0">
+                          <span className="font-semibold block truncate">Ponta A (Origem)</span>
+                          <span className="text-[10px] font-mono text-purple-300 block truncate">
+                            {linkFormSourceIface || 'Porta A não inf.'}
+                          </span>
+                        </div>
+                      </label>
+
+                      <label
+                        className={`flex items-center gap-2 p-2 rounded-lg border cursor-pointer transition text-xs ${
+                          linkFormTrafficEnd === 'target'
+                            ? 'bg-purple-900/40 border-purple-400 text-white'
+                            : 'bg-[#161922] border-[#242836] text-slate-400 hover:text-slate-200'
+                        }`}
+                      >
+                        <input
+                          type="radio"
+                          name="traffic_end"
+                          value="target"
+                          checked={linkFormTrafficEnd === 'target'}
+                          onChange={() => setLinkFormTrafficEnd('target')}
+                          className="accent-purple-500 cursor-pointer"
+                        />
+                        <div className="min-w-0">
+                          <span className="font-semibold block truncate">Ponta B (Destino)</span>
+                          <span className="text-[10px] font-mono text-purple-300 block truncate">
+                            {linkFormTargetIface || 'Porta B não inf.'}
+                          </span>
+                        </div>
+                      </label>
+                    </div>
+                  </div>
+
+                  <div className="text-[10px] text-purple-300/80 leading-relaxed pt-0.5">
+                    💡 O NetPulse coletará automaticamente o tráfego desta interface e exibirá sobre a linha do cabo. Se a porta cair no Zabbix, a linha do cabo mudará para <strong>Vermelho Neon</strong>.
                   </div>
                 </div>
 
@@ -2674,8 +3007,9 @@ export const BackboneMapView: React.FC<BackboneMapViewProps> = ({
                   </div>
 
                   <div>
-                    <label className="block text-xs font-medium text-slate-400 mb-1">
-                      Cor do Cabo no Mapa
+                    <label className="block text-xs font-medium text-slate-400 mb-1 flex items-center justify-between">
+                      <span>Cor do Cabo</span>
+                      <span className="text-[10px] text-slate-500 font-mono">{linkFormColor}</span>
                     </label>
                     <div className="flex items-center gap-1.5 pt-1">
                       {LINK_COLOR_PALETTE.map((pal) => (
@@ -2684,13 +3018,29 @@ export const BackboneMapView: React.FC<BackboneMapViewProps> = ({
                           type="button"
                           onClick={() => setLinkFormColor(pal.id)}
                           className={`w-6 h-6 rounded-full transition cursor-pointer border-2 ${
-                            linkFormColor === pal.id ? 'border-white scale-110 shadow-md' : 'border-transparent'
+                            linkFormColor === pal.id ? 'border-white scale-110 shadow-md ring-1 ring-white/40' : 'border-transparent hover:scale-105'
                           }`}
                           style={{ backgroundColor: pal.id }}
                           title={pal.label}
                         />
                       ))}
+                      {/* Custom color input */}
+                      <label
+                        className="w-6 h-6 rounded-full border border-slate-600 flex items-center justify-center cursor-pointer overflow-hidden hover:scale-105 transition"
+                        title="Cor personalizada (Clique para abrir paleta de cores)"
+                        style={{ backgroundColor: linkFormColor }}
+                      >
+                        <input
+                          type="color"
+                          value={linkFormColor}
+                          onChange={(e) => setLinkFormColor(e.target.value)}
+                          className="opacity-0 w-0 h-0 cursor-pointer"
+                        />
+                      </label>
                     </div>
+                    <span className="text-[9px] text-slate-500 block mt-1">
+                      🚨 Em caso de queda (DOWN), o cabo fica vermelho no mapa.
+                    </span>
                   </div>
                 </div>
 
