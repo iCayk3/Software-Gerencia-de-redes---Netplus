@@ -585,8 +585,8 @@ func parseTrafficFromCLI(out string, vendor models.VendorType) (float64, float64
 	}
 
 	if rx == 0 && tx == 0 {
-		reMkRx := regexp.MustCompile(`(?i)rx-bits-per-second:\s*([0-9\.]+)\s*([kKmMgGtT]?)`)
-		reMkTx := regexp.MustCompile(`(?i)tx-bits-per-second:\s*([0-9\.]+)\s*([kKmMgGtT]?)`)
+		reMkRx := regexp.MustCompile(`(?i)rx-bits-per-second:\s*([0-9\.]+)\s*([kKmMgGtT]?)(?:bps|bits/s)?`)
+		reMkTx := regexp.MustCompile(`(?i)tx-bits-per-second:\s*([0-9\.]+)\s*([kKmMgGtT]?)(?:bps|bits/s)?`)
 		if m := reMkRx.FindStringSubmatch(out); len(m) > 1 {
 			val, _ := strconv.ParseFloat(m[1], 64)
 			rx = val * parseUnitMultiplier(m[2])
@@ -631,6 +631,12 @@ func (c *ZabbixController) GetDeviceInterfaces(w http.ResponseWriter, r *http.Re
 		return
 	}
 
+	effectiveVendor := drivers.ResolveVendor(device)
+	if device.Vendor != effectiveVendor {
+		device.Vendor = effectiveVendor
+		_ = c.deviceStore.Update(*device)
+	}
+
 	ctx, cancel := context.WithTimeout(r.Context(), 15*time.Second)
 	defer cancel()
 
@@ -651,9 +657,9 @@ func (c *ZabbixController) GetDeviceInterfaces(w http.ResponseWriter, r *http.Re
 	// 2. If no interfaces from Zabbix, fallback to querying the router via SSH driver
 	if len(interfaces) == 0 && device.Username != "" && (device.Password != "" || device.AuthType == "key") {
 		if driver, err := drivers.NewDriver(device); err == nil {
-			cmd := getInterfaceCommand(device.Vendor)
+			cmd := getInterfaceCommand(effectiveVendor)
 			if out, err := driver.RunCommand(cmd); err == nil && len(out) > 0 {
-				ifaces := parseInterfacesFromCLI(out, device.Vendor)
+				ifaces := parseInterfacesFromCLI(out, effectiveVendor)
 				if len(ifaces) > 0 {
 					interfaces = ifaces
 					source = "router_ssh"
@@ -664,7 +670,7 @@ func (c *ZabbixController) GetDeviceInterfaces(w http.ResponseWriter, r *http.Re
 
 	// 3. Fallback to common vendor interface presets if device is offline or not yet connected
 	if len(interfaces) == 0 {
-		interfaces = getDefaultVendorInterfaces(device.Vendor)
+		interfaces = getDefaultVendorInterfaces(effectiveVendor)
 		source = "presets"
 	}
 
@@ -672,7 +678,7 @@ func (c *ZabbixController) GetDeviceInterfaces(w http.ResponseWriter, r *http.Re
 		"device_id":   device.ID,
 		"device_name": device.Name,
 		"host":        device.Host,
-		"vendor":      device.Vendor,
+		"vendor":      effectiveVendor,
 		"source":      source,
 		"interfaces":  interfaces,
 	})
@@ -683,9 +689,9 @@ func getInterfaceCommand(v models.VendorType) string {
 	case models.VendorHuawei:
 		return "display interface brief"
 	case models.VendorDatacom:
-		return "show interface brief"
+		return "show running-config interface"
 	case models.VendorMikrotikV6, models.VendorMikrotikV7:
-		return "/interface print brief"
+		return "/interface print terse without-paging"
 	default:
 		return "display interface brief"
 	}
@@ -696,9 +702,49 @@ func parseInterfacesFromCLI(output string, v models.VendorType) []string {
 	var result []string
 
 	lines := strings.Split(output, "\n")
-	rePort := regexp.MustCompile(`(?i)\b((?:10GE|40GE|100GE|25GE|GE|GigabitEthernet|FastEthernet|Ethernet|Eth-Trunk|XGE|ether|sfp|sfpplus|xe-|ge-|et-)[0-9\/\-\.:]+)\b`)
+
+	// MikroTik: terse print puts `name=ether1` or `name="sfp-sfpplus1"`
+	reMkName := regexp.MustCompile(`(?i)\bname=(?:"([^"]+)"|([^\s]+))`)
+
+	// Datacom: `interface gigabit-ethernet 1/1/1`
+	reDcIface := regexp.MustCompile(`(?i)^\s*interface\s+([a-zA-Z0-9\-]+(?:\s+[0-9\/\-]+)?)`)
+
+	// General / Huawei interface identifiers
+	rePort := regexp.MustCompile(`(?i)\b((?:100GE|40GE|25GE|10GE|GE|XGigabitEthernet|GigabitEthernet|FastEthernet|Ethernet|Eth-Trunk|Vlanif|ten-gigabit-ethernet|gigabit-ethernet|XGE|ether|sfp|sfpplus|sfp-sfpplus|xe-|ge-|et-|lag-)[0-9\/\-\.:]+)\b`)
 
 	for _, line := range lines {
+		// 1. Check MikroTik syntax if applicable
+		if v == models.VendorMikrotikV6 || v == models.VendorMikrotikV7 || strings.Contains(line, "name=") {
+			if m := reMkName.FindStringSubmatch(line); len(m) > 1 {
+				name := m[1]
+				if name == "" {
+					name = m[2]
+				}
+				clean := cleanCandidate(name)
+				if isValidIface(clean) && !seen[clean] {
+					seen[clean] = true
+					result = append(result, clean)
+					continue
+				}
+			}
+		}
+
+		// 2. Check Datacom DmOS syntax
+		if v == models.VendorDatacom || strings.Contains(line, "interface gigabit-ethernet") || strings.Contains(line, "interface ten-gigabit-ethernet") {
+			if m := reDcIface.FindStringSubmatch(line); len(m) > 1 {
+				name := strings.TrimSpace(m[1])
+				// Normalize "gigabit-ethernet 1/1/1" -> "gigabit-ethernet-1/1/1"
+				name = strings.ReplaceAll(name, " ", "-")
+				clean := cleanCandidate(name)
+				if isValidIface(clean) && !seen[clean] {
+					seen[clean] = true
+					result = append(result, clean)
+					continue
+				}
+			}
+		}
+
+		// 3. Fallback to standard interface identifiers
 		matches := rePort.FindAllString(line, -1)
 		for _, m := range matches {
 			clean := cleanCandidate(m)
@@ -723,13 +769,16 @@ func getDefaultVendorInterfaces(v models.VendorType) []string {
 		}
 	case models.VendorDatacom:
 		return []string{
-			"ge-1/1/1", "ge-1/1/2", "xe-1/1/1", "xe-1/1/2",
+			"gigabit-ethernet-1/1/1", "gigabit-ethernet-1/1/2", "gigabit-ethernet-1/1/3", "gigabit-ethernet-1/1/4",
+			"gigabit-ethernet-1/1/5", "gigabit-ethernet-1/1/6", "gigabit-ethernet-1/1/7", "gigabit-ethernet-1/1/8",
+			"ten-gigabit-ethernet-1/1/1", "ten-gigabit-ethernet-1/1/2", "ten-gigabit-ethernet-1/1/3", "ten-gigabit-ethernet-1/1/4",
 			"lag-1", "lag-2",
 		}
 	case models.VendorMikrotikV6, models.VendorMikrotikV7:
 		return []string{
 			"ether1", "ether2", "ether3", "ether4", "ether5",
-			"sfp-sfpplus1", "sfp-sfpplus2", "sfp-sfpplus3", "sfp-sfpplus4",
+			"ether6", "ether7", "ether8", "ether9", "ether10",
+			"sfp1", "sfp-sfpplus1", "sfp-sfpplus2",
 			"bonding1",
 		}
 	default:

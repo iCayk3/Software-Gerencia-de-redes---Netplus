@@ -62,16 +62,43 @@ type Client struct {
 	sessionID  string
 }
 
+// NormalizeZabbixURL cleans up and fixes the Zabbix API endpoint URL.
+func NormalizeZabbixURL(rawURL string) string {
+	rawURL = strings.TrimSpace(rawURL)
+	rawURL = strings.TrimRight(rawURL, "/")
+
+	if rawURL == "" {
+		return ""
+	}
+
+	// If protocol is missing, default to http:// (or https:// if port is 443)
+	if !strings.HasPrefix(rawURL, "http://") && !strings.HasPrefix(rawURL, "https://") {
+		if strings.Contains(rawURL, ":443") || strings.Contains(rawURL, ":8443") {
+			rawURL = "https://" + rawURL
+		} else {
+			rawURL = "http://" + rawURL
+		}
+	}
+
+	// Cloudflare and standard reverse proxies on port 8080/8880 serve plain HTTP, not TLS.
+	// If user typed https://host:8080, auto-switch to http://host:8080 to prevent SSL wrong version number.
+	if strings.HasPrefix(rawURL, "https://") && (strings.Contains(rawURL, ":8080") || strings.Contains(rawURL, ":8880")) {
+		rawURL = "http://" + strings.TrimPrefix(rawURL, "https://")
+	}
+
+	if !strings.HasSuffix(rawURL, "api_jsonrpc.php") {
+		rawURL = rawURL + "/api_jsonrpc.php"
+	}
+	return rawURL
+}
+
 // NewClient creates a new Zabbix API client from configuration.
 func NewClient(cfg models.ZabbixConfig) (*Client, error) {
 	if cfg.URL == "" {
 		return nil, errors.New("zabbix URL cannot be empty")
 	}
 
-	rawURL := strings.TrimRight(cfg.URL, "/")
-	if !strings.HasSuffix(rawURL, "api_jsonrpc.php") {
-		rawURL = rawURL + "/api_jsonrpc.php"
-	}
+	rawURL := NormalizeZabbixURL(cfg.URL)
 
 	parsed, err := url.Parse(rawURL)
 	if err != nil {
@@ -122,11 +149,28 @@ func (c *Client) doRPC(ctx context.Context, method string, params interface{}, u
 	}
 
 	httpReq.Header.Set("Content-Type", "application/json-rpc")
+	httpReq.Header.Set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
 	if c.apiToken != "" {
 		httpReq.Header.Set("Authorization", "Bearer "+c.apiToken)
 	}
 
 	resp, err := c.httpClient.Do(httpReq)
+	// If HTTPS failed due to SSL wrong version number (common when port 8080 is used), fallback to HTTP
+	if err != nil && strings.HasPrefix(c.endpoint, "https://") {
+		httpEndpoint := "http://" + strings.TrimPrefix(c.endpoint, "https://")
+		if retryReq, retryErr := http.NewRequestWithContext(ctx, "POST", httpEndpoint, bytes.NewReader(data)); retryErr == nil {
+			retryReq.Header.Set("Content-Type", "application/json-rpc")
+			retryReq.Header.Set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
+			if c.apiToken != "" {
+				retryReq.Header.Set("Authorization", "Bearer "+c.apiToken)
+			}
+			if retryResp, retryDoErr := c.httpClient.Do(retryReq); retryDoErr == nil {
+				c.endpoint = httpEndpoint // Update endpoint permanently
+				resp = retryResp
+				err = nil
+			}
+		}
+	}
 	if err != nil {
 		return nil, fmt.Errorf("zabbix request failed: %w", err)
 	}
@@ -333,9 +377,9 @@ var (
 	// Matches names like "Interface 10GE0/1/1: Operational status" or "Interface GigabitEthernet0/0/1(Uplink)"
 	reInterfaceItemName = regexp.MustCompile(`(?i)(?:Interface|Porta|Port)\s+([A-Za-z0-9\/\-\.:]+)`)
 	// Matches key patterns like net.if.status[10GE0/1/1], net.if.in["GigabitEthernet0/0/2"], ifOperStatus[Eth-Trunk1]
-	reInterfaceKey = regexp.MustCompile(`(?i)(?:net\.if\.[a-z_]+|if(?:OperStatus|InOctets|OutOctets|Speed|Alias))\s*\["?'?([^"'\],]+)`)
+	reInterfaceKey = regexp.MustCompile(`(?i)(?:net\.if\.[a-z_]+|if(?:OperStatus|InOctets|OutOctets|Speed|Alias|HCInOctets|HCOutOctets))\s*\["?'?([^"'\],]+)`)
 	// Standard interface identifiers: 10GE0/1/1, XGE0/0/1, GigabitEthernet0/0/1, Eth-Trunk1, ether1, sfp-sfpplus1
-	reStandardIface = regexp.MustCompile(`(?i)\b((?:10GE|40GE|100GE|25GE|GE|GigabitEthernet|FastEthernet|Ethernet|Eth-Trunk|XGE|ether|sfp|sfpplus|vlan|xe-|ge-|et-)[0-9\/\-\.:]+)\b`)
+	reStandardIface = regexp.MustCompile(`(?i)\b((?:100GE|40GE|25GE|10GE|GE|XGigabitEthernet|GigabitEthernet|FastEthernet|Ethernet|Eth-Trunk|Vlanif|ten-gigabit-ethernet|gigabit-ethernet|XGE|ether|sfp|sfpplus|sfp-sfpplus|vlan|xe-|ge-|et-|lag-)[0-9\/\-\.:]+)\b`)
 )
 
 // ExtractInterfacesFromItems extracts clean, normalized interface names from Zabbix items.
