@@ -232,9 +232,29 @@ export const BackboneMapView: React.FC<BackboneMapViewProps> = ({
     }, 800)
   }
 
+  // Close API key modal on Escape
+  useEffect(() => {
+    if (!isApiKeyModalOpen) return
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setIsApiKeyModalOpen(false)
+    }
+    window.addEventListener('keydown', handleKeyDown)
+    return () => window.removeEventListener('keydown', handleKeyDown)
+  }, [isApiKeyModalOpen])
+
   // Device coordinate placement mode
   const [placingDeviceId, setPlacingDeviceId] = useState<string | null>(null)
   const [savingLocation, setSavingLocation] = useState(false)
+
+  // Cancel placement mode on Escape
+  useEffect(() => {
+    if (!placingDeviceId) return
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setPlacingDeviceId(null)
+    }
+    window.addEventListener('keydown', handleKeyDown)
+    return () => window.removeEventListener('keydown', handleKeyDown)
+  }, [placingDeviceId])
 
   // Classify devices into placed on map vs unplaced
   const placedDevices = useMemo(() => {
@@ -401,6 +421,10 @@ export const BackboneMapView: React.FC<BackboneMapViewProps> = ({
   const placingDeviceIdRef = useRef<string | null>(placingDeviceId)
   useEffect(() => {
     placingDeviceIdRef.current = placingDeviceId
+    const timer = setTimeout(() => {
+      mapInstanceRef.current?.invalidateSize()
+    }, 50)
+    return () => clearTimeout(timer)
   }, [placingDeviceId])
 
   // Update markers when visibleDevices changes
@@ -755,9 +779,9 @@ export const BackboneMapView: React.FC<BackboneMapViewProps> = ({
       )}
 
       {/* Main Map Box & Lateral Overlay */}
-      <div className="relative rounded-2xl border border-[#242836] overflow-hidden bg-[#13151D] shadow-2xl h-[620px] sm:h-[680px]">
+      <div className={`relative rounded-2xl border border-[#242836] overflow-hidden bg-[#13151D] shadow-2xl h-[620px] sm:h-[680px] ${placingDeviceId ? 'cursor-crosshair [&_.leaflet-container]:!cursor-crosshair [&_.leaflet-grab]:!cursor-crosshair' : ''}`}>
         {/* Leaflet DOM container */}
-        <div ref={mapContainerRef} className={`w-full h-full z-0 ${placingDeviceId ? 'cursor-crosshair' : ''}`} />
+        <div ref={mapContainerRef} className="w-full h-full z-0" />
 
         {/* Floating Unplaced Devices Drawer (if any devices lack coordinates) */}
         {unplacedDevices.length > 0 && !placingDeviceId && (
@@ -936,7 +960,11 @@ export const BackboneMapView: React.FC<BackboneMapViewProps> = ({
               {onEditDevice && (
                 <button
                   type="button"
-                  onClick={() => onEditDevice(selectedDevice)}
+                  onClick={() => {
+                    const dev = selectedDevice
+                    setSelectedDevice(null)
+                    onEditDevice(dev)
+                  }}
                   className="p-1.5 rounded-xl bg-[#161922] hover:bg-[#202738] text-slate-300 hover:text-white border border-[#242836] transition cursor-pointer"
                   title="Editar dados e coordenadas deste equipamento"
                 >
@@ -950,10 +978,15 @@ export const BackboneMapView: React.FC<BackboneMapViewProps> = ({
 
       {/* Google Maps API Key Modal */}
       {isApiKeyModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-xs p-4 animate-in fade-in duration-150">
-          <div className="bg-[#1C202C] border border-[#2D3345] rounded-2xl w-full max-w-lg shadow-2xl overflow-hidden animate-in zoom-in-95 duration-150">
+        <div
+          onClick={(e) => {
+            if (e.target === e.currentTarget) setIsApiKeyModalOpen(false)
+          }}
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 backdrop-blur-xs p-3 sm:p-4 overflow-y-auto animate-in fade-in duration-150"
+        >
+          <div className="bg-[#1C202C] border border-[#2D3345] rounded-2xl w-full max-w-lg shadow-2xl overflow-hidden my-auto max-h-[90vh] flex flex-col animate-in zoom-in-95 duration-150">
             {/* Modal Header */}
-            <div className="p-5 border-b border-[#242836] flex items-center justify-between">
+            <div className="p-4 sm:p-5 border-b border-[#242836] flex items-center justify-between shrink-0 bg-[#161922]">
               <div className="flex items-center gap-2.5">
                 <div className="h-9 w-9 rounded-xl bg-amber-950/40 border border-amber-600/40 flex items-center justify-center text-amber-400">
                   <KeyRound className="h-5 w-5" />
@@ -966,13 +999,15 @@ export const BackboneMapView: React.FC<BackboneMapViewProps> = ({
               <button
                 type="button"
                 onClick={() => setIsApiKeyModalOpen(false)}
-                className="text-slate-400 hover:text-slate-200 text-lg cursor-pointer p-1 rounded-lg hover:bg-[#161922]"
+                className="text-slate-400 hover:text-white p-1.5 rounded-lg hover:bg-[#1C202C] transition cursor-pointer"
+                title="Fechar"
               >
                 <X className="h-4 w-4" />
               </button>
             </div>
 
-            <form onSubmit={handleSaveApiKey} className="p-6 space-y-4">
+            <form onSubmit={handleSaveApiKey} className="flex flex-col flex-1 min-h-0 overflow-hidden">
+              <div className="p-4 sm:p-6 space-y-4 overflow-y-auto flex-1">
               {/* Informative Status Banner */}
               <div className="p-3.5 rounded-xl bg-[#161922] border border-[#242836] space-y-2">
                 <div className="flex items-center justify-between">
@@ -1042,8 +1077,10 @@ export const BackboneMapView: React.FC<BackboneMapViewProps> = ({
                 </div>
               )}
 
+              </div>
+
               {/* Modal Actions */}
-              <div className="pt-3 border-t border-[#242836] flex items-center justify-between gap-2">
+              <div className="p-4 border-t border-[#242836] flex items-center justify-between gap-2 shrink-0 bg-[#161922]">
                 <div>
                   {googleApiKey && (
                     <button
@@ -1059,7 +1096,7 @@ export const BackboneMapView: React.FC<BackboneMapViewProps> = ({
                   <button
                     type="button"
                     onClick={() => setIsApiKeyModalOpen(false)}
-                    className="px-4 py-2 bg-[#161922] hover:bg-[#202738] text-slate-300 rounded-xl text-xs font-medium cursor-pointer border border-[#242836]"
+                    className="px-4 py-2 bg-[#1E2330] hover:bg-[#252C3D] text-slate-300 rounded-xl text-xs font-medium cursor-pointer border border-[#2D3345] transition"
                   >
                     Fechar
                   </button>

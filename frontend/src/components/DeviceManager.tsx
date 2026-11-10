@@ -18,6 +18,7 @@ import {
   MapPin,
   Locate,
   LayoutGrid,
+  X,
 } from 'lucide-react'
 import {
   fetchDevices,
@@ -112,6 +113,18 @@ export const DeviceManager: React.FC<DeviceManagerProps> = ({
     window.addEventListener('bgp_master_changed', handler)
     return () => window.removeEventListener('bgp_master_changed', handler)
   }, [])
+
+  // Close modal with Escape key
+  useEffect(() => {
+    if (!isModalOpen) return
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        setIsModalOpen(false)
+      }
+    }
+    window.addEventListener('keydown', handleKeyDown)
+    return () => window.removeEventListener('keydown', handleKeyDown)
+  }, [isModalOpen])
 
   // Geolocation capture via browser API
   const handleCaptureLocation = () => {
@@ -662,41 +675,51 @@ export const DeviceManager: React.FC<DeviceManagerProps> = ({
 
       {/* Add / Edit Device Modal */}
       {isModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-xs p-4">
-          <div className="bg-slate-900 border border-slate-800 rounded-2xl w-full max-w-lg shadow-2xl overflow-hidden animate-in fade-in zoom-in-95">
-            <div className="p-5 border-b border-slate-800 flex items-center justify-between">
-              <h3 className="font-semibold text-slate-100 flex items-center gap-2">
+        <div
+          onClick={(e) => {
+            if (e.target === e.currentTarget) setIsModalOpen(false)
+          }}
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 backdrop-blur-xs p-3 sm:p-4 overflow-y-auto"
+        >
+          <div className="bg-[#1C202C] border border-[#2D3345] rounded-2xl w-full max-w-xl shadow-2xl overflow-hidden my-auto max-h-[90vh] flex flex-col animate-in fade-in zoom-in-95 duration-150">
+            {/* Pinned Modal Header */}
+            <div className="p-4 sm:p-5 border-b border-[#242836] flex items-center justify-between shrink-0 bg-[#161922]">
+              <h3 className="font-semibold text-slate-100 flex items-center gap-2 text-sm sm:text-base">
                 <Server className="h-5 w-5 text-cyan-400" />
                 <span>{editingDevice ? 'Editar Equipamento' : 'Novo Equipamento'}</span>
               </h3>
               <button
+                type="button"
                 onClick={() => setIsModalOpen(false)}
-                className="text-slate-400 hover:text-slate-200 text-lg cursor-pointer"
+                className="text-slate-400 hover:text-white p-1.5 rounded-lg hover:bg-[#1C202C] transition cursor-pointer"
+                title="Fechar (Esc)"
               >
-                &times;
+                <X className="h-5 w-5" />
               </button>
             </div>
 
-            <form onSubmit={handleSave} className="p-6 space-y-4">
-              {/* Tenant Selector for SuperAdmin */}
-              {isSuperAdmin && (
-                <div>
-                  <label className="block text-xs font-medium text-slate-400 mb-1">
-                    Empresa Cliente (Tenant Proprietário) *
-                  </label>
-                  <select
-                    value={formTenantId}
-                    onChange={(e) => setFormTenantId(e.target.value)}
-                    className="w-full px-3 py-2 bg-slate-950/70 border border-slate-700 rounded-lg text-xs text-slate-100 focus:outline-none focus:border-cyan-500 cursor-pointer"
-                  >
-                    {tenants.map((t) => (
-                      <option key={t.id} value={t.id}>
-                        🏢 {t.name} {t.asn ? `(AS${t.asn})` : ''}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-              )}
+            <form onSubmit={handleSave} className="flex flex-col flex-1 min-h-0 overflow-hidden">
+              {/* Scrollable Form Body */}
+              <div className="p-4 sm:p-6 space-y-4 overflow-y-auto flex-1">
+                {/* Tenant Selector for SuperAdmin */}
+                {isSuperAdmin && (
+                  <div>
+                    <label className="block text-xs font-medium text-slate-400 mb-1">
+                      Empresa Cliente (Tenant Proprietário) *
+                    </label>
+                    <select
+                      value={formTenantId}
+                      onChange={(e) => setFormTenantId(e.target.value)}
+                      className="w-full px-3 py-2 bg-slate-950/70 border border-slate-700 rounded-lg text-xs text-slate-100 focus:outline-none focus:border-cyan-500 cursor-pointer"
+                    >
+                      {tenants.map((t) => (
+                        <option key={t.id} value={t.id}>
+                          🏢 {t.name} {t.asn ? `(AS${t.asn})` : ''}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                )}
 
               {/* Papel no Backbone */}
               <div className="space-y-1.5">
@@ -963,23 +986,25 @@ export const DeviceManager: React.FC<DeviceManagerProps> = ({
                   O sistema desativa automaticamente a paginação de tela (<code className="bg-slate-900 px-1 py-0.5 rounded">screen-length 0 temporary</code> no Huawei e <code className="bg-slate-900 px-1 py-0.5 rounded">terminal length 0</code> no Datacom).
                 </span>
               </div>
+            </div>
 
-              <div className="pt-4 border-t border-slate-800 flex items-center justify-end gap-3">
-                <button
-                  type="button"
-                  onClick={() => setIsModalOpen(false)}
-                  className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-lg text-xs font-medium cursor-pointer"
-                >
-                  Cancelar
-                </button>
-                <button
-                  type="submit"
-                  className="px-5 py-2 bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-500 hover:to-blue-500 text-white rounded-lg text-xs font-medium shadow-md shadow-cyan-600/20 cursor-pointer"
-                >
-                  Salvar Equipamento
-                </button>
-              </div>
-            </form>
+            {/* Pinned Modal Footer */}
+            <div className="p-4 border-t border-[#242836] flex items-center justify-end gap-3 shrink-0 bg-[#161922]">
+              <button
+                type="button"
+                onClick={() => setIsModalOpen(false)}
+                className="px-4 py-2 bg-[#1E2330] hover:bg-[#252C3D] text-slate-300 rounded-xl text-xs font-medium cursor-pointer border border-[#2D3345] transition"
+              >
+                Cancelar
+              </button>
+              <button
+                type="submit"
+                className="px-5 py-2 bg-[#3B5B8C] hover:bg-[#4A72B2] text-white rounded-xl text-xs font-semibold shadow-sm cursor-pointer transition"
+              >
+                Salvar Equipamento
+              </button>
+            </div>
+          </form>
           </div>
         </div>
       )}
