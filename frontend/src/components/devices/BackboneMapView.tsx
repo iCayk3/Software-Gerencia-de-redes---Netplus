@@ -479,6 +479,8 @@ export const BackboneMapView: React.FC<BackboneMapViewProps> = ({
   const linkTargetIdRef = useRef(linkFormTargetId)
   const linkWaypointsRef = useRef(linkFormWaypoints)
   const handleRecalculateRouteRef = useRef(handleRecalculateRoute)
+  const onUpdateCoordinatesRef = useRef(onUpdateCoordinates)
+  const hasAutoFittedRef = useRef(false)
 
   useEffect(() => {
     placingDeviceIdRef.current = placingDeviceId
@@ -489,6 +491,7 @@ export const BackboneMapView: React.FC<BackboneMapViewProps> = ({
     linkTargetIdRef.current = linkFormTargetId
     linkWaypointsRef.current = linkFormWaypoints
     handleRecalculateRouteRef.current = handleRecalculateRoute
+    onUpdateCoordinatesRef.current = onUpdateCoordinates
   }, [
     placingDeviceId,
     isAddWaypointMode,
@@ -498,6 +501,7 @@ export const BackboneMapView: React.FC<BackboneMapViewProps> = ({
     linkFormTargetId,
     linkFormWaypoints,
     handleRecalculateRoute,
+    onUpdateCoordinates,
   ])
 
   // Invalidate map size when placement or edit mode toggles
@@ -553,11 +557,11 @@ export const BackboneMapView: React.FC<BackboneMapViewProps> = ({
     map.on('click', async (e: L.LeafletMouseEvent) => {
       // 1. Placing device coordinates
       const activePlacingId = placingDeviceIdRef.current
-      if (activePlacingId && onUpdateCoordinates) {
+      if (activePlacingId && onUpdateCoordinatesRef.current) {
         const { lat, lng } = e.latlng
         setSavingLocation(true)
         try {
-          await onUpdateCoordinates(activePlacingId, Number(lat.toFixed(6)), Number(lng.toFixed(6)))
+          await onUpdateCoordinatesRef.current(activePlacingId, Number(lat.toFixed(6)), Number(lng.toFixed(6)))
           setPlacingDeviceId(null)
         } finally {
           setSavingLocation(false)
@@ -625,7 +629,7 @@ export const BackboneMapView: React.FC<BackboneMapViewProps> = ({
       tileLayerRef.current = null
       setMapReady(false)
     }
-  }, [onUpdateCoordinates, placedDevices])
+  }, [])
 
   // Synchronize dynamic tile layer
   useEffect(() => {
@@ -656,7 +660,7 @@ export const BackboneMapView: React.FC<BackboneMapViewProps> = ({
   useEffect(() => {
     const map = mapInstanceRef.current
     const layer = linksLayerRef.current
-    if (!map || !layer) return
+    if (!map || !layer || !mapReady) return
 
     layer.clearLayers()
 
@@ -708,13 +712,13 @@ export const BackboneMapView: React.FC<BackboneMapViewProps> = ({
       glowLine.addTo(layer)
       coreLine.addTo(layer)
     })
-  }, [links, selectedLink])
+  }, [links, selectedLink, mapReady])
 
   // Render Interactive Edit Layer (drafting new links or modifying existing cables)
   useEffect(() => {
     const map = mapInstanceRef.current
     const layer = editLayerRef.current
-    if (!map || !layer) return
+    if (!map || !layer || !mapReady) return
 
     layer.clearLayers()
 
@@ -855,13 +859,14 @@ export const BackboneMapView: React.FC<BackboneMapViewProps> = ({
     linkFormSourceId,
     linkFormTargetId,
     handleRecalculateRoute,
+    mapReady,
   ])
 
   // Update device markers
   useEffect(() => {
     const map = mapInstanceRef.current
     const layer = markersLayerRef.current
-    if (!map || !layer) return
+    if (!map || !layer || !mapReady) return
 
     layer.clearLayers()
     const bounds = L.latLngBounds([])
@@ -919,8 +924,8 @@ export const BackboneMapView: React.FC<BackboneMapViewProps> = ({
       marker.on('dragend', async (e: L.LeafletEvent) => {
         const target = e.target as L.Marker
         const newPos = target.getLatLng()
-        if (onUpdateCoordinates) {
-          await onUpdateCoordinates(
+        if (onUpdateCoordinatesRef.current) {
+          await onUpdateCoordinatesRef.current(
             dev.id,
             Number(newPos.lat.toFixed(6)),
             Number(newPos.lng.toFixed(6))
@@ -929,10 +934,11 @@ export const BackboneMapView: React.FC<BackboneMapViewProps> = ({
       })
     })
 
-    if (visibleDevices.length > 0 && mapReady && !mapInstanceRef.current?.getZoom()) {
+    if (visibleDevices.length > 0 && mapReady && !hasAutoFittedRef.current) {
+      hasAutoFittedRef.current = true
       map.fitBounds(bounds, { padding: [60, 60], maxZoom: 14 })
     }
-  }, [visibleDevices, devices, onUpdateCoordinates, mapReady])
+  }, [visibleDevices, devices, mapReady])
 
   // Reset zoom view
   const handleResetView = () => {
@@ -1016,6 +1022,9 @@ export const BackboneMapView: React.FC<BackboneMapViewProps> = ({
       setIsAddWaypointMode(false)
       setIsManualDrawMode(false)
       setEditingLinkTarget(null)
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'Erro ao salvar enlace'
+      alert(msg)
     } finally {
       setIsSavingLink(false)
     }
@@ -1056,6 +1065,9 @@ export const BackboneMapView: React.FC<BackboneMapViewProps> = ({
       setSelectedLink(updated)
       setIsEditingLinkPath(false)
       setEditingLinkTarget(null)
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'Erro ao salvar traçado do enlace'
+      alert(msg)
     } finally {
       setIsSavingLink(false)
     }

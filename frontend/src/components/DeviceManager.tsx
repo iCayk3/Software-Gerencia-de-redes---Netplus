@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useCallback } from 'react'
 import {
   Server,
   Plus,
@@ -145,7 +145,7 @@ export const DeviceManager: React.FC<DeviceManagerProps> = ({
   }
 
   // Update coordinates directly from map placement
-  const handleUpdateCoordinates = async (deviceId: string, lat: number, lng: number) => {
+  const handleUpdateCoordinates = useCallback(async (deviceId: string, lat: number, lng: number) => {
     try {
       const dev = devices.find((d) => d.id === deviceId)
       if (dev) {
@@ -171,7 +171,7 @@ export const DeviceManager: React.FC<DeviceManagerProps> = ({
       const msg = err instanceof Error ? err.message : 'Erro ao atualizar coordenadas'
       setError(msg)
     }
-  }
+  }, [devices])
 
   // Testing SSH state per device
   const [testingId, setTestingId] = useState<string | null>(null)
