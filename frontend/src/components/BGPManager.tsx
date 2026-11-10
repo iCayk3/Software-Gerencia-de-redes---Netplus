@@ -260,30 +260,40 @@ export const BGPManager: React.FC = () => {
     loadBGPSessions(devId)
   }
 
-  // Filtered Sessions
-  const filteredSessions = sessions.filter((s) => {
-    const q = search.toLowerCase()
-    const holder = getASHolder(s.remote_as).toLowerCase()
-    const sessionDesc = getSessionDescription(s).toLowerCase()
-    const matchesSearch =
-      s.peer_ip.toLowerCase().includes(q) ||
-      s.remote_as.toLowerCase().includes(q) ||
-      s.device_name.toLowerCase().includes(q) ||
-      holder.includes(q) ||
-      sessionDesc.includes(q) ||
-      (s.description && s.description.toLowerCase().includes(q))
+  // Filtered & Deterministically Sorted Sessions (stable order, cards never jump when edited)
+  const filteredSessions = sessions
+    .filter((s) => {
+      const q = search.toLowerCase()
+      const holder = getASHolder(s.remote_as).toLowerCase()
+      const sessionDesc = getSessionDescription(s).toLowerCase()
+      const matchesSearch =
+        s.peer_ip.toLowerCase().includes(q) ||
+        s.remote_as.toLowerCase().includes(q) ||
+        s.device_name.toLowerCase().includes(q) ||
+        holder.includes(q) ||
+        sessionDesc.includes(q) ||
+        (s.description && s.description.toLowerCase().includes(q))
 
-    if (!matchesSearch) return false
+      if (!matchesSearch) return false
 
-    const isEstablished = s.state.toLowerCase() === 'established'
-    if (statusFilter === 'established' && !isEstablished) return false
-    if (statusFilter === 'down' && isEstablished) return false
+      const isEstablished = s.state.toLowerCase() === 'established'
+      if (statusFilter === 'established' && !isEstablished) return false
+      if (statusFilter === 'down' && isEstablished) return false
 
-    if (sourceFilter === 'bmp' && s.telemetry_source !== 'bmp') return false
-    if (sourceFilter === 'ssh' && s.telemetry_source === 'bmp') return false
+      if (sourceFilter === 'bmp' && s.telemetry_source !== 'bmp') return false
+      if (sourceFilter === 'ssh' && s.telemetry_source === 'bmp') return false
 
-    return true
-  })
+      return true
+    })
+    .sort((a, b) => {
+      if (a.device_name !== b.device_name) {
+        return (a.device_name || '').localeCompare(b.device_name || '')
+      }
+      if (a.remote_as !== b.remote_as) {
+        return (a.remote_as || '').localeCompare(b.remote_as || '')
+      }
+      return (a.peer_ip || '').localeCompare(b.peer_ip || '')
+    })
 
   // Summary Metrics
   const totalSessions = sessions.length

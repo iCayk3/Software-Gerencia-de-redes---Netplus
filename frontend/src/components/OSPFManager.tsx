@@ -94,16 +94,26 @@ export const OSPFManager: React.FC<OSPFManagerProps> = ({
     setTimeout(() => setCopiedCommand(null), 2500)
   }
 
-  const filteredNeighbors = neighbors.filter((n) => {
-    const q = search.toLowerCase()
-    return (
-      n.neighbor_id.toLowerCase().includes(q) ||
-      n.ip.toLowerCase().includes(q) ||
-      n.interface.toLowerCase().includes(q) ||
-      n.device_name.toLowerCase().includes(q) ||
-      n.area.toLowerCase().includes(q)
-    )
-  })
+  const filteredNeighbors = neighbors
+    .filter((n) => {
+      const q = search.toLowerCase()
+      return (
+        n.neighbor_id.toLowerCase().includes(q) ||
+        n.ip.toLowerCase().includes(q) ||
+        n.interface.toLowerCase().includes(q) ||
+        n.device_name.toLowerCase().includes(q) ||
+        n.area.toLowerCase().includes(q)
+      )
+    })
+    .sort((a, b) => {
+      if (a.device_name !== b.device_name) {
+        return (a.device_name || '').localeCompare(b.device_name || '')
+      }
+      if (a.neighbor_id !== b.neighbor_id) {
+        return (a.neighbor_id || '').localeCompare(b.neighbor_id || '')
+      }
+      return (a.interface || '').localeCompare(b.interface || '')
+    })
 
   // Metrics
   const totalNeighbors = neighbors.length

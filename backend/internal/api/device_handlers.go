@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"net/http"
+	"sort"
 	"sync"
 	"time"
 
@@ -538,6 +539,17 @@ func (c *DeviceController) GetAllBGP(w http.ResponseWriter, r *http.Request) {
 	}
 
 	wg.Wait()
+
+	sort.Slice(allSessions, func(i, j int) bool {
+		if allSessions[i].DeviceName != allSessions[j].DeviceName {
+			return allSessions[i].DeviceName < allSessions[j].DeviceName
+		}
+		if allSessions[i].RemoteAS != allSessions[j].RemoteAS {
+			return allSessions[i].RemoteAS < allSessions[j].RemoteAS
+		}
+		return allSessions[i].PeerIP < allSessions[j].PeerIP
+	})
+
 	WriteJSON(w, http.StatusOK, allSessions)
 }
 
@@ -560,6 +572,15 @@ func (c *DeviceController) GetAllOSPF(w http.ResponseWriter, r *http.Request) {
 					filtered = append(filtered, n)
 				}
 			}
+			sort.Slice(filtered, func(i, j int) bool {
+				if filtered[i].DeviceName != filtered[j].DeviceName {
+					return filtered[i].DeviceName < filtered[j].DeviceName
+				}
+				if filtered[i].NeighborID != filtered[j].NeighborID {
+					return filtered[i].NeighborID < filtered[j].NeighborID
+				}
+				return filtered[i].Interface < filtered[j].Interface
+			})
 			WriteJSON(w, http.StatusOK, filtered)
 			return
 		}
@@ -592,5 +613,16 @@ func (c *DeviceController) GetAllOSPF(w http.ResponseWriter, r *http.Request) {
 	}
 
 	wg.Wait()
+
+	sort.Slice(allNeighbors, func(i, j int) bool {
+		if allNeighbors[i].DeviceName != allNeighbors[j].DeviceName {
+			return allNeighbors[i].DeviceName < allNeighbors[j].DeviceName
+		}
+		if allNeighbors[i].NeighborID != allNeighbors[j].NeighborID {
+			return allNeighbors[i].NeighborID < allNeighbors[j].NeighborID
+		}
+		return allNeighbors[i].Interface < allNeighbors[j].Interface
+	})
+
 	WriteJSON(w, http.StatusOK, allNeighbors)
 }

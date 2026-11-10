@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react'
+import React, { useState, useEffect, useCallback, useMemo } from 'react'
 import {
   Server,
   Plus,
@@ -109,6 +109,17 @@ export const DeviceManager: React.FC<DeviceManagerProps> = ({
   const [formSite, setFormSite] = useState('')
   const [formCity, setFormCity] = useState('')
   const [, setMasterTrigger] = useState(0)
+
+  // Maintain stable, deterministic order so cards never jump around when edited
+  const sortedDevices = useMemo(() => {
+    return [...devices].sort((a, b) => {
+      const timeA = new Date(a.created_at || 0).getTime()
+      const timeB = new Date(b.created_at || 0).getTime()
+      if (timeA !== timeB) return timeA - timeB
+      if (a.name !== b.name) return (a.name || '').localeCompare(b.name || '')
+      return (a.id || '').localeCompare(b.id || '')
+    })
+  }, [devices])
 
   useEffect(() => {
     const handler = () => setMasterTrigger((prev) => prev + 1)
@@ -429,7 +440,7 @@ export const DeviceManager: React.FC<DeviceManagerProps> = ({
       {/* Main View: Geographic Map or Inventory Cards */}
       {viewMode === 'map' ? (
         <BackboneMapView
-          devices={devices}
+          devices={sortedDevices}
           onEditDevice={openEditModal}
           onSelectDeviceForTerminal={onSelectDeviceForTerminal}
           onSelectDeviceForBGP={onSelectDeviceForBGP}
@@ -459,7 +470,7 @@ export const DeviceManager: React.FC<DeviceManagerProps> = ({
         </div>
       ) : (
         <div className={`grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 ${density === 'compact' ? 'gap-3.5' : 'gap-5'}`}>
-          {devices.map((dev) => {
+          {sortedDevices.map((dev) => {
             const vendorInfo = VENDOR_OPTIONS.find((v) => v.id === dev.vendor) || {
               badge: dev.vendor,
               color: 'bg-slate-800 text-slate-300 border-slate-700',

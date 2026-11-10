@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sort"
 	"sync"
 	"time"
 
@@ -91,6 +92,13 @@ func (s *LinkStore) saveLocked() error {
 		list = append(list, l)
 	}
 
+	sort.Slice(list, func(i, j int) bool {
+		if !list[i].CreatedAt.Equal(list[j].CreatedAt) {
+			return list[i].CreatedAt.Before(list[j].CreatedAt)
+		}
+		return list[i].ID < list[j].ID
+	})
+
 	data, err := json.MarshalIndent(list, "", "  ")
 	if err != nil {
 		return err
@@ -113,6 +121,7 @@ func (s *LinkStore) GetAll() []models.BackboneLink {
 }
 
 // GetAllByTenant returns links filtered by tenantID (or all if empty or "all").
+// Results are deterministically sorted by CreatedAt ASC.
 func (s *LinkStore) GetAllByTenant(tenantID string) []models.BackboneLink {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
@@ -123,6 +132,17 @@ func (s *LinkStore) GetAllByTenant(tenantID string) []models.BackboneLink {
 			result = append(result, l)
 		}
 	}
+
+	sort.Slice(result, func(i, j int) bool {
+		if !result[i].CreatedAt.Equal(result[j].CreatedAt) {
+			return result[i].CreatedAt.Before(result[j].CreatedAt)
+		}
+		if result[i].Name != result[j].Name {
+			return result[i].Name < result[j].Name
+		}
+		return result[i].ID < result[j].ID
+	})
+
 	return result
 }
 

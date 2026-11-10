@@ -9,6 +9,7 @@ import (
 	"log"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -122,6 +123,17 @@ func (s *DeviceStore) saveLocked() error {
 		list = append(list, dCopy)
 	}
 
+	// Deterministic sorting to keep devices.json diffs clean and stable
+	sort.Slice(list, func(i, j int) bool {
+		if !list[i].CreatedAt.Equal(list[j].CreatedAt) {
+			return list[i].CreatedAt.Before(list[j].CreatedAt)
+		}
+		if list[i].Name != list[j].Name {
+			return list[i].Name < list[j].Name
+		}
+		return list[i].ID < list[j].ID
+	})
+
 	data, err := json.MarshalIndent(list, "", "  ")
 	if err != nil {
 		return err
@@ -144,6 +156,7 @@ func (s *DeviceStore) GetAll() []models.Device {
 }
 
 // GetAllByTenant returns devices belonging to a specific tenant (or all if tenantID is empty or "all").
+// Results are deterministically sorted by CreatedAt ASC, preserving visual card order.
 func (s *DeviceStore) GetAllByTenant(tenantID string) []models.Device {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
@@ -154,6 +167,17 @@ func (s *DeviceStore) GetAllByTenant(tenantID string) []models.Device {
 			result = append(result, d)
 		}
 	}
+
+	sort.Slice(result, func(i, j int) bool {
+		if !result[i].CreatedAt.Equal(result[j].CreatedAt) {
+			return result[i].CreatedAt.Before(result[j].CreatedAt)
+		}
+		if result[i].Name != result[j].Name {
+			return result[i].Name < result[j].Name
+		}
+		return result[i].ID < result[j].ID
+	})
+
 	return result
 }
 
@@ -163,6 +187,7 @@ func (s *DeviceStore) GetAllSafe() []models.SafeDevice {
 }
 
 // GetAllSafeByTenant returns safe devices filtered by tenantID (or all if empty or "all").
+// Results are deterministically sorted by CreatedAt ASC, preserving visual card order.
 func (s *DeviceStore) GetAllSafeByTenant(tenantID string) []models.SafeDevice {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
@@ -173,6 +198,17 @@ func (s *DeviceStore) GetAllSafeByTenant(tenantID string) []models.SafeDevice {
 			result = append(result, d.ToSafe())
 		}
 	}
+
+	sort.Slice(result, func(i, j int) bool {
+		if !result[i].CreatedAt.Equal(result[j].CreatedAt) {
+			return result[i].CreatedAt.Before(result[j].CreatedAt)
+		}
+		if result[i].Name != result[j].Name {
+			return result[i].Name < result[j].Name
+		}
+		return result[i].ID < result[j].ID
+	})
+
 	return result
 }
 
