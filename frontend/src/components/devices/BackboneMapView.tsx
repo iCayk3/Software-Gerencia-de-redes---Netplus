@@ -452,12 +452,29 @@ export const BackboneMapView: React.FC<BackboneMapViewProps> = ({
         popupAnchor: [0, -20],
       })
 
-      const marker = L.marker([lat, lng], { icon: customIcon }).addTo(layer)
+      const marker = L.marker([lat, lng], {
+        icon: customIcon,
+        draggable: true,
+        title: `${dev.name} (Arraste para mover ou clique para detalhes)`,
+      }).addTo(layer)
       bounds.extend([lat, lng])
 
       // Click event selects device for quick actions flyout
       marker.on('click', () => {
         setSelectedDevice(dev)
+      })
+
+      // Drag event updates coordinates directly when marker is dropped
+      marker.on('dragend', async (e: L.LeafletEvent) => {
+        const target = e.target as L.Marker
+        const newPos = target.getLatLng()
+        if (onUpdateCoordinates) {
+          await onUpdateCoordinates(
+            dev.id,
+            Number(newPos.lat.toFixed(6)),
+            Number(newPos.lng.toFixed(6))
+          )
+        }
       })
     })
 
@@ -710,12 +727,20 @@ export const BackboneMapView: React.FC<BackboneMapViewProps> = ({
       {placingDeviceId && (
         <div className="p-3.5 rounded-2xl bg-amber-950/60 border border-amber-600/70 text-amber-200 text-xs flex items-center justify-between shadow-lg animate-in fade-in duration-150">
           <div className="flex items-center gap-2.5">
-            <MapPin className="h-4 w-4 text-amber-400 animate-bounce" />
+            <MapPin className="h-4 w-4 text-amber-400 animate-bounce shrink-0" />
             <span>
               <strong>Modo de Posicionamento Ativo:</strong>{' '}
-              {savingLocation
-                ? 'Salvando coordenadas geográficas no equipamento...'
-                : 'Clique em qualquer ponto do mapa para definir a localização do equipamento selecionado.'}
+              {savingLocation ? (
+                'Salvando coordenadas geográficas no equipamento...'
+              ) : (
+                <>
+                  Clique em qualquer ponto do mapa para definir a posição de{' '}
+                  <strong className="text-white bg-amber-900/80 px-1.5 py-0.5 rounded font-mono">
+                    {devices.find((d) => d.id === placingDeviceId)?.name || 'equipamento'}
+                  </strong>
+                  .
+                </>
+              )}
             </span>
           </div>
           <button
@@ -732,7 +757,7 @@ export const BackboneMapView: React.FC<BackboneMapViewProps> = ({
       {/* Main Map Box & Lateral Overlay */}
       <div className="relative rounded-2xl border border-[#242836] overflow-hidden bg-[#13151D] shadow-2xl h-[620px] sm:h-[680px]">
         {/* Leaflet DOM container */}
-        <div ref={mapContainerRef} className="w-full h-full z-0" />
+        <div ref={mapContainerRef} className={`w-full h-full z-0 ${placingDeviceId ? 'cursor-crosshair' : ''}`} />
 
         {/* Floating Unplaced Devices Drawer (if any devices lack coordinates) */}
         {unplacedDevices.length > 0 && !placingDeviceId && (
@@ -870,15 +895,15 @@ export const BackboneMapView: React.FC<BackboneMapViewProps> = ({
             </div>
 
             {/* Action buttons */}
-            <div className="flex items-center gap-2 pt-1">
+            <div className="flex items-center gap-2 pt-1 flex-wrap">
               {onSelectDeviceForTerminal && (
                 <button
                   type="button"
                   onClick={() => onSelectDeviceForTerminal(selectedDevice)}
-                  className="flex-1 py-1.5 px-2.5 rounded-xl bg-[#25334D] hover:bg-[#3B5B8C] text-slate-200 hover:text-white text-xs font-semibold border border-[#3B5B8C]/40 transition cursor-pointer flex items-center justify-center gap-1.5"
+                  className="flex-1 py-1.5 px-2.5 rounded-xl bg-[#25334D] hover:bg-[#3B5B8C] text-slate-200 hover:text-white text-xs font-semibold border border-[#3B5B8C]/40 transition cursor-pointer flex items-center justify-center gap-1.5 min-w-[100px]"
                 >
                   <Terminal className="h-3.5 w-3.5 text-[#93B4E6]" />
-                  <span>SSH Terminal</span>
+                  <span>Terminal</span>
                 </button>
               )}
 
@@ -886,10 +911,25 @@ export const BackboneMapView: React.FC<BackboneMapViewProps> = ({
                 <button
                   type="button"
                   onClick={() => onSelectDeviceForBGP(selectedDevice)}
-                  className="flex-1 py-1.5 px-2.5 rounded-xl bg-blue-950/70 hover:bg-blue-900 text-blue-200 text-xs font-semibold border border-blue-500/40 transition cursor-pointer flex items-center justify-center gap-1.5"
+                  className="flex-1 py-1.5 px-2.5 rounded-xl bg-blue-950/70 hover:bg-blue-900 text-blue-200 text-xs font-semibold border border-blue-500/40 transition cursor-pointer flex items-center justify-center gap-1.5 min-w-[90px]"
                 >
                   <ArrowUpDown className="h-3.5 w-3.5 text-blue-400" />
-                  <span>Rotas BGP</span>
+                  <span>BGP</span>
+                </button>
+              )}
+
+              {onUpdateCoordinates && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setPlacingDeviceId(selectedDevice.id)
+                    setSelectedDevice(null)
+                  }}
+                  className="py-1.5 px-2.5 rounded-xl bg-amber-950/60 hover:bg-amber-900 text-amber-200 text-xs font-semibold border border-amber-600/40 transition cursor-pointer flex items-center justify-center gap-1.5"
+                  title="Clique para reposicionar este equipamento em outro local do mapa"
+                >
+                  <MapPin className="h-3.5 w-3.5 text-amber-400" />
+                  <span>Mover</span>
                 </button>
               )}
 
