@@ -2824,11 +2824,13 @@ export const BackboneMapView: React.FC<BackboneMapViewProps> = ({
           </div>
         )}
 
-        {/* Floating In-Map Fullscreen Button */}
+        {/* Floating In-Map Fullscreen Button (Positioned bottom-left to never collide with link/device detail cards) */}
         <button
           type="button"
           onClick={toggleFullscreen}
-          className="absolute bottom-5 right-5 z-20 p-2.5 rounded-xl bg-[#0F172A]/90 hover:bg-[#1E293B] text-slate-200 hover:text-white border border-slate-700/80 shadow-2xl backdrop-blur-md transition cursor-pointer flex items-center gap-1.5 group"
+          className={`absolute bottom-5 left-5 z-20 p-2.5 rounded-xl bg-[#0F172A]/90 hover:bg-[#1E293B] text-slate-200 hover:text-white border border-slate-700/80 shadow-2xl backdrop-blur-md transition cursor-pointer items-center gap-1.5 group ${
+            selectedLink || selectedDevice ? 'hidden sm:flex' : 'flex'
+          }`}
           title={isFullscreen ? 'Sair da tela cheia (Esc)' : 'Expandir mapa em tela cheia'}
         >
           {isFullscreen ? (
