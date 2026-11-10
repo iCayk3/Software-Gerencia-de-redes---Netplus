@@ -88,6 +88,7 @@ const LAYER_PROVIDERS: Record<MapLayerType, LayerOption> = {
       'https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Dark_Gray_Base/MapServer/tile/{z}/{y}/{x}',
     attribution: '&copy; Esri &mdash; Esri, DeLorme, NAVTEQ',
     maxZoom: 16,
+    subdomains: ['a', 'b', 'c'],
   },
   google_terrain: {
     id: 'google_terrain',
@@ -507,7 +508,11 @@ export const BackboneMapView: React.FC<BackboneMapViewProps> = ({
   // Invalidate map size when placement or edit mode toggles
   useEffect(() => {
     const timer = setTimeout(() => {
-      mapInstanceRef.current?.invalidateSize()
+      try {
+        mapInstanceRef.current?.invalidateSize()
+      } catch {
+        // Safe fallback
+      }
     }, 50)
     return () => clearTimeout(timer)
   }, [placingDeviceId, isEditingLinkPath, isAddWaypointMode, isManualDrawMode])
@@ -542,13 +547,21 @@ export const BackboneMapView: React.FC<BackboneMapViewProps> = ({
     setMapReady(true)
 
     setTimeout(() => {
-      map.invalidateSize()
+      try {
+        map.invalidateSize()
+      } catch {
+        // Safe fallback
+      }
     }, 150)
 
     let resizeObserver: ResizeObserver | null = null
     if (typeof ResizeObserver !== 'undefined' && mapContainerRef.current) {
       resizeObserver = new ResizeObserver(() => {
-        map.invalidateSize()
+        try {
+          map.invalidateSize()
+        } catch {
+          // Safe fallback
+        }
       })
       resizeObserver.observe(mapContainerRef.current)
     }
@@ -643,10 +656,15 @@ export const BackboneMapView: React.FC<BackboneMapViewProps> = ({
 
     const provider = LAYER_PROVIDERS[activeLayer] || LAYER_PROVIDERS.google_satellite
     const tileUrl = provider.url(googleApiKey)
+    const subdomains =
+      provider.subdomains && provider.subdomains.length > 0
+        ? provider.subdomains
+        : ['0', '1', '2', '3']
+
     const newLayer = L.tileLayer(tileUrl, {
-      maxZoom: provider.maxZoom,
-      subdomains: provider.subdomains,
-      attribution: provider.attribution,
+      maxZoom: provider.maxZoom || 18,
+      subdomains,
+      attribution: provider.attribution || '',
     })
 
     newLayer.addTo(map)
