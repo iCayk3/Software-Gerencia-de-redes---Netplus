@@ -266,11 +266,60 @@ type BackboneLink struct {
 	RoutingMode    LinkRoutingMode `json:"routing_mode"`         // "road", "manual", "direct"
 	Path           [][2]float64    `json:"path"`                 // Array of [lat, lng] coordinates
 	Waypoints      [][2]float64    `json:"waypoints,omitempty"` // Intermediate forced via-points
-	Capacity       string          `json:"capacity,omitempty"`   // e.g. "10G", "40G", "100G"
-	Color          string          `json:"color,omitempty"`      // Hex color code, e.g. "#00E5FF"
-	DistanceKm     float64         `json:"distance_km"`
-	Notes          string          `json:"notes,omitempty"`
-	Status         string          `json:"status"`               // "active", "planned", "degraded", "down"
-	CreatedAt      time.Time       `json:"created_at"`
-	UpdatedAt      time.Time       `json:"updated_at"`
+	Capacity        string          `json:"capacity,omitempty"`   // e.g. "10G", "40G", "100G"
+	SourceInterface string          `json:"source_interface,omitempty"` // Interface/porta na origem (ex: 10GE0/1/1)
+	TargetInterface string          `json:"target_interface,omitempty"` // Interface/porta no destino (ex: 10GE0/1/2)
+	Color           string          `json:"color,omitempty"`      // Hex color code, e.g. "#00E5FF"
+	DistanceKm      float64         `json:"distance_km"`
+	Notes           string          `json:"notes,omitempty"`
+	Status          string          `json:"status"`               // "active", "planned", "degraded", "down"
+	ZabbixProblem   string          `json:"zabbix_problem,omitempty"`   // Descrição da falha no Zabbix quando link down
+	ZabbixLastAlert *time.Time      `json:"zabbix_last_alert,omitempty"`// Timestamp do último evento recebido
+	CreatedAt       time.Time       `json:"created_at"`
+	UpdatedAt       time.Time       `json:"updated_at"`
+}
+
+// --- Zabbix Integration & Network Monitoring ---
+
+// ZabbixConfig holds settings for Zabbix server JSON-RPC API and Webhook integration.
+type ZabbixConfig struct {
+	URL           string    `json:"url"`                      // e.g. "http://10.80.80.5/zabbix" or "https://zabbix.provedor.net"
+	APIToken      string    `json:"api_token,omitempty"`      // Zabbix API Token (Bearer)
+	Username      string    `json:"username,omitempty"`       // User/Pass fallback for Zabbix < 5.4
+	Password      string    `json:"password,omitempty"`       // Password
+	WebhookSecret string    `json:"webhook_secret,omitempty"` // Shared secret passed in webhook (?token=...)
+	Enabled       bool      `json:"enabled"`                  // Whether integration is active
+	UpdatedAt     time.Time `json:"updated_at"`
+}
+
+// SafeZabbixConfig masks sensitive credentials before returning to UI.
+type SafeZabbixConfig struct {
+	URL           string    `json:"url"`
+	HasAPIToken   bool      `json:"has_api_token"`
+	HasPassword   bool      `json:"has_password"`
+	Username      string    `json:"username,omitempty"`
+	WebhookSecret string    `json:"webhook_secret,omitempty"`
+	Enabled       bool      `json:"enabled"`
+	UpdatedAt     time.Time `json:"updated_at"`
+}
+
+// ZabbixWebhookPayload represents the incoming payload from Zabbix Media Type Webhook.
+type ZabbixWebhookPayload struct {
+	EventValue      string `json:"event_value"`      // "1" = Problem, "0" = Recovery/Resolved
+	EventID         string `json:"event_id,omitempty"`
+	EventTitle      string `json:"event_title,omitempty"`
+	HostName        string `json:"host_name"`
+	HostIP          string `json:"host_ip"`
+	ItemName        string `json:"item_name,omitempty"`
+	ItemKey         string `json:"item_key,omitempty"`
+	TriggerName     string `json:"trigger_name,omitempty"`
+	TriggerSeverity string `json:"trigger_severity,omitempty"`
+	Message         string `json:"message,omitempty"`
+}
+
+// ZabbixTestResult represents the connection test result.
+type ZabbixTestResult struct {
+	Success bool   `json:"success"`
+	Version string `json:"version,omitempty"`
+	Error   string `json:"error,omitempty"`
 }

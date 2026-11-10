@@ -68,6 +68,12 @@ func NewRouter(
 	}
 	linkCtrl := NewLinkController(linkStore, store, auditStore)
 
+	zabbixStore, err := storage.NewZabbixStore(dataDir)
+	if err != nil {
+		log.Printf("[Router] Aviso: falha ao inicializar ZabbixStore: %v", err)
+	}
+	zabbixCtrl := NewZabbixController(zabbixStore, linkStore, store, auditStore)
+
 	trafficCtrl := NewTrafficController(store, asMetaStore, trafficSvc, uploadDir, auditStore)
 	if peerMetaStore != nil {
 		trafficCtrl.SetPeerMetadataStore(peerMetaStore)
@@ -125,6 +131,15 @@ func NewRouter(
 	mux.HandleFunc("POST /api/backbone/links", RequireRole(models.RoleAdmin, models.RoleNOCOperator)(linkCtrl.CreateLink))
 	mux.HandleFunc("PUT /api/backbone/links/{id}", RequireRole(models.RoleAdmin, models.RoleNOCOperator)(linkCtrl.UpdateLink))
 	mux.HandleFunc("DELETE /api/backbone/links/{id}", RequireRole(models.RoleAdmin, models.RoleNOCOperator)(linkCtrl.DeleteLink))
+
+	// Zabbix Integration & Webhook Receivers
+	mux.HandleFunc("POST /api/webhooks/zabbix", zabbixCtrl.HandleWebhook)
+	mux.HandleFunc("GET /api/zabbix/config", zabbixCtrl.GetConfig)
+	mux.HandleFunc("POST /api/zabbix/config", RequireRole(models.RoleAdmin, models.RoleNOCOperator)(zabbixCtrl.SaveConfig))
+	mux.HandleFunc("POST /api/zabbix/test", RequireRole(models.RoleAdmin, models.RoleNOCOperator)(zabbixCtrl.TestConnection))
+	mux.HandleFunc("POST /api/zabbix/sync", RequireRole(models.RoleAdmin, models.RoleNOCOperator)(zabbixCtrl.SyncStatus))
+	mux.HandleFunc("GET /api/zabbix/webhook-script", zabbixCtrl.GetWebhookScript)
+	mux.HandleFunc("GET /api/devices/{id}/interfaces", zabbixCtrl.GetDeviceInterfaces)
 
 	// Routing inspection per device
 	mux.HandleFunc("GET /api/devices/{id}/bgp", devCtrl.GetDeviceBGP)

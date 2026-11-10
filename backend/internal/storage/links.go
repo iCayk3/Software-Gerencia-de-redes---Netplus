@@ -221,11 +221,46 @@ func (s *LinkStore) Update(link models.BackboneLink) error {
 	if link.Status == "" {
 		link.Status = existing.Status
 	}
+	if link.SourceInterface == "" && existing.SourceInterface != "" {
+		link.SourceInterface = existing.SourceInterface
+	}
+	if link.TargetInterface == "" && existing.TargetInterface != "" {
+		link.TargetInterface = existing.TargetInterface
+	}
+	if link.ZabbixProblem == "" && existing.ZabbixProblem != "" && link.Status == existing.Status {
+		link.ZabbixProblem = existing.ZabbixProblem
+	}
+	if link.ZabbixLastAlert == nil && existing.ZabbixLastAlert != nil {
+		link.ZabbixLastAlert = existing.ZabbixLastAlert
+	}
 	link.CreatedAt = existing.CreatedAt
 	link.UpdatedAt = time.Now()
 
 	s.links[link.ID] = link
 	return s.saveLocked()
+}
+
+// UpdateLinkZabbixStatus updates link status and problem description for specified link IDs.
+func (s *LinkStore) UpdateLinkZabbixStatus(linkID string, status string, problem string) (*models.BackboneLink, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	existing, ok := s.links[linkID]
+	if !ok {
+		return nil, ErrLinkNotFound
+	}
+
+	existing.Status = status
+	existing.ZabbixProblem = problem
+	now := time.Now()
+	existing.ZabbixLastAlert = &now
+	existing.UpdatedAt = now
+
+	s.links[linkID] = existing
+	if err := s.saveLocked(); err != nil {
+		return nil, err
+	}
+	return &existing, nil
 }
 
 // Delete removes a link by ID.

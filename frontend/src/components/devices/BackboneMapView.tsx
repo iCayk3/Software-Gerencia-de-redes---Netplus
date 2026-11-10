@@ -20,6 +20,12 @@ import {
   Check,
   Sliders,
   Undo2,
+  Activity,
+  AlertTriangle,
+  RefreshCw,
+  Copy,
+  CheckCircle,
+  Link2,
 } from 'lucide-react'
 import type { Device, DeviceRole } from '../../services/api'
 import {
@@ -29,10 +35,19 @@ import {
   deleteBackboneLink,
   calculateRoadRoute,
   haversineDistance,
+  fetchZabbixConfig,
+  saveZabbixConfig,
+  testZabbixConnection,
+  syncZabbixLinks,
+  fetchZabbixWebhookScript,
+  fetchDeviceInterfaces,
   type BackboneLink,
   type LinkType,
   type LinkRoutingMode,
   type LinkStatus,
+  type ZabbixConfig,
+  type ZabbixSyncResult,
+  type ZabbixWebhookScriptResponse,
 } from '../../services/api'
 import { isBGPMasterDevice } from '../../utils/bgpMaster'
 
@@ -219,6 +234,33 @@ export const BackboneMapView: React.FC<BackboneMapViewProps> = ({
   const [isCalculatingRoute, setIsCalculatingRoute] = useState(false)
   const [isSavingLink, setIsSavingLink] = useState(false)
 
+  // Source & Target Interface Assignment for Links
+  const [linkFormSourceIface, setLinkFormSourceIface] = useState('')
+  const [linkFormTargetIface, setLinkFormTargetIface] = useState('')
+  const [sourceInterfaces, setSourceInterfaces] = useState<string[]>([])
+  const [targetInterfaces, setTargetInterfaces] = useState<string[]>([])
+  const [loadingSourceIfaces, setLoadingSourceIfaces] = useState(false)
+  const [loadingTargetIfaces, setLoadingTargetIfaces] = useState(false)
+
+  // Zabbix Integration State
+  const [isZabbixModalOpen, setIsZabbixModalOpen] = useState(false)
+  const [zabbixConfig, setZabbixConfig] = useState<ZabbixConfig | null>(null)
+  const [zabbixFormUrl, setZabbixFormUrl] = useState('')
+  const [zabbixFormToken, setZabbixFormToken] = useState('')
+  const [zabbixFormUser, setZabbixFormUser] = useState('')
+  const [zabbixFormPass, setZabbixFormPass] = useState('')
+  const [zabbixFormSecret, setZabbixFormSecret] = useState('')
+  const [zabbixFormEnabled, setZabbixFormEnabled] = useState(true)
+  const [zabbixActiveTab, setZabbixActiveTab] = useState<'config' | 'webhook' | 'sync'>('config')
+  const [testingZabbix, setTestingZabbix] = useState(false)
+  const [testResult, setTestResult] = useState<{ success: boolean; version?: string; error?: string } | null>(null)
+  const [syncingZabbix, setSyncingZabbix] = useState(false)
+  const [syncResult, setSyncResult] = useState<ZabbixSyncResult | null>(null)
+  const [webhookScriptData, setWebhookScriptData] = useState<ZabbixWebhookScriptResponse | null>(null)
+  const [copiedScript, setCopiedScript] = useState(false)
+  const [copiedUrl, setCopiedUrl] = useState(false)
+  const [isSavingZabbix, setIsSavingZabbix] = useState(false)
+
   // Interactive Map Modes for Links
   const [isAddWaypointMode, setIsAddWaypointMode] = useState(false)
   const [isManualDrawMode, setIsManualDrawMode] = useState(false)
@@ -271,6 +313,78 @@ export const BackboneMapView: React.FC<BackboneMapViewProps> = ({
   useEffect(() => {
     loadLinks()
   }, [loadLinks])
+
+  // Load Zabbix configuration on mount
+  useEffect(() => {
+    fetchZabbixConfig()
+      .then((cfg) => {
+        setZabbixConfig(cfg)
+        setZabbixFormUrl(cfg.url || '')
+        setZabbixFormUser(cfg.username || '')
+        setZabbixFormSecret(cfg.webhook_secret || '')
+        setZabbixFormEnabled(cfg.enabled)
+      })
+      .catch(() => {})
+  }, [])
+
+  // Auto-fetch interfaces for Source Device
+  useEffect(() => {
+    if (!linkFormSourceId) {
+      setSourceInterfaces([])
+      return
+    }
+    let cancelled = false
+    setLoadingSourceIfaces(true)
+    fetchDeviceInterfaces(linkFormSourceId)
+      .then((res) => {
+        if (!cancelled && res.interfaces) {
+          setSourceInterfaces(res.interfaces)
+        }
+      })
+      .catch(() => {
+        if (!cancelled) setSourceInterfaces([])
+      })
+      .finally(() => {
+        if (!cancelled) setLoadingSourceIfaces(false)
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [linkFormSourceId])
+
+  // Auto-fetch interfaces for Target Device
+  useEffect(() => {
+    if (!linkFormTargetId) {
+      setTargetInterfaces([])
+      return
+    }
+    let cancelled = false
+    setLoadingTargetIfaces(true)
+    fetchDeviceInterfaces(linkFormTargetId)
+      .then((res) => {
+        if (!cancelled && res.interfaces) {
+          setTargetInterfaces(res.interfaces)
+        }
+      })
+      .catch(() => {
+        if (!cancelled) setTargetInterfaces([])
+      })
+      .finally(() => {
+        if (!cancelled) setLoadingTargetIfaces(false)
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [linkFormTargetId])
+
+  // Fetch Webhook Script when Zabbix modal is opened
+  useEffect(() => {
+    if (isZabbixModalOpen) {
+      fetchZabbixWebhookScript()
+        .then((data) => setWebhookScriptData(data))
+        .catch(() => {})
+    }
+  }, [isZabbixModalOpen])
 
   const handleSelectLayer = (layer: MapLayerType) => {
     setActiveLayer(layer)
@@ -693,13 +807,15 @@ export const BackboneMapView: React.FC<BackboneMapViewProps> = ({
       if (!link.path || link.path.length < 2) return
 
       const isSelected = selectedLink?.id === link.id
-      const color = link.color || '#00E5FF'
+      const isDown = link.status === 'down'
+      const color = isDown ? '#EF4444' : (link.color || '#00E5FF')
 
       // Outer glowing halo
       const glowLine = L.polyline(link.path, {
         color,
-        weight: isSelected ? 8 : 6,
-        opacity: isSelected ? 0.6 : 0.25,
+        weight: isSelected ? 10 : (isDown ? 8 : 6),
+        opacity: isDown ? 0.8 : (isSelected ? 0.6 : 0.25),
+        className: isDown ? 'leaflet-noc-link-down-glow' : undefined,
         lineCap: 'round',
         lineJoin: 'round',
       })
@@ -707,19 +823,23 @@ export const BackboneMapView: React.FC<BackboneMapViewProps> = ({
       // Inner core cable line
       const coreLine = L.polyline(link.path, {
         color,
-        weight: isSelected ? 4 : 3,
-        opacity: 0.95,
-        dashArray: link.type === 'radio' || link.status === 'planned' ? '6, 6' : undefined,
+        weight: isSelected ? 5 : (isDown ? 4 : 3),
+        opacity: 0.98,
+        dashArray: isDown ? '8, 6' : (link.type === 'radio' || link.status === 'planned' ? '6, 6' : undefined),
+        className: isDown ? 'leaflet-noc-link-down-pulse' : undefined,
         lineCap: 'round',
         lineJoin: 'round',
       })
 
       const tooltipContent = `
-        <div style="font-family: inherit; font-size: 11px; padding: 2px 4px; line-height: 1.3;">
-          <strong style="color: #FFFFFF;">${link.name}</strong><br/>
+        <div style="font-family: inherit; font-size: 11px; padding: 4px 6px; line-height: 1.35;">
+          ${isDown ? '<div style="color: #EF4444; font-weight: 800; font-size: 10px; margin-bottom: 2px; text-transform: uppercase; letter-spacing: 0.5px;">🚨 ROTA FORA DO AR (LINK DOWN - ZABBIX)</div>' : ''}
+          <strong style="color: #FFFFFF; font-size: 12px;">${link.name}</strong><br/>
           <span style="color: ${color}; font-weight: 700;">${link.capacity || '10G'}</span> •
           <span style="color: #94A3B8;">${link.distance_km ? link.distance_km.toFixed(1) + ' km' : ''}</span>
           ${link.type === 'radio' ? ' • <span style="color: #F59E0B;">Rádio</span>' : ' • <span style="color: #38BDF8;">Fibra</span>'}
+          ${link.source_interface || link.target_interface ? `<br/><span style="color: #A78BFA; font-size: 10px; font-weight: 600;">Portas: ${link.source_interface || '?'} ➔ ${link.target_interface || '?'}</span>` : ''}
+          ${isDown && link.zabbix_problem ? `<br/><span style="color: #FCA5A5; font-size: 10px; font-style: italic;">Falha: ${link.zabbix_problem}</span>` : ''}
         </div>
       `
       glowLine.bindTooltip(tooltipContent, { sticky: true, className: 'leaflet-noc-link-tooltip' })
@@ -1000,6 +1120,8 @@ export const BackboneMapView: React.FC<BackboneMapViewProps> = ({
     setLinkFormColor('#00E5FF')
     setLinkFormStatus('active')
     setLinkFormNotes('')
+    setLinkFormSourceIface('')
+    setLinkFormTargetIface('')
     setLinkFormWaypoints([])
     setLinkFormPath([])
     setLinkFormDistanceKm(0)
@@ -1008,6 +1130,91 @@ export const BackboneMapView: React.FC<BackboneMapViewProps> = ({
 
     if (srcId && tgtId) {
       handleRecalculateRoute(srcId, tgtId, 'road', [])
+    }
+  }
+
+  // Force Link Active manually
+  const handleForceActiveLink = async (link: BackboneLink) => {
+    try {
+      const updated = await updateBackboneLink(link.id, {
+        status: 'active',
+        zabbix_problem: '',
+      })
+      setLinks((prev) => prev.map((l) => (l.id === updated.id ? updated : l)))
+      setSelectedLink(updated)
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'Erro ao atualizar enlace'
+      alert(msg)
+    }
+  }
+
+  // Zabbix operations
+  const handleSaveZabbixConfig = async (e: React.FormEvent) => {
+    e.preventDefault()
+    setIsSavingZabbix(true)
+    try {
+      const updated = await saveZabbixConfig({
+        url: zabbixFormUrl.trim(),
+        api_token: zabbixFormToken.trim() || undefined,
+        username: zabbixFormUser.trim() || undefined,
+        password: zabbixFormPass.trim() || undefined,
+        webhook_secret: zabbixFormSecret.trim() || undefined,
+        enabled: zabbixFormEnabled,
+      })
+      setZabbixConfig(updated)
+      setZabbixFormPass('')
+      setZabbixFormToken('')
+      alert('Configurações do Zabbix salvas com sucesso!')
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'Erro ao salvar Zabbix'
+      alert(msg)
+    } finally {
+      setIsSavingZabbix(false)
+    }
+  }
+
+  const handleTestZabbix = async () => {
+    setTestingZabbix(true)
+    setTestResult(null)
+    try {
+      const res = await testZabbixConnection({
+        url: zabbixFormUrl.trim() || undefined,
+        api_token: zabbixFormToken.trim() || undefined,
+        username: zabbixFormUser.trim() || undefined,
+        password: zabbixFormPass.trim() || undefined,
+      })
+      setTestResult(res)
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'Erro ao testar Zabbix'
+      setTestResult({ success: false, error: msg })
+    } finally {
+      setTestingZabbix(false)
+    }
+  }
+
+  const handleSyncZabbix = async () => {
+    setSyncingZabbix(true)
+    setSyncResult(null)
+    try {
+      const res = await syncZabbixLinks()
+      setSyncResult(res)
+      if (res.links && res.links.length > 0) {
+        setLinks((prev) =>
+          prev.map((l) => {
+            const found = res.links.find((u) => u.id === l.id)
+            return found || l
+          })
+        )
+        if (selectedLink) {
+          const updatedSel = res.links.find((u) => u.id === selectedLink.id)
+          if (updatedSel) setSelectedLink(updatedSel)
+        }
+      }
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'Erro ao sincronizar com Zabbix'
+      alert(msg)
+    } finally {
+      setSyncingZabbix(false)
     }
   }
 
@@ -1022,6 +1229,8 @@ export const BackboneMapView: React.FC<BackboneMapViewProps> = ({
         name: linkFormName.trim(),
         source_device_id: linkFormSourceId,
         target_device_id: linkFormTargetId,
+        source_interface: linkFormSourceIface.trim(),
+        target_interface: linkFormTargetIface.trim(),
         type: linkFormType,
         routing_mode: linkFormRoutingMode,
         capacity: linkFormCapacity,
@@ -1376,6 +1585,24 @@ export const BackboneMapView: React.FC<BackboneMapViewProps> = ({
             <span className="hidden sm:inline">Centralizar</span>
           </button>
 
+          {/* Zabbix Integration Button */}
+          <button
+            type="button"
+            onClick={() => setIsZabbixModalOpen(true)}
+            className={`px-3 py-1.5 rounded-xl border text-xs font-bold transition cursor-pointer flex items-center gap-1.5 shadow-sm ${
+              zabbixConfig?.enabled
+                ? 'bg-red-950/40 hover:bg-red-900/60 text-red-200 border-red-500/50'
+                : 'bg-[#161922] hover:bg-[#202738] text-slate-300 hover:text-white border-[#242836]'
+            }`}
+            title="Monitoramento Zabbix: API de Interfaces e Webhook de Link Down em tempo real"
+          >
+            <Activity className={`h-3.5 w-3.5 ${zabbixConfig?.enabled ? 'text-red-400' : 'text-slate-400'}`} />
+            <span>Zabbix</span>
+            {zabbixConfig?.enabled ? (
+              <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" title="Zabbix Ativo" />
+            ) : null}
+          </button>
+
           {/* New PTP Link button */}
           <button
             type="button"
@@ -1690,6 +1917,7 @@ export const BackboneMapView: React.FC<BackboneMapViewProps> = ({
                   const src = devices.find((d) => d.id === link.source_device_id)
                   const tgt = devices.find((d) => d.id === link.target_device_id)
                   const isSelected = selectedLink?.id === link.id
+                  const isDown = link.status === 'down'
                   return (
                     <div
                       key={link.id}
@@ -1703,7 +1931,9 @@ export const BackboneMapView: React.FC<BackboneMapViewProps> = ({
                         }
                       }}
                       className={`p-2.5 rounded-xl border transition cursor-pointer text-xs space-y-1 ${
-                        isSelected
+                        isDown
+                          ? 'bg-red-950/40 border-red-500/70 text-red-100 ring-1 ring-red-500/50'
+                          : isSelected
                           ? 'bg-[#25334D] border-[#3B5B8C] text-white'
                           : 'bg-[#161922] border-[#242836] text-slate-300 hover:border-[#3B5B8C]/60'
                       }`}
@@ -1711,14 +1941,22 @@ export const BackboneMapView: React.FC<BackboneMapViewProps> = ({
                       <div className="flex items-center justify-between gap-1.5">
                         <strong className="truncate font-semibold flex items-center gap-1.5">
                           <span
-                            className="w-2.5 h-2.5 rounded-full shrink-0"
-                            style={{ backgroundColor: link.color || '#00E5FF' }}
+                            className={`w-2.5 h-2.5 rounded-full shrink-0 ${isDown ? 'bg-red-500 animate-pulse' : ''}`}
+                            style={{ backgroundColor: isDown ? '#EF4444' : (link.color || '#00E5FF') }}
                           />
                           <span>{link.name}</span>
                         </strong>
-                        <span className="text-[10px] px-1.5 py-0.2 rounded font-bold bg-[#1C202C] text-cyan-300 font-mono">
-                          {link.capacity || '10G'}
-                        </span>
+                        <div className="flex items-center gap-1">
+                          {isDown ? (
+                            <span className="text-[10px] px-1.5 py-0.2 rounded font-bold bg-red-900 text-red-200 border border-red-700/60 animate-pulse">
+                              DOWN
+                            </span>
+                          ) : (
+                            <span className="text-[10px] px-1.5 py-0.2 rounded font-bold bg-[#1C202C] text-cyan-300 font-mono">
+                              {link.capacity || '10G'}
+                            </span>
+                          )}
+                        </div>
                       </div>
                       <div className="text-[11px] text-slate-400 flex items-center justify-between">
                         <span className="truncate">
@@ -1728,6 +1966,16 @@ export const BackboneMapView: React.FC<BackboneMapViewProps> = ({
                           {link.distance_km ? link.distance_km.toFixed(1) + ' km' : ''}
                         </span>
                       </div>
+                      {(link.source_interface || link.target_interface) && (
+                        <div className="text-[10px] text-purple-300 font-mono flex items-center gap-1 truncate pt-0.5">
+                          <span>Portas: {link.source_interface || '?'} ➔ {link.target_interface || '?'}</span>
+                        </div>
+                      )}
+                      {isDown && link.zabbix_problem && (
+                        <div className="text-[10px] text-red-300 italic truncate pt-0.5">
+                          ⚠️ {link.zabbix_problem}
+                        </div>
+                      )}
                     </div>
                   )
                 })
@@ -1903,22 +2151,59 @@ export const BackboneMapView: React.FC<BackboneMapViewProps> = ({
         {/* Selected Link Details Flyout Overlay */}
         {selectedLink && !isEditingLinkPath && (
           <div className="absolute bottom-4 left-4 right-4 sm:left-auto sm:right-4 z-20 sm:max-w-md bg-[#1C202C]/95 border border-[#242836] rounded-2xl p-4 shadow-2xl backdrop-blur-md space-y-3 animate-in fade-in slide-in-from-bottom-2 duration-150">
+            {/* Alarm banner if link is down in Zabbix */}
+            {selectedLink.status === 'down' && (
+              <div className="p-3 rounded-xl bg-red-950/80 border border-red-500/70 text-red-200 text-xs flex flex-col gap-1.5 shadow-lg animate-pulse">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-1.5 font-bold text-red-400">
+                    <AlertTriangle className="h-4 w-4 text-red-400" />
+                    <span>ROTA FORA DO AR (LINK DOWN - ZABBIX)</span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => handleForceActiveLink(selectedLink)}
+                    className="px-2 py-0.5 rounded bg-red-900 hover:bg-red-800 text-white text-[10px] font-bold transition cursor-pointer shadow-xs"
+                    title="Forçar enlace como ativo temporariamente"
+                  >
+                    Forçar Ativo
+                  </button>
+                </div>
+                {selectedLink.zabbix_problem && (
+                  <p className="text-[11px] text-red-300 font-mono bg-red-950 p-1.5 rounded border border-red-800/50">
+                    {selectedLink.zabbix_problem}
+                  </p>
+                )}
+                {selectedLink.zabbix_last_alert && (
+                  <span className="text-[10px] text-red-400/80">
+                    Alerta recebido em: {new Date(selectedLink.zabbix_last_alert).toLocaleString()}
+                  </span>
+                )}
+              </div>
+            )}
+
             <div className="flex items-center justify-between border-b border-[#242836] pb-2">
               <div className="flex items-center gap-2">
                 <span
-                  className="w-3 h-3 rounded-full shrink-0"
-                  style={{ backgroundColor: selectedLink.color || '#00E5FF' }}
+                  className={`w-3 h-3 rounded-full shrink-0 ${selectedLink.status === 'down' ? 'bg-red-500 animate-pulse' : ''}`}
+                  style={{ backgroundColor: selectedLink.status === 'down' ? '#EF4444' : (selectedLink.color || '#00E5FF') }}
                 />
                 <h4 className="font-bold text-white text-sm truncate">{selectedLink.name}</h4>
               </div>
-              <button
-                type="button"
-                onClick={() => setSelectedLink(null)}
-                className="text-slate-400 hover:text-white p-1 rounded-lg hover:bg-[#161922] transition cursor-pointer"
-                title="Fechar"
-              >
-                &times;
-              </button>
+              <div className="flex items-center gap-1.5">
+                {selectedLink.status === 'down' && (
+                  <span className="px-1.5 py-0.5 text-[10px] font-bold rounded bg-red-900 text-red-200 border border-red-700/60">
+                    DOWN
+                  </span>
+                )}
+                <button
+                  type="button"
+                  onClick={() => setSelectedLink(null)}
+                  className="text-slate-400 hover:text-white p-1 rounded-lg hover:bg-[#161922] transition cursor-pointer"
+                  title="Fechar"
+                >
+                  &times;
+                </button>
+              </div>
             </div>
 
             {/* Link details grid */}
@@ -1952,6 +2237,17 @@ export const BackboneMapView: React.FC<BackboneMapViewProps> = ({
                     : 'Rádio PTP Direto'}
                 </span>
               </div>
+
+              {/* Interfaces Row */}
+              <div className="col-span-2 pt-1 border-t border-[#242836]/60">
+                <span className="text-slate-500 font-sans text-[10px] block">Portas Monitoradas no Zabbix:</span>
+                <span className="text-purple-300 font-semibold flex items-center gap-1.5">
+                  <Link2 className="h-3 w-3 text-purple-400" />
+                  <span>{selectedLink.source_interface || 'Porta A não inf.'}</span>
+                  <span className="text-slate-500">➔</span>
+                  <span>{selectedLink.target_interface || 'Porta B não inf.'}</span>
+                </span>
+              </div>
             </div>
 
             {/* Latency estimation info */}
@@ -1980,6 +2276,8 @@ export const BackboneMapView: React.FC<BackboneMapViewProps> = ({
                   setEditingLinkTarget(selectedLink)
                   setLinkFormSourceId(selectedLink.source_device_id)
                   setLinkFormTargetId(selectedLink.target_device_id)
+                  setLinkFormSourceIface(selectedLink.source_interface || '')
+                  setLinkFormTargetIface(selectedLink.target_interface || '')
                   setLinkFormName(selectedLink.name)
                   setLinkFormType(selectedLink.type)
                   setLinkFormRoutingMode(selectedLink.routing_mode)
@@ -1993,7 +2291,7 @@ export const BackboneMapView: React.FC<BackboneMapViewProps> = ({
                   setIsLinkModalOpen(true)
                 }}
                 className="p-1.5 rounded-xl bg-[#161922] hover:bg-[#202738] text-slate-300 hover:text-white border border-[#242836] transition cursor-pointer"
-                title="Editar propriedades do enlace"
+                title="Editar propriedades e interfaces do enlace"
               >
                 <Edit2 className="h-3.5 w-3.5" />
               </button>
@@ -2099,6 +2397,107 @@ export const BackboneMapView: React.FC<BackboneMapViewProps> = ({
                         </option>
                       ))}
                     </select>
+                  </div>
+                </div>
+
+                {/* Source & Target Interfaces (Ports) for Zabbix Monitoring */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 p-3 rounded-xl bg-purple-950/20 border border-purple-500/30">
+                  <div>
+                    <div className="flex items-center justify-between mb-1">
+                      <label className="text-xs font-semibold text-purple-200 flex items-center gap-1">
+                        <Link2 className="h-3.5 w-3.5 text-purple-400" />
+                        <span>Porta / Interface na Origem</span>
+                      </label>
+                      {loadingSourceIfaces && (
+                        <span className="text-[10px] text-purple-400 flex items-center gap-1 animate-pulse">
+                          Buscando portas...
+                        </span>
+                      )}
+                    </div>
+                    <input
+                      type="text"
+                      list="source-interfaces-list"
+                      value={linkFormSourceIface}
+                      onChange={(e) => setLinkFormSourceIface(e.target.value)}
+                      placeholder="ex: 10GE0/1/1, ether1, XGE0/0/1"
+                      className="w-full px-3 py-2 bg-slate-950/70 border border-purple-500/40 rounded-lg text-xs text-white placeholder-slate-500 font-mono focus:outline-none focus:border-purple-400"
+                    />
+                    <datalist id="source-interfaces-list">
+                      {sourceInterfaces.map((iface) => (
+                        <option key={iface} value={iface} />
+                      ))}
+                    </datalist>
+
+                    {/* Quick suggestion chips */}
+                    {sourceInterfaces.length > 0 && (
+                      <div className="flex flex-wrap gap-1 mt-1.5 max-h-16 overflow-y-auto">
+                        {sourceInterfaces.slice(0, 6).map((iface) => (
+                          <button
+                            type="button"
+                            key={iface}
+                            onClick={() => setLinkFormSourceIface(iface)}
+                            className={`px-1.5 py-0.5 rounded text-[10px] font-mono cursor-pointer transition border ${
+                              linkFormSourceIface === iface
+                                ? 'bg-purple-600 text-white border-purple-400'
+                                : 'bg-[#161922] text-slate-300 border-[#242836] hover:bg-purple-900/40'
+                            }`}
+                          >
+                            {iface}
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+
+                  <div>
+                    <div className="flex items-center justify-between mb-1">
+                      <label className="text-xs font-semibold text-purple-200 flex items-center gap-1">
+                        <Link2 className="h-3.5 w-3.5 text-purple-400" />
+                        <span>Porta / Interface no Destino</span>
+                      </label>
+                      {loadingTargetIfaces && (
+                        <span className="text-[10px] text-purple-400 flex items-center gap-1 animate-pulse">
+                          Buscando portas...
+                        </span>
+                      )}
+                    </div>
+                    <input
+                      type="text"
+                      list="target-interfaces-list"
+                      value={linkFormTargetIface}
+                      onChange={(e) => setLinkFormTargetIface(e.target.value)}
+                      placeholder="ex: 10GE0/1/2, ether2, XGE0/0/2"
+                      className="w-full px-3 py-2 bg-slate-950/70 border border-purple-500/40 rounded-lg text-xs text-white placeholder-slate-500 font-mono focus:outline-none focus:border-purple-400"
+                    />
+                    <datalist id="target-interfaces-list">
+                      {targetInterfaces.map((iface) => (
+                        <option key={iface} value={iface} />
+                      ))}
+                    </datalist>
+
+                    {/* Quick suggestion chips */}
+                    {targetInterfaces.length > 0 && (
+                      <div className="flex flex-wrap gap-1 mt-1.5 max-h-16 overflow-y-auto">
+                        {targetInterfaces.slice(0, 6).map((iface) => (
+                          <button
+                            type="button"
+                            key={iface}
+                            onClick={() => setLinkFormTargetIface(iface)}
+                            className={`px-1.5 py-0.5 rounded text-[10px] font-mono cursor-pointer transition border ${
+                              linkFormTargetIface === iface
+                                ? 'bg-purple-600 text-white border-purple-400'
+                                : 'bg-[#161922] text-slate-300 border-[#242836] hover:bg-purple-900/40'
+                            }`}
+                          >
+                            {iface}
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="col-span-1 sm:col-span-2 text-[10px] text-purple-300/80">
+                    💡 <strong>Alarme Automático:</strong> Se qualquer uma destas interfaces cair no Zabbix (webhook ou API), o enlace ficará vermelho no mapa instantaneamente.
                   </div>
                 </div>
 
@@ -2484,6 +2883,437 @@ export const BackboneMapView: React.FC<BackboneMapViewProps> = ({
                 </div>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* Zabbix Integration & Webhook Setup Modal */}
+      {isZabbixModalOpen && (
+        <div
+          onClick={(e) => {
+            if (e.target === e.currentTarget) setIsZabbixModalOpen(false)
+          }}
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-xs p-3 sm:p-4 overflow-y-auto animate-in fade-in duration-150"
+        >
+          <div className="bg-[#1C202C] border border-[#2D3345] rounded-2xl w-full max-w-2xl shadow-2xl overflow-hidden my-auto max-h-[90vh] flex flex-col animate-in zoom-in-95 duration-150">
+            {/* Modal Header */}
+            <div className="p-4 sm:p-5 border-b border-[#242836] flex items-center justify-between shrink-0 bg-[#161922]">
+              <div className="flex items-center gap-2.5">
+                <div className="h-9 w-9 rounded-xl bg-red-950/50 border border-red-500/40 flex items-center justify-center text-red-400">
+                  <Activity className="h-5 w-5" />
+                </div>
+                <div>
+                  <h3 className="font-semibold text-slate-100 text-sm flex items-center gap-2">
+                    <span>Integração com Zabbix (API & Webhook)</span>
+                    {zabbixConfig?.enabled && (
+                      <span className="px-2 py-0.5 rounded-full bg-emerald-950 text-emerald-400 border border-emerald-500/40 text-[10px] font-bold">
+                        ATIVO
+                      </span>
+                    )}
+                  </h3>
+                  <p className="text-[11px] text-slate-400">
+                    Monitore portas e exiba automaticamente rotas caídas em vermelho pulsante no mapa
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsZabbixModalOpen(false)}
+                className="text-slate-400 hover:text-white p-1.5 rounded-lg hover:bg-[#1C202C] transition cursor-pointer"
+                title="Fechar"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            {/* Modal Tabs */}
+            <div className="flex border-b border-[#242836] bg-[#161922] px-4 gap-2 shrink-0">
+              <button
+                type="button"
+                onClick={() => setZabbixActiveTab('config')}
+                className={`py-2.5 px-3 text-xs font-semibold border-b-2 transition cursor-pointer ${
+                  zabbixActiveTab === 'config'
+                    ? 'border-red-500 text-white'
+                    : 'border-transparent text-slate-400 hover:text-slate-200'
+                }`}
+              >
+                Servidor & Conexão
+              </button>
+              <button
+                type="button"
+                onClick={() => setZabbixActiveTab('webhook')}
+                className={`py-2.5 px-3 text-xs font-semibold border-b-2 transition cursor-pointer ${
+                  zabbixActiveTab === 'webhook'
+                    ? 'border-red-500 text-white'
+                    : 'border-transparent text-slate-400 hover:text-slate-200'
+                }`}
+              >
+                Webhook em Tempo Real
+              </button>
+              <button
+                type="button"
+                onClick={() => setZabbixActiveTab('sync')}
+                className={`py-2.5 px-3 text-xs font-semibold border-b-2 transition cursor-pointer ${
+                  zabbixActiveTab === 'sync'
+                    ? 'border-red-500 text-white'
+                    : 'border-transparent text-slate-400 hover:text-slate-200'
+                }`}
+              >
+                Sincronizar Enlaces ({links.length})
+              </button>
+            </div>
+
+            {/* Tab 1: Config Form */}
+            {zabbixActiveTab === 'config' && (
+              <form onSubmit={handleSaveZabbixConfig} className="flex flex-col flex-1 min-h-0 overflow-hidden">
+                <div className="p-4 sm:p-6 space-y-4 overflow-y-auto flex-1">
+                  {/* Enable Switch */}
+                  <div className="flex items-center justify-between p-3 rounded-xl bg-[#161922] border border-[#242836]">
+                    <div>
+                      <span className="text-xs font-bold text-white block">Ativar Monitoramento Zabbix</span>
+                      <span className="text-[11px] text-slate-400 block">
+                        Habilita a recepção de alertas e consulta automática de interfaces
+                      </span>
+                    </div>
+                    <label className="relative inline-flex items-center cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={zabbixFormEnabled}
+                        onChange={(e) => setZabbixFormEnabled(e.target.checked)}
+                        className="sr-only peer"
+                      />
+                      <div className="w-11 h-6 bg-slate-800 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-emerald-600"></div>
+                    </label>
+                  </div>
+
+                  {/* Zabbix URL */}
+                  <div>
+                    <label className="block text-xs font-medium text-slate-300 mb-1">
+                      URL do Servidor Zabbix (com ou sem /api_jsonrpc.php) *
+                    </label>
+                    <input
+                      type="url"
+                      required
+                      value={zabbixFormUrl}
+                      onChange={(e) => setZabbixFormUrl(e.target.value)}
+                      placeholder="http://10.80.80.5/zabbix ou https://zabbix.provedor.net"
+                      className="w-full px-3 py-2 bg-[#161922] border border-[#242836] rounded-xl text-xs text-white placeholder-slate-600 focus:outline-none focus:border-red-500 font-mono"
+                    />
+                  </div>
+
+                  {/* API Token vs User/Pass */}
+                  <div className="p-3.5 rounded-xl bg-[#161922] border border-[#242836] space-y-3">
+                    <span className="text-xs font-bold text-slate-200 block">
+                      Autenticação na API (JSON-RPC 2.0)
+                    </span>
+
+                    <div>
+                      <div className="flex items-center justify-between mb-1">
+                        <label className="text-xs text-slate-400">
+                          API Token (Recomendado para Zabbix 5.4, 6.x e 7.x)
+                        </label>
+                        {zabbixConfig?.has_api_token && (
+                          <span className="text-[10px] text-emerald-400 font-semibold">✓ Token já configurado</span>
+                        )}
+                      </div>
+                      <input
+                        type="password"
+                        value={zabbixFormToken}
+                        onChange={(e) => setZabbixFormToken(e.target.value)}
+                        placeholder={zabbixConfig?.has_api_token ? '•••••••••••••••••••• (deixe vazio para manter)' : 'Bearer API Token gerado no Zabbix'}
+                        className="w-full px-3 py-2 bg-[#0E1118] border border-[#242836] rounded-xl text-xs text-white placeholder-slate-600 focus:outline-none focus:border-red-500 font-mono"
+                      />
+                    </div>
+
+                    <div className="pt-2 border-t border-[#242836]/60">
+                      <span className="text-[11px] text-slate-400 block mb-2">
+                        Ou utilize Usuário e Senha (para Zabbix legado ou sem API Token):
+                      </span>
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                        <div>
+                          <input
+                            type="text"
+                            value={zabbixFormUser}
+                            onChange={(e) => setZabbixFormUser(e.target.value)}
+                            placeholder="Usuário (ex: Admin)"
+                            className="w-full px-3 py-2 bg-[#0E1118] border border-[#242836] rounded-xl text-xs text-white placeholder-slate-600 focus:outline-none focus:border-red-500"
+                          />
+                        </div>
+                        <div>
+                          <input
+                            type="password"
+                            value={zabbixFormPass}
+                            onChange={(e) => setZabbixFormPass(e.target.value)}
+                            placeholder={zabbixConfig?.has_password ? '•••••••• (deixe vazio para manter)' : 'Senha'}
+                            className="w-full px-3 py-2 bg-[#0E1118] border border-[#242836] rounded-xl text-xs text-white placeholder-slate-600 focus:outline-none focus:border-red-500 font-mono"
+                          />
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Webhook Secret */}
+                  <div>
+                    <label className="block text-xs font-medium text-slate-300 mb-1">
+                      Token Secreto do Webhook (Validação de Segurança)
+                    </label>
+                    <input
+                      type="text"
+                      value={zabbixFormSecret}
+                      onChange={(e) => setZabbixFormSecret(e.target.value)}
+                      placeholder="Chave secreta alfanumérica"
+                      className="w-full px-3 py-2 bg-[#161922] border border-[#242836] rounded-xl text-xs text-white placeholder-slate-600 focus:outline-none focus:border-red-500 font-mono"
+                    />
+                    <p className="text-[10px] text-slate-500 mt-1">
+                      Este token é adicionado no webhook do Zabbix como parâmetro de autenticação para proteger contra envios indevidos.
+                    </p>
+                  </div>
+
+                  {/* Test Result Toast */}
+                  {testResult && (
+                    <div
+                      className={`p-3 rounded-xl border text-xs flex items-center gap-2.5 animate-in fade-in ${
+                        testResult.success
+                          ? 'bg-emerald-950/60 border-emerald-500/50 text-emerald-300'
+                          : 'bg-red-950/60 border-red-500/50 text-red-300'
+                      }`}
+                    >
+                      {testResult.success ? (
+                        <>
+                          <CheckCircle className="h-4 w-4 text-emerald-400 shrink-0" />
+                          <div>
+                            <strong>Conexão com Zabbix OK!</strong>
+                            <span className="block text-[11px] opacity-90">
+                              Versão do Servidor: {testResult.version || 'Detectada com sucesso'}
+                            </span>
+                          </div>
+                        </>
+                      ) : (
+                        <>
+                          <AlertTriangle className="h-4 w-4 text-red-400 shrink-0" />
+                          <div>
+                            <strong>Falha no teste:</strong>
+                            <span className="block text-[11px] opacity-90">{testResult.error}</span>
+                          </div>
+                        </>
+                      )}
+                    </div>
+                  )}
+                </div>
+
+                {/* Modal Footer */}
+                <div className="p-4 border-t border-[#242836] flex items-center justify-between gap-2 shrink-0 bg-[#161922]">
+                  <button
+                    type="button"
+                    disabled={testingZabbix || !zabbixFormUrl}
+                    onClick={handleTestZabbix}
+                    className="px-3.5 py-2 rounded-xl bg-[#1E2330] hover:bg-[#252C3D] text-slate-200 border border-[#2D3345] text-xs font-semibold transition cursor-pointer flex items-center gap-1.5 disabled:opacity-50"
+                  >
+                    <RefreshCw className={`h-3.5 w-3.5 ${testingZabbix ? 'animate-spin' : ''}`} />
+                    <span>{testingZabbix ? 'Testando Conexão...' : 'Testar Conexão'}</span>
+                  </button>
+
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setIsZabbixModalOpen(false)}
+                      className="px-4 py-2 bg-[#1E2330] hover:bg-[#252C3D] text-slate-300 rounded-xl text-xs font-medium cursor-pointer border border-[#2D3345] transition"
+                    >
+                      Fechar
+                    </button>
+                    <button
+                      type="submit"
+                      disabled={isSavingZabbix}
+                      className="px-4 py-2 bg-red-600 hover:bg-red-500 text-white rounded-xl text-xs font-semibold shadow-sm cursor-pointer transition disabled:opacity-50"
+                    >
+                      {isSavingZabbix ? 'Salvando...' : 'Salvar Configurações'}
+                    </button>
+                  </div>
+                </div>
+              </form>
+            )}
+
+            {/* Tab 2: Webhook Instructions & Script */}
+            {zabbixActiveTab === 'webhook' && (
+              <div className="p-4 sm:p-6 space-y-4 overflow-y-auto flex-1 text-xs">
+                {/* Webhook URL Card */}
+                <div className="p-3.5 rounded-xl bg-[#161922] border border-[#242836] space-y-2">
+                  <div className="flex items-center justify-between">
+                    <span className="font-bold text-white flex items-center gap-1.5">
+                      <Link2 className="h-4 w-4 text-red-400" />
+                      <span>URL do Webhook do NetPulse (Endpoint Receptor)</span>
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (webhookScriptData?.webhook_url) {
+                          const fullUrl = `${webhookScriptData.webhook_url}?token=${encodeURIComponent(webhookScriptData.webhook_secret)}`
+                          navigator.clipboard.writeText(fullUrl)
+                          setCopiedUrl(true)
+                          setTimeout(() => setCopiedUrl(false), 2000)
+                        }
+                      }}
+                      className="px-2.5 py-1 bg-[#1C202C] hover:bg-[#242836] text-cyan-300 rounded-lg font-semibold flex items-center gap-1 text-[11px] border border-[#2D3345] cursor-pointer"
+                    >
+                      {copiedUrl ? <Check className="h-3 w-3 text-emerald-400" /> : <Copy className="h-3 w-3" />}
+                      <span>{copiedUrl ? 'Copiado!' : 'Copiar URL Completa'}</span>
+                    </button>
+                  </div>
+                  <div className="p-2 rounded-lg bg-[#0E1118] border border-[#242836] font-mono text-[11px] text-cyan-200 select-all break-all">
+                    {webhookScriptData?.webhook_url
+                      ? `${webhookScriptData.webhook_url}?token=${webhookScriptData.webhook_secret}`
+                      : 'Carregando URL...'}
+                  </div>
+                  <p className="text-[10px] text-slate-400">
+                    O Zabbix enviará requisições POST para este endereço quando uma interface de rede cair ou se recuperar.
+                  </p>
+                </div>
+
+                {/* Step-by-step Guide */}
+                <div className="p-3.5 rounded-xl bg-[#161922] border border-[#242836] space-y-2">
+                  <span className="font-bold text-slate-200 block">Como configurar no Zabbix (3 Passos Rápidos):</span>
+                  <ol className="list-decimal list-inside space-y-1.5 text-slate-300 text-[11px]">
+                    <li>No Zabbix, vá em <strong>Administração ➔ Tipos de Mídia</strong> e clique em <strong>Criar tipo de mídia</strong>.</li>
+                    <li>Defina o nome como <code className="text-cyan-300">NetPulse Webhook</code> e selecione o Tipo <code className="text-cyan-300">Webhook</code>.</li>
+                    <li>Copie o script JavaScript abaixo e cole no campo de Script do tipo de mídia.</li>
+                    <li>Em <strong>Ações de Trigger</strong>, adicione uma operação para enviar mensagem via NetPulse Webhook!</li>
+                  </ol>
+                </div>
+
+                {/* JavaScript Code snippet */}
+                <div className="space-y-1.5">
+                  <div className="flex items-center justify-between">
+                    <span className="font-semibold text-slate-300">Script JavaScript do Webhook:</span>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (webhookScriptData?.script) {
+                          navigator.clipboard.writeText(webhookScriptData.script)
+                          setCopiedScript(true)
+                          setTimeout(() => setCopiedScript(false), 2000)
+                        }
+                      }}
+                      className="px-2.5 py-1 bg-red-950/60 hover:bg-red-900 text-red-200 rounded-lg font-semibold flex items-center gap-1 text-[11px] border border-red-500/40 cursor-pointer"
+                    >
+                      {copiedScript ? <Check className="h-3 w-3 text-emerald-400" /> : <Copy className="h-3 w-3" />}
+                      <span>{copiedScript ? 'Copiado para Área de Transferência!' : 'Copiar Script JS'}</span>
+                    </button>
+                  </div>
+                  <pre className="p-3 rounded-xl bg-[#0E1118] border border-[#242836] text-[11px] font-mono text-slate-300 overflow-x-auto max-h-56 leading-relaxed">
+                    {webhookScriptData?.script || '// Carregando script...'}
+                  </pre>
+                </div>
+
+                {/* Parameters table */}
+                {webhookScriptData?.parameters && (
+                  <div className="space-y-1.5">
+                    <span className="font-semibold text-slate-300">Parâmetros do Webhook configurados no Zabbix:</span>
+                    <div className="border border-[#242836] rounded-xl overflow-hidden max-h-40 overflow-y-auto">
+                      <table className="w-full text-left text-[11px]">
+                        <thead className="bg-[#161922] text-slate-400 border-b border-[#242836]">
+                          <tr>
+                            <th className="p-2 font-mono">Nome do Parâmetro</th>
+                            <th className="p-2 font-mono">Valor Macro no Zabbix</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-[#242836]">
+                          {webhookScriptData.parameters.map((p) => (
+                            <tr key={p.name} className="hover:bg-[#161922]/50">
+                              <td className="p-2 font-mono text-cyan-300 font-semibold">{p.name}</td>
+                              <td className="p-2 font-mono text-slate-300">{p.value}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Tab 3: Link Sync */}
+            {zabbixActiveTab === 'sync' && (
+              <div className="p-4 sm:p-6 space-y-4 overflow-y-auto flex-1 text-xs">
+                <div className="p-4 rounded-xl bg-[#161922] border border-[#242836] flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                  <div>
+                    <strong className="text-white block text-sm">Sincronização Sob Demanda</strong>
+                    <span className="text-[11px] text-slate-400 block">
+                      Consulta todos os enlaces cadastrados com portas configuradas diretamente na API do Zabbix.
+                    </span>
+                  </div>
+                  <button
+                    type="button"
+                    disabled={syncingZabbix || !zabbixConfig?.enabled}
+                    onClick={handleSyncZabbix}
+                    className="px-4 py-2 rounded-xl bg-red-600 hover:bg-red-500 text-white font-bold transition cursor-pointer flex items-center justify-center gap-2 shadow-sm disabled:opacity-50 shrink-0"
+                  >
+                    <RefreshCw className={`h-4 w-4 ${syncingZabbix ? 'animate-spin' : ''}`} />
+                    <span>{syncingZabbix ? 'Sincronizando...' : 'Sincronizar Estados Agora'}</span>
+                  </button>
+                </div>
+
+                {/* Sync Result */}
+                {syncResult && (
+                  <div className="p-3 rounded-xl bg-[#161922] border border-[#242836] space-y-1">
+                    <span className="font-bold text-white block">Resultado da Sincronização:</span>
+                    <div className="grid grid-cols-3 gap-2 font-mono text-center pt-1">
+                      <div className="p-2 rounded bg-[#0E1118]">
+                        <span className="text-[10px] text-slate-400 block font-sans">Verificados</span>
+                        <strong className="text-white text-base">{syncResult.checked_links}</strong>
+                      </div>
+                      <div className="p-2 rounded bg-red-950/40 border border-red-500/30">
+                        <span className="text-[10px] text-red-300 block font-sans">Caídos (DOWN)</span>
+                        <strong className="text-red-400 text-base">{syncResult.down_links}</strong>
+                      </div>
+                      <div className="p-2 rounded bg-emerald-950/40 border border-emerald-500/30">
+                        <span className="text-[10px] text-emerald-300 block font-sans">Atualizados</span>
+                        <strong className="text-emerald-400 text-base">{syncResult.updated_links}</strong>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* Enlaces List Overview */}
+                <div className="space-y-2">
+                  <span className="font-semibold text-slate-300 block">Status dos Enlaces Cadastrados:</span>
+                  <div className="space-y-1.5 max-h-64 overflow-y-auto pr-1">
+                    {links.map((l) => (
+                      <div
+                        key={l.id}
+                        className={`p-2.5 rounded-xl border flex items-center justify-between gap-2 ${
+                          l.status === 'down'
+                            ? 'bg-red-950/40 border-red-500/60 text-red-200'
+                            : 'bg-[#161922] border-[#242836] text-slate-300'
+                        }`}
+                      >
+                        <div className="min-w-0">
+                          <span className="font-bold text-white block truncate">{l.name}</span>
+                          <span className="text-[10px] text-slate-400 block font-mono">
+                            Portas: {l.source_interface || 'N/A'} ➔ {l.target_interface || 'N/A'}
+                          </span>
+                          {l.status === 'down' && l.zabbix_problem && (
+                            <span className="text-[10px] text-red-300 italic block truncate">
+                              ⚠️ {l.zabbix_problem}
+                            </span>
+                          )}
+                        </div>
+                        <div className="shrink-0 flex items-center gap-1.5">
+                          <span
+                            className={`px-2 py-0.5 rounded text-[10px] font-bold font-mono ${
+                              l.status === 'down'
+                                ? 'bg-red-900 text-red-200 border border-red-700 animate-pulse'
+                                : 'bg-emerald-950 text-emerald-300 border border-emerald-500/40'
+                            }`}
+                          >
+                            {l.status.toUpperCase()}
+                          </span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
         </div>
       )}

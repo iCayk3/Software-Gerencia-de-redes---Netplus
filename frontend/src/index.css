@@ -48,3 +48,45 @@ body {
 .leaflet-tooltip.leaflet-noc-link-tooltip:before {
   border-top-color: rgba(22, 25, 34, 0.95);
 }
+
+/* Pulsing Red Alarm for Down Backbone Routes (Zabbix Alert) */
+@keyframes link-down-pulse-anim {
+  0% {
+    stroke-opacity: 0.35;
+    stroke-width: 4px;
+  }
+  50% {
+    stroke-opacity: 1;
+    stroke-width: 6px;
+  }
+  100% {
+    stroke-opacity: 0.35;
+    stroke-width: 4px;
+  }
+}
+
+@keyframes link-down-glow-anim {
+  0% {
+    stroke-opacity: 0.2;
+    filter: drop-shadow(0 0 2px rgba(239, 68, 68, 0.4));
+  }
+  50% {
+    stroke-opacity: 0.85;
+    filter: drop-shadow(0 0 12px rgba(239, 68, 68, 1));
+  }
+  100% {
+    stroke-opacity: 0.2;
+    filter: drop-shadow(0 0 2px rgba(239, 68, 68, 0.4));
+  }
+}
+
+.leaflet-noc-link-down-pulse {
+  stroke: #EF4444 !important;
+  animation: link-down-pulse-anim 1.4s infinite ease-in-out;
+}
+
+.leaflet-noc-link-down-glow {
+  stroke: #DC2626 !important;
+  animation: link-down-glow-anim 1.4s infinite ease-in-out;
+}
+

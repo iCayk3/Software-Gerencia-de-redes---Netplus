@@ -1526,6 +1526,8 @@ export interface BackboneLink {
   name: string
   source_device_id: string
   target_device_id: string
+  source_interface?: string
+  target_interface?: string
   type: LinkType
   routing_mode: LinkRoutingMode
   path: [number, number][] // [lat, lng] array
@@ -1535,6 +1537,8 @@ export interface BackboneLink {
   distance_km: number
   notes?: string
   status: LinkStatus
+  zabbix_problem?: string
+  zabbix_last_alert?: string
   created_at?: string
   updated_at?: string
 }
@@ -1638,6 +1642,122 @@ export function haversineDistance(p1: [number, number], p2: [number, number]): n
   const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a))
   return R * c
 }
+
+// --- Zabbix API Integration & Webhooks ---
+
+export interface ZabbixConfig {
+  url: string
+  has_api_token: boolean
+  has_password: boolean
+  username?: string
+  webhook_secret?: string
+  enabled: boolean
+  updated_at?: string
+}
+
+export interface ZabbixSavePayload {
+  url: string
+  api_token?: string
+  username?: string
+  password?: string
+  webhook_secret?: string
+  enabled: boolean
+}
+
+export interface ZabbixTestResult {
+  success: boolean
+  version?: string
+  error?: string
+}
+
+export interface ZabbixSyncResult {
+  success: boolean
+  checked_links: number
+  down_links: number
+  updated_links: number
+  links: BackboneLink[]
+}
+
+export interface ZabbixWebhookScriptResponse {
+  webhook_url: string
+  webhook_secret: string
+  script: string
+  parameters: Array<{ name: string; value: string }>
+}
+
+export interface DeviceInterfacesResponse {
+  device_id: string
+  device_name: string
+  host: string
+  vendor: string
+  source: 'zabbix' | 'router_ssh' | 'presets' | 'manual'
+  interfaces: string[]
+}
+
+export async function fetchZabbixConfig(): Promise<ZabbixConfig> {
+  const res = await apiFetch(`${API_BASE}/zabbix/config`)
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}))
+    throw new Error(err.error || `Erro ao carregar configurações do Zabbix: HTTP ${res.status}`)
+  }
+  return res.json()
+}
+
+export async function saveZabbixConfig(cfg: ZabbixSavePayload): Promise<ZabbixConfig> {
+  const res = await apiFetch(`${API_BASE}/zabbix/config`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(cfg),
+  })
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}))
+    throw new Error(err.error || `Erro ao salvar configurações do Zabbix: HTTP ${res.status}`)
+  }
+  return res.json()
+}
+
+export async function testZabbixConnection(cfg?: Partial<ZabbixSavePayload>): Promise<ZabbixTestResult> {
+  const res = await apiFetch(`${API_BASE}/zabbix/test`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(cfg || {}),
+  })
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}))
+    throw new Error(err.error || `Erro ao testar Zabbix: HTTP ${res.status}`)
+  }
+  return res.json()
+}
+
+export async function syncZabbixLinks(): Promise<ZabbixSyncResult> {
+  const res = await apiFetch(`${API_BASE}/zabbix/sync`, {
+    method: 'POST',
+  })
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}))
+    throw new Error(err.error || `Erro ao sincronizar com Zabbix: HTTP ${res.status}`)
+  }
+  return res.json()
+}
+
+export async function fetchZabbixWebhookScript(): Promise<ZabbixWebhookScriptResponse> {
+  const res = await apiFetch(`${API_BASE}/zabbix/webhook-script`)
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}))
+    throw new Error(err.error || `Erro ao gerar script de webhook: HTTP ${res.status}`)
+  }
+  return res.json()
+}
+
+export async function fetchDeviceInterfaces(deviceId: string): Promise<DeviceInterfacesResponse> {
+  const res = await apiFetch(`${API_BASE}/devices/${deviceId}/interfaces`)
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}))
+    throw new Error(err.error || `Erro ao carregar interfaces do equipamento: HTTP ${res.status}`)
+  }
+  return res.json()
+}
+
 
 
 
