@@ -196,6 +196,42 @@ const LINK_COLOR_PALETTE = [
 
 const CAPACITY_PRESETS = ['1G', '10G', '40G', '100G', '200G', '400G']
 
+/**
+ * Calculates the exact geographic midpoint (at 50% cumulative distance) along a cable path.
+ * Guarantees traffic badges sit centered along the cable line away from endpoints/routers.
+ */
+function calculatePathMidpoint(path: [number, number][]): [number, number] {
+  if (!path || path.length === 0) return [0, 0]
+  if (path.length === 1) return path[0]
+  if (path.length === 2) {
+    return [(path[0][0] + path[1][0]) / 2, (path[0][1] + path[1][1]) / 2]
+  }
+
+  let totalDist = 0
+  const dists: number[] = [0]
+  for (let i = 0; i < path.length - 1; i++) {
+    const d = haversineDistance(path[i], path[i + 1])
+    totalDist += d
+    dists.push(totalDist)
+  }
+
+  if (totalDist <= 0) return path[Math.floor(path.length / 2)]
+
+  const targetDist = totalDist / 2
+  for (let i = 0; i < path.length - 1; i++) {
+    if (dists[i + 1] >= targetDist) {
+      const segLen = dists[i + 1] - dists[i]
+      const ratio = segLen > 0 ? (targetDist - dists[i]) / segLen : 0.5
+      return [
+        Number((path[i][0] + (path[i + 1][0] - path[i][0]) * ratio).toFixed(6)),
+        Number((path[i][1] + (path[i + 1][1] - path[i][1]) * ratio).toFixed(6)),
+      ]
+    }
+  }
+
+  return path[Math.floor(path.length / 2)]
+}
+
 export const BackboneMapView: React.FC<BackboneMapViewProps> = ({
   devices,
   onEditDevice,
@@ -880,17 +916,6 @@ export const BackboneMapView: React.FC<BackboneMapViewProps> = ({
         lineJoin: 'round',
       })
 
-      // Inner core cable line
-      const coreLine = L.polyline(renderedPath, {
-        color,
-        weight: isSelected ? 5 : (isDown ? 4 : 3),
-        opacity: 0.98,
-        dashArray: isDown ? '8, 6' : (link.type === 'radio' || link.status === 'planned' ? '6, 6' : undefined),
-        className: isDown ? 'leaflet-noc-link-down-pulse' : undefined,
-        lineCap: 'round',
-        lineJoin: 'round',
-      })
-
       const hasTraffic =
         (link.traffic_rx_bps != null && link.traffic_rx_bps > 0) ||
         (link.traffic_tx_bps != null && link.traffic_tx_bps > 0)
@@ -899,6 +924,19 @@ export const BackboneMapView: React.FC<BackboneMapViewProps> = ({
       const capacityBps = parseCapacityToBps(link.capacity)
       const maxTraffic = Math.max(link.traffic_rx_bps || 0, link.traffic_tx_bps || 0)
       const usagePercent = capacityBps > 0 ? Math.min(100, (maxTraffic / capacityBps) * 100) : 0
+      const isSaturated = usagePercent >= 85
+      const isWarning = usagePercent >= 70 && !isSaturated
+
+      // Inner core cable line
+      const coreLine = L.polyline(renderedPath, {
+        color: isDown ? '#EF4444' : (isSaturated ? '#EF4444' : color),
+        weight: isSelected ? 5 : (isDown ? 4 : (isSaturated ? 4 : 3)),
+        opacity: 0.98,
+        dashArray: isDown ? '8, 6' : (link.type === 'radio' || link.status === 'planned' ? '6, 6' : undefined),
+        className: isDown ? 'leaflet-noc-link-down-pulse' : undefined,
+        lineCap: 'round',
+        lineJoin: 'round',
+      })
 
       const tooltipContent = `
         <div style="font-family: inherit; font-size: 11px; padding: 4px 6px; line-height: 1.35; min-width: 170px;">
@@ -943,24 +981,138 @@ export const BackboneMapView: React.FC<BackboneMapViewProps> = ({
       glowLine.addTo(layer)
       coreLine.addTo(layer)
 
-      // Floating Midpoint Badge with Live Traffic or Down Alarm
-      const midIdx = Math.floor(renderedPath.length / 2)
-      const midCoord = renderedPath[midIdx]
+      // Floating Midpoint Badge with Live Traffic or Down Alarm (Positioned at 50% cable distance)
+      const midCoord = calculatePathMidpoint(renderedPath)
       if (midCoord && (hasTraffic || isDown)) {
+        const badgeBorder = isDown
+          ? '#EF4444'
+          : isSaturated
+            ? '#EF4444'
+            : isWarning
+              ? '#F59E0B'
+              : (color || '#00E5FF')
+
+        const badgeGlow = isDown || isSaturated
+          ? 'rgba(239, 68, 68, 0.7)'
+          : isWarning
+            ? 'rgba(245, 158, 11, 0.6)'
+            : 'rgba(0, 229, 255, 0.4)'
+
+        const animClass = isDown ? 'noc-badge-down' : (isSaturated ? 'noc-badge-saturated' : '')
+
         const badgeHtml = `
-          <div class="px-2 py-0.5 rounded-full shadow-xl font-mono text-[10px] font-bold flex items-center gap-1.5 whitespace-nowrap cursor-pointer transition transform hover:scale-110"
-               style="background: rgba(15, 23, 42, 0.95); border: 1.5px solid ${color}; color: #FFFFFF; box-shadow: 0 4px 12px rgba(0,0,0,0.7);">
+          <div class="${animClass}"
+               style="
+                 transform: translate(-50%, -50%);
+                 display: inline-flex;
+                 align-items: center;
+                 gap: 6px;
+                 padding: 5px 10px;
+                 background: rgba(8, 12, 22, 0.97);
+                 backdrop-filter: blur(10px);
+                 -webkit-backdrop-filter: blur(10px);
+                 border: 2px solid ${badgeBorder};
+                 border-radius: 9999px;
+                 box-shadow: 0 4px 20px rgba(0, 0, 0, 0.95), 0 0 14px ${badgeGlow};
+                 font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+                 user-select: none;
+                 white-space: nowrap;
+                 cursor: pointer;
+                 transition: transform 0.15s ease;
+               "
+               title="${link.name} • Clique para ver detalhes"
+               onmouseover="this.style.transform='translate(-50%, -50%) scale(1.12)'"
+               onmouseout="this.style.transform='translate(-50%, -50%) scale(1)'">
             ${
               isDown
-                ? '<span style="width: 7px; height: 7px; border-radius: 50%; background-color: #EF4444; display: inline-block;"></span><span style="color:#EF4444; font-weight:900; letter-spacing: 0.5px;">🚨 DOWN</span>'
-                : `<span style="color: #38BDF8;">↓ ${rxText}</span><span style="color: #64748B;">|</span><span style="color: #34D399;">↑ ${txText}</span>`
+                ? `<span style="display: inline-flex; align-items: center; gap: 6px; color: #FFFFFF; font-weight: 900; font-size: 11px; letter-spacing: 0.5px; text-transform: uppercase;">
+                    <span style="width: 8px; height: 8px; border-radius: 50%; background: #EF4444; box-shadow: 0 0 10px #EF4444; display: inline-block;"></span>
+                    🚨 FORA DO AR (DOWN)
+                   </span>`
+                : `
+                   <!-- RX (Download / Entrada) -->
+                   <span style="
+                     display: inline-flex;
+                     align-items: center;
+                     gap: 4px;
+                     background: rgba(6, 182, 212, 0.22);
+                     border: 1px solid rgba(6, 182, 212, 0.65);
+                     padding: 2.5px 7px;
+                     border-radius: 6px;
+                     color: #38BDF8;
+                     font-size: 12px;
+                     font-weight: 800;
+                     letter-spacing: 0.2px;
+                     box-shadow: 0 1px 4px rgba(0,0,0,0.4);
+                   ">
+                     <span style="font-size: 13px; font-weight: 900; color: #00E5FF; line-height: 1;">↓</span>
+                     ${rxText}
+                   </span>
+
+                   <!-- TX (Upload / Saída) -->
+                   <span style="
+                     display: inline-flex;
+                     align-items: center;
+                     gap: 4px;
+                     background: rgba(16, 185, 129, 0.22);
+                     border: 1px solid rgba(16, 185, 129, 0.65);
+                     padding: 2.5px 7px;
+                     border-radius: 6px;
+                     color: #34D399;
+                     font-size: 12px;
+                     font-weight: 800;
+                     letter-spacing: 0.2px;
+                     box-shadow: 0 1px 4px rgba(0,0,0,0.4);
+                   ">
+                     <span style="font-size: 13px; font-weight: 900; color: #10B981; line-height: 1;">↑</span>
+                     ${txText}
+                   </span>
+
+                   <!-- Saturation / Capacity Gauge -->
+                   ${
+                     isSaturated
+                       ? `<span style="
+                            background: #DC2626;
+                            color: #FFFFFF;
+                            font-weight: 900;
+                            font-size: 11px;
+                            padding: 2.5px 7px;
+                            border-radius: 6px;
+                            letter-spacing: 0.5px;
+                            box-shadow: 0 0 10px rgba(220, 38, 38, 0.85);
+                          ">⚠️ ${usagePercent.toFixed(0)}% LOTADO</span>`
+                       : isWarning
+                         ? `<span style="
+                              background: rgba(245, 158, 11, 0.3);
+                              border: 1px solid #F59E0B;
+                              color: #FBBF24;
+                              font-weight: 800;
+                              font-size: 11px;
+                              padding: 2.5px 6px;
+                              border-radius: 6px;
+                            ">⚡ ${usagePercent.toFixed(0)}%</span>`
+                         : capacityBps > 0
+                           ? `<span style="
+                                background: rgba(255, 255, 255, 0.1);
+                                border: 1px solid rgba(255, 255, 255, 0.18);
+                                color: #CBD5E1;
+                                font-weight: 700;
+                                font-size: 10px;
+                                padding: 2.5px 6px;
+                                border-radius: 6px;
+                              ">${usagePercent.toFixed(0)}% de ${link.capacity || '10G'}</span>`
+                           : ''
+                   }
+                `
             }
           </div>
         `
+
         const midIcon = L.divIcon({
           html: badgeHtml,
           className: 'leaflet-noc-mid-badge',
-          iconAnchor: [45, 10],
+          iconSize: [0, 0],
+          iconAnchor: [0, 0],
         })
         const midMarker = L.marker(midCoord, { icon: midIcon, interactive: true })
         midMarker.on('click', (e) => {

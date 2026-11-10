@@ -96,4 +96,22 @@ body {
   border: none !important;
 }
 
+@keyframes noc-traffic-pulse {
+  0%, 100% {
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.95), 0 0 10px rgba(239, 68, 68, 0.6);
+  }
+  50% {
+    box-shadow: 0 6px 26px rgba(0, 0, 0, 1), 0 0 22px rgba(239, 68, 68, 0.95);
+  }
+}
+
+.noc-badge-down {
+  animation: noc-traffic-pulse 1.3s infinite ease-in-out;
+}
+
+.noc-badge-saturated {
+  animation: noc-traffic-pulse 1.6s infinite ease-in-out;
+}
+
+
 
