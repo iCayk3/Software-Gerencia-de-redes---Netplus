@@ -545,10 +545,22 @@ func (c *ZabbixController) GetWebhookScript(w http.ResponseWriter, r *http.Reque
 	if r.TLS != nil || r.Header.Get("X-Forwarded-Proto") == "https" {
 		scheme = "https"
 	}
-	serverHost := r.Host
+
+	serverHost := r.Header.Get("X-Forwarded-Host")
+	if serverHost == "" {
+		serverHost = r.Host
+	}
 	if serverHost == "" {
 		serverHost = "10.12.199.251:8088"
 	}
+
+	// If serverHost has no port or port 80/443, explicitly force :8088 because port 80 on host is used by another service (Fastify/rbxhub)
+	if !strings.Contains(serverHost, ":") {
+		serverHost = serverHost + ":8088"
+	} else if strings.HasSuffix(serverHost, ":80") {
+		serverHost = strings.TrimSuffix(serverHost, ":80") + ":8088"
+	}
+
 	webhookURL := fmt.Sprintf("%s://%s/api/webhooks/zabbix", scheme, serverHost)
 
 	script := fmt.Sprintf(`// NetPulse Webhook Media Type Script (Zabbix 5.x, 6.x, 7.x)

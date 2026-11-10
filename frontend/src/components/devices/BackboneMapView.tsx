@@ -3146,27 +3146,35 @@ export const BackboneMapView: React.FC<BackboneMapViewProps> = ({
                     <button
                       type="button"
                       onClick={() => {
-                        if (webhookScriptData?.webhook_url) {
-                          const fullUrl = `${webhookScriptData.webhook_url}?token=${encodeURIComponent(webhookScriptData.webhook_secret)}`
-                          navigator.clipboard.writeText(fullUrl)
-                          setCopiedUrl(true)
-                          setTimeout(() => setCopiedUrl(false), 2000)
-                        }
+                        const targetUrl = webhookScriptData?.webhook_url
+                          ? (webhookScriptData.webhook_url.includes(':8088') || webhookScriptData.webhook_url.includes(':3000')
+                              ? webhookScriptData.webhook_url
+                              : webhookScriptData.webhook_url.replace('/api/webhooks/zabbix', ':8088/api/webhooks/zabbix'))
+                          : `http://${window.location.hostname}:8088/api/webhooks/zabbix`
+                        const fullUrl = `${targetUrl}?token=${encodeURIComponent(webhookScriptData?.webhook_secret || zabbixFormSecret)}`
+                        navigator.clipboard.writeText(fullUrl)
+                        setCopiedUrl(true)
+                        setTimeout(() => setCopiedUrl(false), 2000)
                       }}
-                      className="px-2.5 py-1 bg-[#1C202C] hover:bg-[#242836] text-cyan-300 rounded-lg font-semibold flex items-center gap-1 text-[11px] border border-[#2D3345] cursor-pointer"
+                      className="px-2.5 py-1 bg-red-950/60 hover:bg-red-900 text-red-200 rounded-lg font-semibold flex items-center gap-1 text-[11px] border border-red-500/40 cursor-pointer"
                     >
                       {copiedUrl ? <Check className="h-3 w-3 text-emerald-400" /> : <Copy className="h-3 w-3" />}
                       <span>{copiedUrl ? 'Copiado!' : 'Copiar URL Completa'}</span>
                     </button>
                   </div>
                   <div className="p-2 rounded-lg bg-[#0E1118] border border-[#242836] font-mono text-[11px] text-cyan-200 select-all break-all">
-                    {webhookScriptData?.webhook_url
-                      ? `${webhookScriptData.webhook_url}?token=${webhookScriptData.webhook_secret}`
-                      : 'Carregando URL...'}
+                    {(() => {
+                      const base = webhookScriptData?.webhook_url
+                        ? (webhookScriptData.webhook_url.includes(':8088') || webhookScriptData.webhook_url.includes(':3000')
+                            ? webhookScriptData.webhook_url
+                            : webhookScriptData.webhook_url.replace('/api/webhooks/zabbix', ':8088/api/webhooks/zabbix'))
+                        : `http://${window.location.hostname}:8088/api/webhooks/zabbix`
+                      return `${base}?token=${webhookScriptData?.webhook_secret || zabbixFormSecret}`
+                    })()}
                   </div>
-                  <p className="text-[10px] text-slate-400">
-                    O Zabbix enviará requisições POST para este endereço quando uma interface de rede cair ou se recuperar.
-                  </p>
+                  <div className="p-2 rounded-lg bg-amber-950/40 border border-amber-600/40 text-[11px] text-amber-200">
+                    ⚠️ <strong>Atenção à Porta de Rede:</strong> O NetPulse responde na porta <strong>:8088</strong> (ou :3000). Certifique-se de que a URL no Zabbix contenha <code>:8088</code> (ex: <code>http://10.12.199.251:8088/api/webhooks/zabbix</code>). Não utilize a porta 80 padrão pois ela está ocupada por outro serviço no servidor.
+                  </div>
                 </div>
 
                 {/* Step-by-step Guide */}
