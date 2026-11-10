@@ -14,9 +14,83 @@ import {
   Compass,
   Edit2,
   Plus,
+  KeyRound,
+  Eye,
+  EyeOff,
+  ExternalLink,
+  ShieldCheck,
+  X,
+  Sparkles,
 } from 'lucide-react'
 import type { Device, DeviceRole } from '../../services/api'
 import { isBGPMasterDevice } from '../../utils/bgpMaster'
+
+export type MapLayerType = 'dark' | 'satellite' | 'streets' | 'osm'
+
+interface LayerOption {
+  id: MapLayerType
+  name: string
+  shortName: string
+  icon: string
+  description: string
+  url: (apiKey?: string) => string
+  attribution: string
+  maxZoom: number
+  subdomains?: string | string[]
+}
+
+const LAYER_PROVIDERS: Record<MapLayerType, LayerOption> = {
+  dark: {
+    id: 'dark',
+    name: 'NetPulse Dark (CartoDB)',
+    shortName: 'Escuro NOC',
+    icon: '🌑',
+    description: 'Tema escuro padrão NOC (gratuito, sem chave)',
+    url: () => 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',
+    attribution: '&copy; CartoDB &copy; OpenStreetMap',
+    maxZoom: 19,
+    subdomains: 'abcd',
+  },
+  satellite: {
+    id: 'satellite',
+    name: 'Google Satélite (Híbrido)',
+    shortName: 'Satélite',
+    icon: '🛰️',
+    description: 'Imagens aéreas com nomes de cidades e rodovias',
+    url: (key) =>
+      key
+        ? `https://mt1.google.com/vt/lyrs=y&x={x}&y={y}&z={z}&key=${encodeURIComponent(key)}`
+        : 'https://mt1.google.com/vt/lyrs=y&x={x}&y={y}&z={z}',
+    attribution: '&copy; Google Maps',
+    maxZoom: 20,
+    subdomains: ['mt0', 'mt1', 'mt2', 'mt3'],
+  },
+  streets: {
+    id: 'streets',
+    name: 'Google Ruas (Roadmap)',
+    shortName: 'Google Ruas',
+    icon: '🗺️',
+    description: 'Mapa de tráfego e ruas clássico da Google',
+    url: (key) =>
+      key
+        ? `https://mt1.google.com/vt/lyrs=m&x={x}&y={y}&z={z}&key=${encodeURIComponent(key)}`
+        : 'https://mt1.google.com/vt/lyrs=m&x={x}&y={y}&z={z}',
+    attribution: '&copy; Google Maps',
+    maxZoom: 20,
+    subdomains: ['mt0', 'mt1', 'mt2', 'mt3'],
+  },
+  osm: {
+    id: 'osm',
+    name: 'OpenStreetMap (Padrão)',
+    shortName: 'OSM Padrão',
+    icon: '🌐',
+    description: 'Cartografia colaborativa clara global',
+    url: () => 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',
+    attribution: '&copy; OpenStreetMap contributors',
+    maxZoom: 19,
+    subdomains: 'abc',
+  },
+}
 
 export interface BackboneMapViewProps {
   devices: Device[]
@@ -85,12 +159,64 @@ export const BackboneMapView: React.FC<BackboneMapViewProps> = ({
   const mapContainerRef = useRef<HTMLDivElement>(null)
   const mapInstanceRef = useRef<L.Map | null>(null)
   const markersLayerRef = useRef<L.LayerGroup | null>(null)
+  const tileLayerRef = useRef<L.TileLayer | null>(null)
 
   // Filters state
   const [roleFilter, setRoleFilter] = useState<'all' | DeviceRole>('all')
   const [statusFilter, setStatusFilter] = useState<'all' | 'online' | 'offline'>('all')
   const [search, setSearch] = useState('')
   const [selectedDevice, setSelectedDevice] = useState<Device | null>(null)
+
+  // Map Layer & Google Maps API configuration
+  const [activeLayer, setActiveLayer] = useState<MapLayerType>(() => {
+    return (localStorage.getItem('netpulse_map_layer') as MapLayerType) || 'dark'
+  })
+
+  const [googleApiKey, setGoogleApiKey] = useState<string>(() => {
+    return (
+      localStorage.getItem('netpulse_google_maps_api_key') ||
+      (import.meta.env.VITE_GOOGLE_MAPS_API_KEY as string) ||
+      ''
+    )
+  })
+
+  const [isApiKeyModalOpen, setIsApiKeyModalOpen] = useState(false)
+  const [tempApiKey, setTempApiKey] = useState(googleApiKey)
+  const [showKeySecret, setShowKeySecret] = useState(false)
+  const [keySavedToast, setKeySavedToast] = useState(false)
+  const [mapReady, setMapReady] = useState(false)
+
+  const handleSelectLayer = (layer: MapLayerType) => {
+    setActiveLayer(layer)
+    localStorage.setItem('netpulse_map_layer', layer)
+  }
+
+  const handleSaveApiKey = (e: React.FormEvent) => {
+    e.preventDefault()
+    const trimmed = tempApiKey.trim()
+    setGoogleApiKey(trimmed)
+    if (trimmed) {
+      localStorage.setItem('netpulse_google_maps_api_key', trimmed)
+    } else {
+      localStorage.removeItem('netpulse_google_maps_api_key')
+    }
+    setKeySavedToast(true)
+    setTimeout(() => {
+      setKeySavedToast(false)
+      setIsApiKeyModalOpen(false)
+    }, 1200)
+  }
+
+  const handleRemoveApiKey = () => {
+    setTempApiKey('')
+    setGoogleApiKey('')
+    localStorage.removeItem('netpulse_google_maps_api_key')
+    setKeySavedToast(true)
+    setTimeout(() => {
+      setKeySavedToast(false)
+      setIsApiKeyModalOpen(false)
+    }, 800)
+  }
 
   // Device coordinate placement mode
   const [placingDeviceId, setPlacingDeviceId] = useState<string | null>(null)
@@ -182,12 +308,6 @@ export const BackboneMapView: React.FC<BackboneMapViewProps> = ({
       attributionControl: false,
     })
 
-    // CartoDB Dark Matter tiles (Official NetPulse dark theme matching #13151D)
-    L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
-      maxZoom: 19,
-      subdomains: 'abcd',
-    }).addTo(map)
-
     // Custom positioned zoom control at top-right
     L.control.zoom({ position: 'topright' }).addTo(map)
 
@@ -195,6 +315,7 @@ export const BackboneMapView: React.FC<BackboneMapViewProps> = ({
     const markersGroup = L.layerGroup().addTo(map)
     markersLayerRef.current = markersGroup
     mapInstanceRef.current = map
+    setMapReady(true)
 
     // Handle click on map when placing a device
     map.on('click', async (e: L.LeafletMouseEvent) => {
@@ -214,8 +335,36 @@ export const BackboneMapView: React.FC<BackboneMapViewProps> = ({
     return () => {
       map.remove()
       mapInstanceRef.current = null
+      tileLayerRef.current = null
+      setMapReady(false)
     }
   }, [])
+
+  // Synchronize dynamic tile layer (NetPulse Dark / Google Satélite / Google Ruas / OSM)
+  useEffect(() => {
+    const map = mapInstanceRef.current
+    if (!map || !mapReady) return
+
+    if (tileLayerRef.current) {
+      map.removeLayer(tileLayerRef.current)
+      tileLayerRef.current = null
+    }
+
+    const provider = LAYER_PROVIDERS[activeLayer] || LAYER_PROVIDERS.dark
+    const tileUrl = provider.url(googleApiKey)
+    const newLayer = L.tileLayer(tileUrl, {
+      maxZoom: provider.maxZoom,
+      subdomains: provider.subdomains,
+      attribution: provider.attribution,
+    })
+
+    newLayer.addTo(map)
+    // Send tile layer to back so markers are always visible on top
+    if ((newLayer as any).bringToBack) {
+      (newLayer as any).bringToBack()
+    }
+    tileLayerRef.current = newLayer
+  }, [activeLayer, googleApiKey, mapReady])
 
   // Keep a ref to placingDeviceId for the Leaflet event listener
   const placingDeviceIdRef = useRef<string | null>(placingDeviceId)
@@ -456,6 +605,51 @@ export const BackboneMapView: React.FC<BackboneMapViewProps> = ({
             />
           </div>
 
+          {/* Layer Selector */}
+          <div className="flex items-center bg-[#161922] p-0.5 rounded-xl border border-[#242836]">
+            {(['dark', 'satellite', 'streets', 'osm'] as MapLayerType[]).map((lId) => {
+              const opt = LAYER_PROVIDERS[lId]
+              const isActive = activeLayer === lId
+              return (
+                <button
+                  key={lId}
+                  type="button"
+                  onClick={() => handleSelectLayer(lId)}
+                  className={`px-2.5 py-1 rounded-lg text-xs font-semibold transition cursor-pointer flex items-center gap-1 ${
+                    isActive
+                      ? 'bg-[#25334D] text-[#93B4E6] border border-[#3B5B8C]/40 shadow-xs'
+                      : 'text-slate-400 hover:text-white'
+                  }`}
+                  title={`${opt.name}: ${opt.description}`}
+                >
+                  <span className="text-xs">{opt.icon}</span>
+                  <span className="hidden xl:inline">{opt.shortName}</span>
+                </button>
+              )
+            })}
+          </div>
+
+          {/* Google Maps API Key Config Button */}
+          <button
+            type="button"
+            onClick={() => {
+              setTempApiKey(googleApiKey)
+              setIsApiKeyModalOpen(true)
+            }}
+            className={`px-2.5 py-1.5 rounded-xl border text-xs font-medium transition cursor-pointer flex items-center gap-1.5 ${
+              googleApiKey
+                ? 'bg-amber-950/40 text-amber-300 border-amber-600/40 hover:bg-amber-900/50'
+                : 'bg-[#161922] text-slate-300 hover:text-white border-[#242836] hover:bg-[#202738]'
+            }`}
+            title="Configurar chave de API Google Maps"
+          >
+            <KeyRound className="h-3.5 w-3.5 text-amber-400" />
+            <span className="hidden lg:inline">API Google</span>
+            {googleApiKey ? (
+              <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" title="Chave Google Maps configurada" />
+            ) : null}
+          </button>
+
           {/* Reset Zoom */}
           <button
             type="button"
@@ -682,6 +876,134 @@ export const BackboneMapView: React.FC<BackboneMapViewProps> = ({
           </div>
         )}
       </div>
+
+      {/* Google Maps API Key Modal */}
+      {isApiKeyModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-xs p-4 animate-in fade-in duration-150">
+          <div className="bg-[#1C202C] border border-[#2D3345] rounded-2xl w-full max-w-lg shadow-2xl overflow-hidden animate-in zoom-in-95 duration-150">
+            {/* Modal Header */}
+            <div className="p-5 border-b border-[#242836] flex items-center justify-between">
+              <div className="flex items-center gap-2.5">
+                <div className="h-9 w-9 rounded-xl bg-amber-950/40 border border-amber-600/40 flex items-center justify-center text-amber-400">
+                  <KeyRound className="h-5 w-5" />
+                </div>
+                <div>
+                  <h3 className="font-semibold text-slate-100 text-sm">Configuração da API Google Maps</h3>
+                  <p className="text-[11px] text-slate-400">Camadas cartográficas e chave oficial da Google Cloud</p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsApiKeyModalOpen(false)}
+                className="text-slate-400 hover:text-slate-200 text-lg cursor-pointer p-1 rounded-lg hover:bg-[#161922]"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+
+            <form onSubmit={handleSaveApiKey} className="p-6 space-y-4">
+              {/* Informative Status Banner */}
+              <div className="p-3.5 rounded-xl bg-[#161922] border border-[#242836] space-y-2">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-semibold text-slate-200 flex items-center gap-1.5">
+                    <Sparkles className="h-3.5 w-3.5 text-[#93B4E6]" />
+                    <span>Status da Integração:</span>
+                  </span>
+                  {googleApiKey ? (
+                    <span className="text-[10px] font-bold text-emerald-400 bg-emerald-950/60 border border-emerald-500/40 px-2 py-0.5 rounded-full flex items-center gap-1">
+                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-400"></span>
+                      Chave Google Maps Ativa
+                    </span>
+                  ) : (
+                    <span className="text-[10px] font-bold text-[#93B4E6] bg-[#25334D] border border-[#3B5B8C]/40 px-2 py-0.5 rounded-full flex items-center gap-1">
+                      <ShieldCheck className="h-3 w-3" />
+                      Modo Livre Ativo (Sem Chave)
+                    </span>
+                  )}
+                </div>
+                <p className="text-[11px] text-slate-400 leading-relaxed">
+                  O NetPulse <strong>não exige</strong> obrigatoriamente nenhuma chave de API para funcionar. O mapa já opera gratuitamente via <strong>CartoDB Dark Matter</strong> (OpenStreetMap). Caso você possua uma chave da Google Cloud Platform e deseje habilitar imagens oficiais de satélite e ruas da Google, configure-a abaixo.
+                </p>
+              </div>
+
+              {/* API Key Input */}
+              <div className="space-y-1.5">
+                <label className="block text-xs font-medium text-slate-300">
+                  Chave de API da Google Cloud (API Key)
+                </label>
+                <div className="relative">
+                  <input
+                    type={showKeySecret ? 'text' : 'password'}
+                    value={tempApiKey}
+                    onChange={(e) => setTempApiKey(e.target.value)}
+                    placeholder="AIzaSy..."
+                    className="w-full pl-3 pr-10 py-2 bg-[#13151D] border border-[#2D3345] rounded-xl text-xs text-slate-100 placeholder-slate-600 font-mono focus:outline-none focus:border-[#3B5B8C]"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowKeySecret(!showKeySecret)}
+                    className="absolute right-2.5 top-2.5 text-slate-500 hover:text-slate-300 cursor-pointer"
+                    title={showKeySecret ? 'Ocultar chave' : 'Mostrar chave'}
+                  >
+                    {showKeySecret ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                  </button>
+                </div>
+                <p className="text-[11px] text-slate-500">
+                  Alternativamente, você também pode definir no arquivo <code className="text-[#93B4E6] bg-[#161922] px-1 py-0.5 rounded">frontend/.env</code> como <code className="text-[#93B4E6] bg-[#161922] px-1 py-0.5 rounded">VITE_GOOGLE_MAPS_API_KEY=sua_chave</code>.
+                </p>
+              </div>
+
+              {/* Quick instructions */}
+              <div className="p-3 bg-[#161922]/70 border border-[#242836] rounded-xl space-y-1.5 text-[11px] text-slate-400">
+                <span className="font-semibold text-slate-300 block">Como obter sua chave no Google Cloud Console:</span>
+                <ol className="list-decimal list-inside space-y-1 text-slate-400">
+                  <li>Acesse o <a href="https://console.cloud.google.com" target="_blank" rel="noreferrer" className="text-[#93B4E6] hover:underline inline-flex items-center gap-0.5">Google Cloud Console <ExternalLink className="h-2.5 w-2.5" /></a> e selecione seu projeto.</li>
+                  <li>Em <strong>APIs & Services &gt; Library</strong>, ative a <strong>Maps JavaScript API</strong>.</li>
+                  <li>Em <strong>Credentials</strong>, crie uma <strong>API Key</strong> e cole no campo acima.</li>
+                </ol>
+              </div>
+
+              {/* Toast feedback */}
+              {keySavedToast && (
+                <div className="p-2.5 rounded-xl bg-emerald-950/60 border border-emerald-600/50 text-emerald-300 text-xs flex items-center gap-2 animate-in fade-in">
+                  <CheckCircle2 className="h-4 w-4 text-emerald-400" />
+                  <span>Configuração da API atualizada com sucesso!</span>
+                </div>
+              )}
+
+              {/* Modal Actions */}
+              <div className="pt-3 border-t border-[#242836] flex items-center justify-between gap-2">
+                <div>
+                  {googleApiKey && (
+                    <button
+                      type="button"
+                      onClick={handleRemoveApiKey}
+                      className="text-xs text-rose-400 hover:text-rose-300 cursor-pointer font-medium hover:underline"
+                    >
+                      Remover Chave
+                    </button>
+                  )}
+                </div>
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setIsApiKeyModalOpen(false)}
+                    className="px-4 py-2 bg-[#161922] hover:bg-[#202738] text-slate-300 rounded-xl text-xs font-medium cursor-pointer border border-[#242836]"
+                  >
+                    Fechar
+                  </button>
+                  <button
+                    type="submit"
+                    className="px-4 py-2 bg-[#3B5B8C] hover:bg-[#4A72B2] text-white rounded-xl text-xs font-semibold shadow-sm cursor-pointer transition"
+                  >
+                    Salvar Chave
+                  </button>
+                </div>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
