@@ -29,6 +29,8 @@ import {
   ArrowDown,
   ArrowUp,
   Gauge,
+  Maximize2,
+  Minimize2,
 } from 'lucide-react'
 import type { Device, DeviceRole } from '../../services/api'
 import {
@@ -258,6 +260,67 @@ export const BackboneMapView: React.FC<BackboneMapViewProps> = ({
   const [loadingLinks, setLoadingLinks] = useState(false)
   const [selectedLink, setSelectedLink] = useState<BackboneLink | null>(null)
   const [isLinksDrawerOpen, setIsLinksDrawerOpen] = useState(false)
+
+  // Fullscreen view state
+  const mapWrapperRef = useRef<HTMLDivElement>(null)
+  const [isFullscreen, setIsFullscreen] = useState(false)
+
+  const toggleFullscreen = useCallback(async () => {
+    try {
+      if (!document.fullscreenElement) {
+        if (mapWrapperRef.current?.requestFullscreen) {
+          await mapWrapperRef.current.requestFullscreen()
+        }
+        setIsFullscreen(true)
+      } else {
+        if (document.exitFullscreen) {
+          await document.exitFullscreen()
+        }
+        setIsFullscreen(false)
+      }
+    } catch {
+      // Fallback to CSS-only fullscreen
+      setIsFullscreen((prev) => !prev)
+    }
+  }, [])
+
+  useEffect(() => {
+    const handleFullscreenChange = () => {
+      const isFs = !!document.fullscreenElement
+      setIsFullscreen(isFs)
+      setTimeout(() => {
+        mapInstanceRef.current?.invalidateSize()
+      }, 150)
+      setTimeout(() => {
+        mapInstanceRef.current?.invalidateSize()
+      }, 400)
+    }
+
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' && isFullscreen) {
+        if (document.fullscreenElement) {
+          document.exitFullscreen().catch(() => {})
+        }
+        setIsFullscreen(false)
+      }
+    }
+
+    document.addEventListener('fullscreenchange', handleFullscreenChange)
+    window.addEventListener('keydown', handleKeyDown)
+    return () => {
+      document.removeEventListener('fullscreenchange', handleFullscreenChange)
+      window.removeEventListener('keydown', handleKeyDown)
+    }
+  }, [isFullscreen])
+
+  useEffect(() => {
+    setTimeout(() => {
+      mapInstanceRef.current?.invalidateSize()
+    }, 120)
+    setTimeout(() => {
+      mapInstanceRef.current?.invalidateSize()
+    }, 350)
+  }, [isFullscreen])
 
   // Link Creation & Editing State
   const [isLinkModalOpen, setIsLinkModalOpen] = useState(false)
@@ -1697,7 +1760,14 @@ export const BackboneMapView: React.FC<BackboneMapViewProps> = ({
   }
 
   return (
-    <div className="space-y-4">
+    <div
+      ref={mapWrapperRef}
+      className={
+        isFullscreen
+          ? 'fixed inset-0 z-[9999] w-screen h-screen bg-[#0B0F19] p-3 m-0 overflow-hidden flex flex-col space-y-3'
+          : 'space-y-4'
+      }
+    >
       {/* Top Map Control Bar */}
       <div className="p-4 rounded-2xl bg-[#1C202C] border border-[#242836] shadow-xl flex flex-col md:flex-row md:items-center justify-between gap-4">
         {/* Left: KPI summary chips */}
@@ -1865,6 +1935,30 @@ export const BackboneMapView: React.FC<BackboneMapViewProps> = ({
           >
             <Compass className="h-3.5 w-3.5 text-[#93B4E6]" />
             <span className="hidden sm:inline">Centralizar</span>
+          </button>
+
+          {/* Fullscreen Button in Toolbar */}
+          <button
+            type="button"
+            onClick={toggleFullscreen}
+            className={`px-3 py-1.5 rounded-xl border text-xs font-semibold transition cursor-pointer flex items-center gap-1.5 shadow-sm ${
+              isFullscreen
+                ? 'bg-cyan-950/80 text-cyan-300 border-cyan-500/60 hover:bg-cyan-900 ring-1 ring-cyan-500/50'
+                : 'bg-[#161922] hover:bg-[#202738] text-slate-300 hover:text-white border-[#242836]'
+            }`}
+            title={isFullscreen ? 'Sair da tela cheia (Esc)' : 'Visualizar mapa em tela cheia'}
+          >
+            {isFullscreen ? (
+              <>
+                <Minimize2 className="h-3.5 w-3.5 text-cyan-400" />
+                <span className="hidden sm:inline">Restaurar</span>
+              </>
+            ) : (
+              <>
+                <Maximize2 className="h-3.5 w-3.5 text-[#93B4E6]" />
+                <span className="hidden sm:inline">Tela Cheia</span>
+              </>
+            )}
           </button>
 
           {/* Zabbix Integration Button */}
@@ -2090,7 +2184,9 @@ export const BackboneMapView: React.FC<BackboneMapViewProps> = ({
 
       {/* Main Map Box & Lateral Overlay */}
       <div
-        className={`relative rounded-2xl border border-[#242836] overflow-hidden bg-[#13151D] shadow-2xl h-[620px] sm:h-[680px] ${
+        className={`relative rounded-2xl border border-[#242836] overflow-hidden bg-[#13151D] shadow-2xl ${
+          isFullscreen ? 'flex-1 h-full min-h-0' : 'h-[620px] sm:h-[680px]'
+        } ${
           placingDeviceId || isAddWaypointMode || isManualDrawMode
             ? 'cursor-crosshair [&_.leaflet-container]:!cursor-crosshair [&_.leaflet-grab]:!cursor-crosshair'
             : ''
@@ -2727,6 +2823,26 @@ export const BackboneMapView: React.FC<BackboneMapViewProps> = ({
             </div>
           </div>
         )}
+
+        {/* Floating In-Map Fullscreen Button */}
+        <button
+          type="button"
+          onClick={toggleFullscreen}
+          className="absolute bottom-5 right-5 z-20 p-2.5 rounded-xl bg-[#0F172A]/90 hover:bg-[#1E293B] text-slate-200 hover:text-white border border-slate-700/80 shadow-2xl backdrop-blur-md transition cursor-pointer flex items-center gap-1.5 group"
+          title={isFullscreen ? 'Sair da tela cheia (Esc)' : 'Expandir mapa em tela cheia'}
+        >
+          {isFullscreen ? (
+            <>
+              <Minimize2 className="h-4 w-4 text-cyan-400 group-hover:scale-110 transition" />
+              <span className="text-xs font-bold hidden sm:inline">Restaurar</span>
+            </>
+          ) : (
+            <>
+              <Maximize2 className="h-4 w-4 text-cyan-400 group-hover:scale-110 transition" />
+              <span className="text-xs font-bold hidden sm:inline">Tela Cheia</span>
+            </>
+          )}
+        </button>
       </div>
 
       {/* New / Edit Backbone Link Modal */}
