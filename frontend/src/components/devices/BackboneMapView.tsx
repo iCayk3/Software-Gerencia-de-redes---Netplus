@@ -264,6 +264,30 @@ export const BackboneMapView: React.FC<BackboneMapViewProps> = ({
   // Fullscreen view state
   const mapWrapperRef = useRef<HTMLDivElement>(null)
   const [isFullscreen, setIsFullscreen] = useState(false)
+  const [isFsMenuVisible, setIsFsMenuVisible] = useState(false)
+  const fsMenuTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const fsMenuRef = useRef<HTMLDivElement>(null)
+
+  const showFsMenu = useCallback(() => {
+    if (fsMenuTimerRef.current) {
+      clearTimeout(fsMenuTimerRef.current)
+      fsMenuTimerRef.current = null
+    }
+    setIsFsMenuVisible(true)
+  }, [])
+
+  const scheduleHideFsMenu = useCallback(() => {
+    if (fsMenuTimerRef.current) {
+      clearTimeout(fsMenuTimerRef.current)
+    }
+    fsMenuTimerRef.current = setTimeout(() => {
+      // Don't hide if an input inside the menu is currently focused
+      if (document.activeElement && fsMenuRef.current?.contains(document.activeElement)) {
+        return
+      }
+      setIsFsMenuVisible(false)
+    }, 5000)
+  }, [])
 
   const toggleFullscreen = useCallback(async () => {
     try {
@@ -312,6 +336,31 @@ export const BackboneMapView: React.FC<BackboneMapViewProps> = ({
       window.removeEventListener('keydown', handleKeyDown)
     }
   }, [isFullscreen])
+
+  useEffect(() => {
+    if (!isFullscreen) {
+      setIsFsMenuVisible(false)
+      if (fsMenuTimerRef.current) {
+        clearTimeout(fsMenuTimerRef.current)
+        fsMenuTimerRef.current = null
+      }
+    } else {
+      // Starts hidden in fullscreen mode to prioritize the map
+      setIsFsMenuVisible(false)
+      if (fsMenuTimerRef.current) {
+        clearTimeout(fsMenuTimerRef.current)
+        fsMenuTimerRef.current = null
+      }
+    }
+  }, [isFullscreen])
+
+  useEffect(() => {
+    return () => {
+      if (fsMenuTimerRef.current) {
+        clearTimeout(fsMenuTimerRef.current)
+      }
+    }
+  }, [])
 
   useEffect(() => {
     setTimeout(() => {
@@ -1762,14 +1811,45 @@ export const BackboneMapView: React.FC<BackboneMapViewProps> = ({
   return (
     <div
       ref={mapWrapperRef}
+      onMouseMove={(e) => {
+        if (isFullscreen && e.clientY <= 25) {
+          showFsMenu()
+        }
+      }}
       className={
         isFullscreen
-          ? 'fixed inset-0 z-[9999] w-screen h-screen bg-[#0B0F19] p-3 m-0 overflow-hidden flex flex-col space-y-3'
+          ? 'fixed inset-0 z-[9999] w-screen h-screen bg-[#0B0F19] p-0 m-0 overflow-hidden relative'
           : 'space-y-4'
       }
     >
+      {/* Top Edge Hover Strip to Reveal Menu in Fullscreen */}
+      {isFullscreen && (
+        <div
+          onMouseEnter={showFsMenu}
+          className="absolute top-0 left-0 right-0 h-4 z-40 cursor-default"
+          aria-hidden="true"
+        />
+      )}
+
       {/* Top Map Control Bar */}
-      <div className="p-4 rounded-2xl bg-[#1C202C] border border-[#242836] shadow-xl flex flex-col md:flex-row md:items-center justify-between gap-4">
+      <div
+        ref={fsMenuRef}
+        onMouseEnter={() => {
+          if (isFullscreen) showFsMenu()
+        }}
+        onMouseLeave={() => {
+          if (isFullscreen) scheduleHideFsMenu()
+        }}
+        className={
+          isFullscreen
+            ? `absolute top-3 left-3 right-3 z-40 p-4 rounded-2xl bg-[#1C202C]/95 border border-[#242836] shadow-2xl backdrop-blur-md flex flex-col md:flex-row md:items-center justify-between gap-4 transition-all duration-300 ease-in-out ${
+                isFsMenuVisible
+                  ? 'translate-y-0 opacity-100 pointer-events-auto shadow-2xl'
+                  : '-translate-y-[130%] opacity-0 pointer-events-none'
+              }`
+            : 'p-4 rounded-2xl bg-[#1C202C] border border-[#242836] shadow-xl flex flex-col md:flex-row md:items-center justify-between gap-4'
+        }
+      >
         {/* Left: KPI summary chips */}
         <div className="flex items-center gap-2 flex-wrap">
           <button
@@ -1877,6 +1957,12 @@ export const BackboneMapView: React.FC<BackboneMapViewProps> = ({
               placeholder="Buscar por Nome, IP, POP, Cidade..."
               value={search}
               onChange={(e) => setSearch(e.target.value)}
+              onFocus={() => {
+                if (isFullscreen) showFsMenu()
+              }}
+              onBlur={() => {
+                if (isFullscreen) scheduleHideFsMenu()
+              }}
               className="bg-[#161922] border border-[#242836] text-slate-200 text-xs rounded-xl pl-9 pr-3 py-1.5 focus:border-[#3B5B8C] focus:outline-none w-52 sm:w-64"
             />
           </div>
@@ -2006,7 +2092,7 @@ export const BackboneMapView: React.FC<BackboneMapViewProps> = ({
 
       {/* Positioning Alert Mode */}
       {placingDeviceId && (
-        <div className="p-3.5 rounded-2xl bg-amber-950/60 border border-amber-600/70 text-amber-200 text-xs flex items-center justify-between shadow-lg animate-in fade-in duration-150">
+        <div className={`p-3.5 rounded-2xl bg-amber-950/60 border border-amber-600/70 text-amber-200 text-xs flex items-center justify-between shadow-lg animate-in fade-in duration-150 ${isFullscreen ? 'absolute top-3 left-3 right-3 z-30 backdrop-blur-md' : ''}`}>
           <div className="flex items-center gap-2.5">
             <MapPin className="h-4 w-4 text-amber-400 animate-bounce shrink-0" />
             <span>
@@ -2037,7 +2123,7 @@ export const BackboneMapView: React.FC<BackboneMapViewProps> = ({
 
       {/* Interactive Path Editing Mode Banner */}
       {isEditingLinkPath && (
-        <div className="p-3.5 rounded-2xl bg-cyan-950/70 border border-cyan-500/70 text-cyan-200 text-xs flex items-center justify-between shadow-xl animate-in fade-in duration-150">
+        <div className={`p-3.5 rounded-2xl bg-cyan-950/70 border border-cyan-500/70 text-cyan-200 text-xs flex items-center justify-between shadow-xl animate-in fade-in duration-150 ${isFullscreen ? 'absolute top-3 left-3 right-3 z-30 backdrop-blur-md' : ''}`}>
           <div className="flex items-center gap-2.5 flex-wrap">
             <Cable className="h-4 w-4 text-cyan-400 animate-pulse shrink-0" />
             <span>
@@ -2072,7 +2158,7 @@ export const BackboneMapView: React.FC<BackboneMapViewProps> = ({
 
       {/* Waypoint Ramal Mode Banner */}
       {isAddWaypointMode && (
-        <div className="p-3.5 rounded-2xl bg-amber-950/80 border border-amber-500/80 text-amber-200 text-xs flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-2xl backdrop-blur-md animate-in fade-in duration-150">
+        <div className={`p-3.5 rounded-2xl bg-amber-950/80 border border-amber-500/80 text-amber-200 text-xs flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-2xl backdrop-blur-md animate-in fade-in duration-150 ${isFullscreen ? 'absolute top-3 left-3 right-3 z-30' : ''}`}>
           <div className="flex items-center gap-2.5 flex-wrap">
             <Waypoints className="h-4 w-4 text-amber-400 animate-pulse shrink-0" />
             <span>
@@ -2128,7 +2214,7 @@ export const BackboneMapView: React.FC<BackboneMapViewProps> = ({
 
       {/* Manual Draw Mode Banner */}
       {isManualDrawMode && (
-        <div className="p-3.5 rounded-2xl bg-emerald-950/80 border border-emerald-500/80 text-emerald-200 text-xs flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-2xl backdrop-blur-md animate-in fade-in duration-150">
+        <div className={`p-3.5 rounded-2xl bg-emerald-950/80 border border-emerald-500/80 text-emerald-200 text-xs flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-2xl backdrop-blur-md animate-in fade-in duration-150 ${isFullscreen ? 'absolute top-3 left-3 right-3 z-30' : ''}`}>
           <div className="flex items-center gap-2.5 flex-wrap">
             <Route className="h-4 w-4 text-emerald-400 animate-pulse shrink-0" />
             <span>
@@ -2184,8 +2270,10 @@ export const BackboneMapView: React.FC<BackboneMapViewProps> = ({
 
       {/* Main Map Box & Lateral Overlay */}
       <div
-        className={`relative rounded-2xl border border-[#242836] overflow-hidden bg-[#13151D] shadow-2xl ${
-          isFullscreen ? 'flex-1 h-full min-h-0' : 'h-[620px] sm:h-[680px]'
+        className={`relative overflow-hidden bg-[#13151D] shadow-2xl ${
+          isFullscreen
+            ? 'w-full h-full rounded-none border-none'
+            : 'rounded-2xl border border-[#242836] h-[620px] sm:h-[680px]'
         } ${
           placingDeviceId || isAddWaypointMode || isManualDrawMode
             ? 'cursor-crosshair [&_.leaflet-container]:!cursor-crosshair [&_.leaflet-grab]:!cursor-crosshair'
